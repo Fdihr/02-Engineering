@@ -1,83 +1,80 @@
-# First Workflow Slice
+# Current Workflow Slice
 
-Build one minimal script before broad application work.
+Status: Seerist reality-check probe completed 2026-08-28. Current target: one-item evidence intake.
 
-The architecture in `memo-workflow.md` is a working hypothesis, not a fixed implementation contract.
+The architecture in `memo-workflow.md` remains a working hypothesis, not a fixed implementation contract.
 
-## Slice: Seerist reality-check probe
+## Completed slice: Seerist reality-check probe
 
-Manual query input -> one Seerist API call -> unchanged raw artifact -> observed-field normalization -> minimal event log -> console summary.
+Manual request input -> one read-only Seerist API call -> unchanged raw artifact -> structural summary -> minimal event log.
+
+The generic probe and representative live requests are working. Observed contracts, response limitations, and workflow implications are recorded in:
+
+- `seerist-probe-findings.md`
+- `../01-Architecture/seerist-api-capability-board.svg`
+
+The probe established three provider roles:
+
+1. Evidence candidates: source-linked records with sufficient captured content for human review.
+2. Collection leads: news/social summaries, cluster records, hotspots, and Scribe events that require source resolution or retrieval.
+3. Context: country background, risk ratings, Pulse, and future-looking provider assessments that may inform analysis but do not independently corroborate claims.
+
+## Current slice: one-item evidence intake
+
+One manually selected Seerist item -> validate observed fields -> classify provider role -> deterministic route -> ledger entry.
+
+This slice must prove the boundary between collection leads, context, and potential evidence before source analysis begins.
 
 ## KISS boundary
 
-This slice stays single-query, script-first, and function-first.
+Keep this slice single-item, local, deterministic, and function-first.
 
 Do not add:
 
-1. Chat or other UI.
-2. AI query generation.
-3. Firecrawl.
+1. Chat or another UI.
+2. AI classification or query generation.
+3. Firecrawl or source-page retrieval.
 4. Find, Sweep, Judge, or Write agents.
 5. Batch orchestration.
 6. A database or plugin framework.
-7. Hash chaining or sealed manifests.
+7. Automatic evidence approval.
+8. Hash chaining or sealed manifests.
 
 ## Definition of done
 
-1. One manually defined query or request payload reaches one confirmed Seerist endpoint.
-2. Credentials are read from environment configuration and never printed or committed.
-3. The raw response is saved unchanged in a configurable, non-committed run folder.
-4. Normalized output contains only fields demonstrated by the real payload.
-5. A minimal JSONL event log records run ID, timestamp, event type, status, artifact reference, and errors.
-6. The script prints a compact candidate-source summary for human inspection.
-7. At least three representative queries are exercised manually.
-8. Probe notes record payload shape, source types, content depth, pagination, errors, and rate limits.
-9. `npm run typecheck` and `npm run build` pass.
+1. One manually selected item from a saved probe response reaches the existing `validate -> route -> ledger` flow.
+2. Classification uses endpoint, source type, provenance fields, and observed content depth rather than narrative wording.
+3. A collection lead cannot be marked claim-eligible or approved.
+4. A context item cannot count as independent claim corroboration.
+5. A potential evidence item records provider ID, retrieval time, raw artifact reference, content completeness, and available source links or references.
+6. No code path advances an item to `approved`; human approval remains a later explicit input.
+7. Expected failures use `Result<T, E>` with literal error types.
+8. Focused tests cover one accepted item, one invalid item, and the no-automatic-approval invariant.
+9. `npm test`, `npm run typecheck`, and `npm run build` pass.
 
-## Inputs required before implementation
+## Inputs and constraints
 
-1. Seerist API documentation or a confirmed endpoint and request example.
-2. Authentication method and environment-variable names.
-3. Provider restrictions governing storage of raw responses.
-
-Never paste credentials into chat or source files.
-
-## Initial event contract
-
-```ts
-type ProbeEvent = {
-	runId: string;
-	occurredAt: string;
-	eventType: string;
-	status: "started" | "completed" | "failed";
-	artifactRef?: string;
-	error?: string;
-};
-```
-
-Checksums, hash chaining, and sealed manifests remain later hardening steps.
+1. Use only fields demonstrated in `seerist-probe-findings.md`.
+2. Keep raw provider responses in the ignored local run folder until retention rules are confirmed.
+3. Do not commit copied provider narrative content as a test fixture without explicit permission.
+4. Treat provider taxonomies and source discriminators as open values.
+5. Record local retrieval time when provider freshness is absent or ambiguous.
 
 ## What this slice should teach us
 
-1. Which endpoints and authentication flow are available.
-2. Which source types and content depths Seerist returns.
-3. Which provenance, date, geography, and language fields are reliable.
-4. How pagination, quotas, rate limits, and errors behave.
-5. Which provisional fields in `memo-workflow.md` should survive.
-
-For reset constraints and non-goals, use:
-
-- `03-Workflow/kiss-reset-plan.md`
-- `03-Workflow/non-goals-from-poc.md`
+1. The smallest stable envelope shared by heterogeneous provider responses.
+2. Which deterministic facts are sufficient to assign a workflow role.
+3. Which records require retrieval before source analysis.
+4. Which fields belong in an active cross-module intake contract.
 
 ## Legacy PoC input rule
 
 If using prior PoC behavior as inspiration, create and accept a mapping note first:
 
-- `00-PoC-Reference/03-Mapping/mapping-template.md`
+- `../00-PoC-Reference/03-Mapping/mapping-template.md`
 
 Track intake status in:
 
-- `03-Workflow/poc-to-workflow-intake.md`
+- `poc-to-workflow-intake.md`
 
-Current cross-session context: `../../HANDOFF.md`
+Current cross-session context: `../HANDOFF.md`

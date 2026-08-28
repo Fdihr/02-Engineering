@@ -61,21 +61,21 @@
   <!-- LEFT: EVIDENCE DISCOVERY -->
   <rect class="panel" x="64" y="128" width="728" height="976" />
   <rect class="panel-header" x="64" y="128" width="728" height="72" />
-  <text class="panel-title" x="88" y="158">1. Evidence discovery and expansion</text>
-  <text class="panel-subtitle" x="88" y="181">Find candidate material, reduce duplication, then inspect source lineage</text>
+  <text class="panel-title" x="88" y="158">1. Item classification and lead resolution</text>
+  <text class="panel-subtitle" x="88" y="181">Classify by content depth and lineage, then resolve discovery leads</text>
 
   <rect class="tested-card" x="88" y="224" width="680" height="272" />
   <rect class="tested-chip" x="88" y="224" width="8" height="272" />
-  <text class="card-title" x="112" y="252">World of Data - primary evidence surface</text>
+  <text class="card-title" x="112" y="252">World of Data - heterogeneous collection surface</text>
   <text class="endpoint" x="112" y="280">GET /v1/wod</text>
   <text class="body" x="112" y="306">Filter by source, topic, time, geography, search, severity, cluster, and hotspot.</text>
   <line class="divider" x1="112" y1="324" x2="744" y2="324" />
   <text class="caption" x="112" y="348">Documented views</text>
   <text class="small" x="112" y="370">News + social | verified events | analyst reports | point-of-interest search</text>
   <text class="small" x="112" y="390">Updated-since polling | filter counts | saved-search execution | cluster lookup</text>
-  <text class="caption" x="112" y="420">Live evidence</text>
-  <text class="small" x="112" y="442">News/social: title, summary, link, provenance; no body observed</text>
-  <text class="small" x="112" y="462">Verified: structured event and references; analyst reports: full multilingual body</text>
+  <text class="caption" x="112" y="420">Observed workflow roles</text>
+  <text class="small" x="112" y="442">News/social: collection leads with summaries + links; no body observed</text>
+  <text class="small" x="112" y="462">Verified: status-rich candidate; analyst reports: captured multilingual body</text>
   <rect class="tested-chip" x="648" y="464" width="96" height="8" />
 
   <rect class="tested-card" x="88" y="520" width="680" height="160" />
@@ -84,7 +84,7 @@
   <text class="endpoint" x="112" y="600">GET /v2/clusters/{cluster_id}/articles</text>
   <text class="body" x="112" y="628">Triage a representative event, then retrieve the article set behind its stable cluster ID.</text>
   <text class="small" x="112" y="650">Live: cluster ID persisted into article expansion; summary + source URL, no body</text>
-  <text class="small" x="112" y="670">Potential role: source grouping and duplicate detection, not proof of corroboration</text>
+  <text class="small" x="112" y="670">Role: lead resolution and duplicate detection, not proof of corroboration</text>
 
   <rect class="tested-card" x="88" y="704" width="680" height="144" />
   <text class="card-title" x="112" y="732">Hotspots - anomalous activity signals</text>
@@ -95,13 +95,13 @@
   <text class="small" x="112" y="832">Role: discovery and prioritization signal, not standalone evidence</text>
 
   <rect class="quiet-card" x="88" y="872" width="680" height="208" />
-  <text class="card-title" x="112" y="900">Evidence contract implied by live responses</text>
+  <text class="card-title" x="112" y="900">Item-role contract implied by live responses</text>
   <text class="body" x="112" y="928">1. Preserve the raw response before normalization.</text>
-  <text class="body" x="112" y="952">2. Treat feature properties as source-dependent and optional.</text>
-  <text class="body" x="112" y="976">3. Keep provider references separate from source URLs.</text>
-  <text class="body" x="112" y="1000">4. Follow next + total, but detect cross-page cache-snapshot drift.</text>
-  <text class="body" x="112" y="1024">5. Do not infer full content, authorship, publication date, or reliability.</text>
-  <text class="small" x="112" y="1056">This contract is evidence-led; it must evolve as other endpoint families are tested.</text>
+  <text class="body" x="112" y="952">2. Assign evidence candidate | lead | context from observed facts.</text>
+  <text class="body" x="112" y="976">3. Keep optional source fields and provider references explicit.</text>
+  <text class="body" x="112" y="1000">4. Follow next + total, but detect cross-page snapshot drift.</text>
+  <text class="body" x="112" y="1024">5. No narrative wording or provider score may approve evidence.</text>
+  <text class="small" x="112" y="1056">Current build target: classify and route one saved provider item.</text>
 
   <!-- MIDDLE: CONTEXT AND FORESIGHT -->
   <rect class="panel" x="816" y="128" width="728" height="976" />
@@ -120,14 +120,14 @@
   <text class="endpoint" x="864" y="382">GET /v2/pulse/country/{code}</text>
   <text class="endpoint" x="864" y="406">GET /v2/pulse/city/{code}</text>
   <text class="endpoint" x="1184" y="406">GET /v2/pulse/county/{fips}</text>
-  <text class="small" x="864" y="438">Potential role: contextual signal and outlook input; never a substitute for sourced claims</text>
+  <text class="small" x="864" y="438">Role: context and outlook; never a substitute for sourced claims</text>
   <text class="small" x="864" y="462">Live: v2 baseline + open adjustments; 7 metadata forecasts; geometry omitted</text>
 
   <rect class="tested-card" x="840" y="512" width="680" height="152" />
   <text class="card-title" x="864" y="540">Early warning and planned disruption</text>
   <text class="endpoint" x="864" y="568">GET /v1/wod/breaking-events</text>
   <text class="endpoint" x="864" y="592">GET /v1/wod/calendar-events</text>
-  <text class="body" x="864" y="620">Breaking events expose evolving status; calendar events expose future dates and impacts.</text>
+  <text class="body" x="864" y="620">Breaking: status-rich candidate; future events: contextual outlook.</text>
   <text class="small" x="864" y="644">Live: status + revision history; future ranges + open classifications</text>
 
   <rect class="tested-card" x="840" y="688" width="680" height="160" />
@@ -145,7 +145,7 @@
   <text class="card-title" x="864" y="900">Scribe - provider-generated narrative</text>
   <text class="endpoint" x="864" y="928">GET /v2/auto-summary/{locationCode}/{locationType}</text>
   <text class="body" x="864" y="956">Combines document counts, Pulse, hotspots, and top events into a location summary.</text>
-  <text class="body" x="864" y="984">Potential role: orientation or comparison, not evidence and not workflow authority.</text>
+  <text class="body" x="864" y="984">Role: orientation and lead discovery, not evidence or workflow authority.</text>
   <text class="small" x="864" y="1016">Live: direct URLs + cluster IDs + summaries; no nested full article text</text>
   <text class="small" x="864" y="1040">Constraint: date must be within 60 days according to the blueprint</text>
   <rect class="caution-chip" x="1400" y="1052" width="96" height="8" />
@@ -176,7 +176,7 @@
   <text class="body" x="1616" y="620">Creation explicitly requires bearer token plus API key; mutation tests remain deferred.</text>
   <rect class="state-chip" x="2192" y="636" width="96" height="8" />
 
-  <text class="section-title" x="1592" y="704">Potential fit with the memo workflow</text>
+  <text class="section-title" x="1592" y="704">Workflow fit from live responses</text>
 
   <rect class="workflow-card" x="1592" y="728" width="224" height="96" />
   <text class="card-title" x="1616" y="756">Scope + plan</text>
@@ -184,22 +184,22 @@
   <text class="small" x="1616" y="800">saved query definitions</text>
 
   <rect class="workflow-card" x="1840" y="728" width="224" height="96" />
-  <text class="card-title" x="1864" y="756">Collect + triage</text>
-  <text class="small" x="1864" y="780">WoD | hotspots | clusters</text>
-  <text class="small" x="1864" y="800">breaking + future events</text>
+  <text class="card-title" x="1864" y="756">Collect + classify</text>
+  <text class="small" x="1864" y="780">evidence | leads | context</text>
+  <text class="small" x="1864" y="800">resolve cluster IDs + URLs</text>
 
   <rect class="workflow-card" x="2088" y="728" width="224" height="96" />
-  <text class="card-title" x="2112" y="756">Evidence gate</text>
-  <text class="small" x="2112" y="780">provenance | relevance</text>
-  <text class="small" x="2112" y="800">coverage | duplicates</text>
+  <text class="card-title" x="2112" y="756">Human evidence gate</text>
+  <text class="small" x="2112" y="780">content depth | lineage</text>
+  <text class="small" x="2112" y="800">approve candidates only</text>
 
   <path class="flow-line" d="M 1816 776 L 1838 776" />
   <path class="flow-line" d="M 2064 776 L 2086 776" />
 
   <rect class="workflow-card" x="1592" y="848" width="224" height="96" />
   <text class="card-title" x="1616" y="876">Source analysis</text>
-  <text class="small" x="1616" y="900">analysis bodies</text>
-  <text class="small" x="1616" y="920">cluster article sets</text>
+  <text class="small" x="1616" y="900">approved captured content</text>
+  <text class="small" x="1616" y="920">one item per worker</text>
 
   <rect class="workflow-card" x="1840" y="848" width="224" height="96" />
   <text class="card-title" x="1864" y="876">Synthesis</text>
@@ -209,7 +209,7 @@
   <rect class="workflow-card" x="2088" y="848" width="224" height="96" />
   <text class="card-title" x="2112" y="876">Context + outlook</text>
   <text class="small" x="2112" y="900">Pulse | risk | calendar</text>
-  <text class="small" x="2112" y="920">Scribe comparison only</text>
+  <text class="small" x="2112" y="920">country baseline only</text>
 
   <path class="flow-line" d="M 1816 896 L 1838 896" />
   <path class="flow-line" d="M 2064 896 L 2086 896" />
@@ -231,9 +231,9 @@
   <rect class="tested-chip" x="488" y="1288" width="96" height="8" />
 
   <rect class="documented-card" x="632" y="1208" width="520" height="104" />
-  <text class="card-title" x="656" y="1236">Test next - highest information value</text>
-  <text class="small" x="656" y="1260">AOIs | Pulse region/city | hotspot topic/top</text>
-  <text class="small" x="656" y="1282">Then security configs | updated-since polling | POI search</text>
+  <text class="card-title" x="656" y="1236">Build next - one-item evidence intake</text>
+  <text class="small" x="656" y="1260">Classify one saved response item by observed role</text>
+  <text class="small" x="656" y="1282">Preserve raw lineage; route to review or retrieval</text>
 
   <rect class="caution-card" x="1176" y="1208" width="552" height="104" />
   <text class="card-title" x="1200" y="1236">Blueprint defects to validate</text>

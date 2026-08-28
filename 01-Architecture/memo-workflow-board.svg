@@ -48,7 +48,7 @@
 
   <rect class="canvas" x="0" y="0" width="2400" height="1400" />
   <text class="page-title" x="48" y="48">Threat intelligence memo workflow</text>
-  <text class="page-subtitle" x="48" y="76">Approved evidence, independent source analysis, challenged synthesis, verified writing, and complete audit history</text>
+  <text class="page-subtitle" x="48" y="76">Classified and approved evidence, independent source analysis, challenged synthesis, verified writing, and complete audit history</text>
 
   <rect class="board" x="32" y="96" width="2336" height="1272" />
 
@@ -84,14 +84,14 @@
   <text class="caption" x="112" y="709">Only approved questions may execute.</text>
 
   <rect class="det-card" x="88" y="736" width="512" height="96" />
-  <text class="card-title" x="112" y="762">6. Plan, collect, normalize</text>
-  <text class="body" x="112" y="786">AI intent -> typed Seerist discovery + one gap-fill pass</text>
-  <text class="caption" x="112" y="807">Deduplicate; propose human-approved Firecrawl if below four.</text>
+  <text class="card-title" x="112" y="762">6. Collect, classify, resolve</text>
+  <text class="body" x="112" y="786">Seerist items -> evidence candidates | leads | context</text>
+  <text class="caption" x="112" y="807">Resolve leads; context cannot satisfy the evidence target.</text>
 
   <rect class="agent-card" x="88" y="848" width="512" height="96" />
-  <text class="card-title" x="112" y="874">7. Candidate evidence review</text>
-  <text class="body" x="112" y="898">Coverage | provenance | relevance | duplicates | gaps</text>
-  <text class="caption" x="112" y="919">Four is a target; limited evidence remains explicit.</text>
+  <text class="card-title" x="112" y="874">7. Potential evidence review</text>
+  <text class="body" x="112" y="898">Content depth | lineage | relevance | duplicates | gaps</text>
+  <text class="caption" x="112" y="919">Only sufficient captured content can reach the evidence gate.</text>
 
   <rect class="human-card" x="88" y="960" width="512" height="80" />
   <text class="card-title" x="112" y="986">8. Human evidence gate</text>
@@ -117,8 +117,8 @@
   <text class="panel-subtitle" x="704" y="181">V1 runs approved sources sequentially, then reconciles evidence by claim</text>
 
   <rect class="artifact-card" x="704" y="224" width="992" height="56" />
-  <text class="card-title" x="728" y="248">Approved source queue</text>
-  <text class="caption" x="728" y="268">Claim-eligible content | actual source lineage | one evidence item per worker | stable order</text>
+  <text class="card-title" x="728" y="248">Human-approved evidence queue</text>
+  <text class="caption" x="728" y="268">Claim-eligible captured content | actual source lineage | one item per worker | stable order</text>
 
   <rect class="agent-card" x="704" y="304" width="304" height="112" />
   <text class="card-title" x="728" y="332">Find - extraction pass A</text>
@@ -191,7 +191,7 @@
 
   <!-- Approved intake enters through the gap between left and middle. -->
   <path class="primary-line" d="M 600 1000 L 652 1000 L 652 252 L 702 252" />
-  <text class="caption" x="632" y="1048">Approved source snapshot</text>
+  <text class="caption" x="632" y="1048">Approved evidence snapshot</text>
 
   <!-- RIGHT: OUTPUT -->
   <rect class="panel" x="1776" y="128" width="560" height="940" />
@@ -269,12 +269,12 @@
   <rect class="tool-card" x="88" y="1192" width="512" height="120" />
   <text class="card-title" x="112" y="1220">Seerist API - primary collection</text>
   <text class="body" x="112" y="1246">Discovery + one bounded gap-fill pass</text>
-  <text class="caption" x="112" y="1270">AI proposes intent; TypeScript compiles operations.</text>
-  <text class="caption" x="112" y="1292">Credentials remain outside prompts, artifacts, and events.</text>
+  <text class="caption" x="112" y="1270">Classify each item; resolve lead cluster IDs or URLs.</text>
+  <text class="caption" x="112" y="1292">Context informs analysis; it does not corroborate claims.</text>
 
   <rect class="tool-card" x="616" y="1192" width="512" height="120" />
   <text class="card-title" x="640" y="1220">Firecrawl API - OSINT fallback</text>
-  <text class="body" x="640" y="1246">Used when fewer than four usable Seerist items remain</text>
+  <text class="body" x="640" y="1246">Gap-fill when fewer than four evidence candidates remain</text>
   <text class="caption" x="640" y="1270">Human approves expansion and candidate evidence.</text>
   <text class="caption" x="640" y="1292">Same normalization, provenance, and worker contracts.</text>
 

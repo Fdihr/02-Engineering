@@ -1,11 +1,11 @@
 # Threat Intelligence Memo Workflow
 
-Status: Intake, analysis, output, and event-log architecture approved; implementation pending.
+Status: Working architecture revised from live Seerist behavior; implementation pending.
 Last updated: 2026-08-28
 Visual: `../01-Architecture/memo-workflow-board.svg`
 Seerist capability visual: `../01-Architecture/seerist-api-capability-board.svg`
 
-The capability visual maps documented and live-tested API possibilities. It is a test-planning aid, not a settled workflow contract.
+The capability visual maps documented and live-tested API possibilities. The live findings determine provider-role boundaries; untested capabilities remain planning inputs rather than workflow contracts.
 
 ## Purpose
 
@@ -21,6 +21,18 @@ Turn a user's free-text intelligence need into a human-approved memo using:
 ## Core principle
 
 The model may propose meaning, plans, questions, summaries, and confidence. Deterministic code owns state, permissions, budgets, tool execution, evidence references, and valid transitions. Humans own the approval gates defined below.
+
+## Observed Seerist role boundary
+
+Normalization must assign each collected provider item one workflow role before evidence review:
+
+| Role | Observed surfaces | Permitted use |
+| --- | --- | --- |
+| Evidence candidate | Analyst reports with captured bodies; source-linked breaking or verified-event records with status retained | Human evidence review; claim use only when content and lineage support the specific claim |
+| Collection lead | News/social summaries, cluster records, hotspot cluster IDs, and Scribe-linked events | Discovery, prioritization, deduplication, or source retrieval; never direct claim support |
+| Context | Country background, risk ratings, Pulse scores and forecasts, and future-event assessments | Attributed background or outlook; never independent corroboration of an event claim |
+
+Provider role is determined from endpoint, source type, provenance, content depth, and retrieval limitations. Narrative wording, provider scores, or generated summaries cannot approve evidence or advance workflow state.
 
 ## Experience boundary
 
@@ -41,7 +53,7 @@ The chat is only the interaction surface. A typed workflow state must exist behi
 1. Human-approved scope and research questions.
 2. AI-proposed provider-neutral query intents compiled by deterministic code.
 3. Two-pass Seerist collection: discovery, then one bounded gap-fill pass.
-4. Normalization, deduplication, optional human-approved Firecrawl expansion, and human evidence approval.
+4. Role classification, lead resolution, normalization, deduplication, optional human-approved Firecrawl expansion, and human evidence approval.
 5. One sequential Find -> Sweep -> Judge -> Write worker per approved evidence item.
 6. Claim-centric synthesis by builder, challenger, and senior adjudicator.
 7. Fixed-shell, adaptive-body memo generation with claim-level citations.
@@ -59,8 +71,8 @@ The chat is only the interaction surface. A typed workflow state must exist behi
 4. Agent proposes research questions.
 5. Human approves or revises the research questions.
 6. Agent proposes provider-neutral discovery intents; deterministic code validates and compiles them into Seerist operations.
-7. Deterministic code runs discovery and one bounded gap-fill pass, then normalizes and deduplicates the results.
-8. If fewer than four usable items remain, the agent may propose a Firecrawl expansion for human approval.
+7. Deterministic code runs discovery and one bounded gap-fill pass, classifies provider roles, resolves eligible leads, then normalizes and deduplicates potential evidence.
+8. If fewer than four usable evidence candidates remain, the agent may propose a Firecrawl expansion for human approval. Context and unresolved leads do not count toward this target.
 9. Agent returns a compact evidence review in chat.
 10. Human approves individual evidence items or selects a targeted return point.
 11. Deterministic code seals the approved evidence snapshot for source analysis.
@@ -373,15 +385,17 @@ type EvidenceRecord = {
 
 One non-duplicate, human-approved `EvidenceRecord` is the execution unit for one source worker. A publisher is not an execution unit, and records are not clustered into events before source analysis.
 
-### Provisional source-eligibility rule
+### Observed source-eligibility rule
 
-This rule must be calibrated against real Seerist responses during integration testing:
-
-1. Full captured content may support claims.
+1. Full captured content, as observed for Seerist analyst reports, may support claims after lineage checks and human approval.
 2. Substantive partial content may support only narrowly bounded claims, with retrieval limitations carried into Judge and synthesis.
-3. Provider summaries and snippet-only records may guide collection and retrieval, but cannot support memo claims.
-4. Access through Seerist does not make Seerist the author. Normalization records the actual publisher, author, content type, evidence order, and cited upstream sources.
-5. If authorship or lineage is unclear, source reliability defaults to `unknown`.
+3. News/social and tested cluster-article records exposed summaries and links but no body. They are collection leads until source content is retrieved.
+4. Hotspots and Scribe-generated narratives are discovery aids. Resolve their source URLs or cluster IDs before evidence review.
+5. Country background, risk ratings, and Pulse are attributed provider context. They do not independently corroborate event claims.
+6. Breaking-event status and revision history must remain visible; future events describe anticipated events rather than proof that an incident occurred.
+7. Access through Seerist does not make Seerist the author. Normalization records the actual publisher, author, content type, evidence order, and cited upstream sources when present.
+8. `@timestamp` may represent ingest time, and targeted risk ratings exposed no freshness field. Preserve provider dates and always record retrieval time.
+9. If authorship or lineage is unclear, source reliability defaults to `unknown`.
 
 ## Step 7: Evidence review package
 
