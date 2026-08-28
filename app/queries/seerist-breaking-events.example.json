@@ -1,0 +1,10 @@
+{
+  "path": "/v1/wod/breaking-events",
+  "query": {
+    "start": "2026-08-27T00:00:00.000Z",
+    "end": "2026-08-28T23:59:59.999Z",
+    "pageSize": 5,
+    "pageOffset": 0,
+    "sortDirection": "desc"
+  }
+}

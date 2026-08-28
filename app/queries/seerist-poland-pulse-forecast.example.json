@@ -1,0 +1,8 @@
+{
+  "path": "/v2/pulse/country/pl",
+  "query": {
+    "model": "v2",
+    "omitGeometry": true,
+    "includeForecast": true
+  }
+}

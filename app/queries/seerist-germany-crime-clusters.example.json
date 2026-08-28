@@ -1,0 +1,10 @@
+{
+  "path": "/v2/clusters/crime",
+  "query": {
+    "aoiId": "de",
+    "start": "2026-08-27T00:00:00.000Z",
+    "end": "2026-08-28T23:59:59.999Z",
+    "pageSize": 3,
+    "pageOffset": 0
+  }
+}

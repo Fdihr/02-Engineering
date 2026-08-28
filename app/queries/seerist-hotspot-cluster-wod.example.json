@@ -1,0 +1,9 @@
+{
+  "path": "/v1/wod",
+  "query": {
+    "clusterId": "01c5804d-1566-4dc2-bb60-7e5a3cd32d1d",
+    "pageSize": 10,
+    "pageOffset": 0,
+    "sortDirection": "desc"
+  }
+}

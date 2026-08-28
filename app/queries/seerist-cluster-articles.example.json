@@ -1,0 +1,7 @@
+{
+  "path": "/v2/clusters/86b717c9-ab2f-4495-bacb-0cf63f1440a3/articles",
+  "query": {
+    "pageSize": 10,
+    "includeRoot": true
+  }
+}

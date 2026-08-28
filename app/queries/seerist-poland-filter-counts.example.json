@@ -1,0 +1,10 @@
+{
+  "path": "/v1/wod",
+  "query": {
+    "aoiId": "pl",
+    "pageSize": 1,
+    "pageOffset": 0,
+    "sortDirection": "desc",
+    "includeFilterCounts": true
+  }
+}

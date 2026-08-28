@@ -1,0 +1,6 @@
+{
+  "path": "/v1/config/topics",
+  "query": {
+    "ui": true
+  }
+}

@@ -78,26 +78,28 @@
   <text class="small" x="112" y="462">Verified: structured event and references; analyst reports: full multilingual body</text>
   <rect class="tested-chip" x="648" y="464" width="96" height="8" />
 
-  <rect class="documented-card" x="88" y="520" width="680" height="160" />
+  <rect class="tested-card" x="88" y="520" width="680" height="160" />
   <text class="card-title" x="112" y="548">Event clusters - deduplicate and expand</text>
   <text class="endpoint" x="112" y="576">GET /v2/clusters/{event_category}</text>
   <text class="endpoint" x="112" y="600">GET /v2/clusters/{cluster_id}/articles</text>
   <text class="body" x="112" y="628">Triage a representative event, then retrieve the article set behind its stable cluster ID.</text>
-  <text class="small" x="112" y="654">Potential workflow role: source grouping, corroboration, duplicate detection</text>
+  <text class="small" x="112" y="650">Live: cluster ID persisted into article expansion; summary + source URL, no body</text>
+  <text class="small" x="112" y="670">Potential role: source grouping and duplicate detection, not proof of corroboration</text>
 
-  <rect class="documented-card" x="88" y="704" width="680" height="144" />
+  <rect class="tested-card" x="88" y="704" width="680" height="144" />
   <text class="card-title" x="112" y="732">Hotspots - anomalous activity signals</text>
   <text class="endpoint" x="112" y="760">GET /v1/hotspots</text>
   <text class="endpoint" x="400" y="760">GET /v1/hotspots/topic/top</text>
   <text class="body" x="112" y="788">Returns hotspot properties and cluster IDs for follow-up through clusters or World of Data.</text>
-  <text class="small" x="112" y="820">Potential workflow role: discovery trigger and prioritization signal, not standalone evidence</text>
+  <text class="small" x="112" y="812">Live: 5 of 184 global hotspots; seven IDs; one resolved to 10 of 13 WoD records</text>
+  <text class="small" x="112" y="832">Role: discovery and prioritization signal, not standalone evidence</text>
 
   <rect class="quiet-card" x="88" y="872" width="680" height="208" />
   <text class="card-title" x="112" y="900">Evidence contract implied by live responses</text>
   <text class="body" x="112" y="928">1. Preserve the raw response before normalization.</text>
   <text class="body" x="112" y="952">2. Treat feature properties as source-dependent and optional.</text>
   <text class="body" x="112" y="976">3. Keep provider references separate from source URLs.</text>
-  <text class="body" x="112" y="1000">4. Use metadata next + total; page length does not prove completion.</text>
+  <text class="body" x="112" y="1000">4. Follow next + total, but detect cross-page cache-snapshot drift.</text>
   <text class="body" x="112" y="1024">5. Do not infer full content, authorship, publication date, or reliability.</text>
   <text class="small" x="112" y="1056">This contract is evidence-led; it must evolve as other endpoint families are tested.</text>
 
@@ -107,7 +109,7 @@
   <text class="panel-title" x="840" y="158">2. Context, warning, and outlook</text>
   <text class="panel-subtitle" x="840" y="181">Add stability, baseline risk, early warning, and forward-looking signals</text>
 
-  <rect class="documented-card" x="840" y="224" width="680" height="264" />
+  <rect class="tested-card" x="840" y="224" width="680" height="264" />
   <text class="card-title" x="864" y="252">Pulse - stability scores and forecasts</text>
   <text class="endpoint" x="864" y="280">GET /v2/pulse/region</text>
   <text class="endpoint" x="1184" y="280">GET /v2/pulse/country</text>
@@ -119,30 +121,32 @@
   <text class="endpoint" x="864" y="406">GET /v2/pulse/city/{code}</text>
   <text class="endpoint" x="1184" y="406">GET /v2/pulse/county/{fips}</text>
   <text class="small" x="864" y="438">Potential role: contextual signal and outlook input; never a substitute for sourced claims</text>
-  <text class="small" x="864" y="462">Needs testing: model v1/v2 differences, forecast presence, score semantics, geometry size</text>
+  <text class="small" x="864" y="462">Live: v2 baseline + open adjustments; 7 metadata forecasts; geometry omitted</text>
 
-  <rect class="documented-card" x="840" y="512" width="680" height="152" />
+  <rect class="tested-card" x="840" y="512" width="680" height="152" />
   <text class="card-title" x="864" y="540">Early warning and planned disruption</text>
   <text class="endpoint" x="864" y="568">GET /v1/wod/breaking-events</text>
   <text class="endpoint" x="864" y="592">GET /v1/wod/calendar-events</text>
   <text class="body" x="864" y="620">Breaking events expose evolving status; calendar events expose future dates and impacts.</text>
-  <text class="small" x="864" y="644">Potential role: warning lane, collection trigger, scenario and outlook input</text>
+  <text class="small" x="864" y="644">Live: status + revision history; future ranges + open classifications</text>
 
-  <rect class="documented-card" x="840" y="688" width="680" height="160" />
+  <rect class="tested-card" x="840" y="688" width="680" height="160" />
+  <rect class="caution-chip" x="840" y="688" width="8" height="160" />
   <text class="card-title" x="864" y="716">Country baseline and risk ratings</text>
   <text class="endpoint" x="864" y="744">GET /v1/wod/country-background/{countryCode}</text>
   <text class="endpoint" x="864" y="768">GET /v1/wod/risk-rating</text>
   <text class="endpoint" x="1184" y="768">GET /v1/wod/risk-rating/{geoCode}</text>
-  <text class="body" x="864" y="798">Retrieve standing country context and geographic risk-rating structures.</text>
-  <text class="small" x="864" y="824">Potential role: baseline context; freshness and provenance require live validation</text>
+  <text class="body" x="864" y="796">Provider context: deep country narrative and hierarchical geographic risk ratings.</text>
+  <text class="small" x="864" y="820">Live: 22 risk sections + 3 scenarios; 29 ratings across 6 parent categories</text>
+  <text class="small" x="864" y="840">Constraint: background has no references; ratings have no freshness timestamp</text>
 
-  <rect class="caution-card" x="840" y="872" width="680" height="208" />
+  <rect class="tested-card" x="840" y="872" width="680" height="208" />
   <rect class="caution-chip" x="840" y="872" width="8" height="208" />
   <text class="card-title" x="864" y="900">Scribe - provider-generated narrative</text>
   <text class="endpoint" x="864" y="928">GET /v2/auto-summary/{locationCode}/{locationType}</text>
   <text class="body" x="864" y="956">Combines document counts, Pulse, hotspots, and top events into a location summary.</text>
   <text class="body" x="864" y="984">Potential role: orientation or comparison, not evidence and not workflow authority.</text>
-  <text class="small" x="864" y="1016">Test for: traceability, source references, factual fidelity, language, date behavior</text>
+  <text class="small" x="864" y="1016">Live: direct URLs + cluster IDs + summaries; no nested full article text</text>
   <text class="small" x="864" y="1040">Constraint: date must be within 60 days according to the blueprint</text>
   <rect class="caution-chip" x="1400" y="1052" width="96" height="8" />
 
@@ -156,10 +160,12 @@
   <text class="card-title" x="1616" y="252">Helper endpoints - authoritative query vocabularies</text>
   <text class="endpoint" x="1616" y="280">GET /v1/aois/country | city | county</text>
   <text class="endpoint" x="1616" y="306">GET /v1/config/topics</text>
+  <rect class="tested-chip" x="2240" y="298" width="48" height="6" />
   <text class="endpoint" x="1616" y="332">GET /v1/config/verified/security/sectors | asset-types</text>
   <text class="endpoint" x="1616" y="358">GET /v1/config/verified/security/attack-types | perpetrators</text>
   <text class="endpoint" x="1616" y="384">GET /v1/config/verified/maritime/subcategories | vessel-types</text>
   <text class="endpoint" x="1616" y="410">GET /v1/config/risk-categories | calendar-events</text>
+  <rect class="tested-chip" x="2240" y="402" width="48" height="6" />
   <text class="small" x="1616" y="440">Potential role: validate human query input and avoid hard-coded provider taxonomies</text>
 
   <rect class="state-card" x="1592" y="488" width="720" height="176" />
@@ -220,14 +226,14 @@
 
   <rect class="tested-card" x="88" y="1208" width="520" height="104" />
   <text class="card-title" x="112" y="1236">Tested now</text>
-  <text class="small" x="112" y="1260">WoD: recent, search, verified, analysis</text>
-  <text class="small" x="112" y="1282">Observed: pagination, cache, source-shaped fields, body depth</text>
+  <text class="small" x="112" y="1260">WoD | hotspots | country/risk | configs | clusters/articles</text>
+  <text class="small" x="112" y="1282">Pulse | Scribe | breaking + future | bounded pages | provenance</text>
   <rect class="tested-chip" x="488" y="1288" width="96" height="8" />
 
   <rect class="documented-card" x="632" y="1208" width="520" height="104" />
   <text class="card-title" x="656" y="1236">Test next - highest information value</text>
-  <text class="small" x="656" y="1260">Topics config | next page | filter counts | clusters + articles</text>
-  <text class="small" x="656" y="1282">Then Pulse | breaking | future | Scribe | country context</text>
+  <text class="small" x="656" y="1260">AOIs | Pulse region/city | hotspot topic/top</text>
+  <text class="small" x="656" y="1282">Then security configs | updated-since polling | POI search</text>
 
   <rect class="caution-card" x="1176" y="1208" width="552" height="104" />
   <text class="card-title" x="1200" y="1236">Blueprint defects to validate</text>

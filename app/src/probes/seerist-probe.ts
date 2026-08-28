@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 
-const SEERIST_ENDPOINT = "https://app.seerist.com/hyperionapi/v1/wod";
+const SEERIST_BASE_URL = "https://app.seerist.com/hyperionapi/";
+const DEFAULT_PATH = "/v1/wod";
 const OBSERVED_SOURCE_FIELDS = [
   "id",
   "title",
@@ -31,6 +32,10 @@ const OBSERVED_SOURCE_FIELDS = [
 
 type QueryValue = string | number | boolean;
 type QueryPayload = Record<string, QueryValue>;
+type RequestDefinition = {
+  path: string;
+  query: QueryPayload;
+};
 
 type ProbeEvent = {
   runId: string;
@@ -51,35 +56,106 @@ const appendEvent = async (eventLogPath: string, event: ProbeEvent): Promise<voi
   await appendFile(eventLogPath, `${JSON.stringify(event)}\n`, "utf8");
 };
 
-const readQueryPayload = async (queryPath: string): Promise<QueryPayload> => {
+const parseQuery = (value: unknown): QueryPayload => {
+  if (!isRecord(value)) {
+    throw new Error("The request query must be a JSON object.");
+  }
+
+  const query: QueryPayload = {};
+  for (const [key, queryValue] of Object.entries(value)) {
+    if (
+      typeof queryValue !== "string" &&
+      typeof queryValue !== "number" &&
+      typeof queryValue !== "boolean"
+    ) {
+      throw new Error(`Query parameter '${key}' must be a string, number, or boolean.`);
+    }
+
+    query[key] = queryValue;
+  }
+
+  return query;
+};
+
+const readRequestDefinition = async (queryPath: string): Promise<RequestDefinition> => {
   const parsed: unknown = JSON.parse(await readFile(queryPath, "utf8"));
 
   if (!isRecord(parsed)) {
     throw new Error("The query file must contain a JSON object.");
   }
 
-  const query: QueryPayload = {};
-  for (const [key, value] of Object.entries(parsed)) {
-    if (
-      typeof value !== "string" &&
-      typeof value !== "number" &&
-      typeof value !== "boolean"
-    ) {
-      throw new Error(`Query parameter '${key}' must be a string, number, or boolean.`);
+  if (Object.hasOwn(parsed, "path") || Object.hasOwn(parsed, "query")) {
+    if (typeof parsed.path !== "string") {
+      throw new Error("The request path must be a string.");
     }
 
-    query[key] = value;
+    return {
+      path: parsed.path,
+      query: parsed.query === undefined ? {} : parseQuery(parsed.query)
+    };
   }
 
-  return query;
+  return { path: DEFAULT_PATH, query: parseQuery(parsed) };
 };
 
-const buildRequestUrl = (query: QueryPayload): URL => {
-  const url = new URL(SEERIST_ENDPOINT);
+const buildRequestUrl = (request: RequestDefinition): URL => {
+  if (!request.path.startsWith("/") || request.path.startsWith("//")) {
+    throw new Error("The request path must be an absolute path within the Seerist API.");
+  }
+
+  const url = new URL(request.path.slice(1), SEERIST_BASE_URL);
+  if (!url.href.startsWith(SEERIST_BASE_URL)) {
+    throw new Error("The request path must remain within the Seerist API base URL.");
+  }
+
+  if (url.search.length > 0 || url.hash.length > 0) {
+    throw new Error("Put query parameters in the request query object, not in the path.");
+  }
+
+  const query = request.query;
   for (const [key, value] of Object.entries(query)) {
     url.searchParams.set(key, String(value));
   }
   return url;
+};
+
+const describePayload = (payload: unknown): Record<string, unknown> => {
+  if (Array.isArray(payload)) {
+    const itemFields = payload.flatMap((item) => isRecord(item) ? Object.keys(item) : []);
+    return {
+      shape: "array",
+      itemCount: payload.length,
+      itemFields: [...new Set(itemFields)].sort()
+    };
+  }
+
+  if (!isRecord(payload)) {
+    return { shape: typeof payload };
+  }
+
+  if (!Array.isArray(payload.features)) {
+    return {
+      shape: "object",
+      fields: Object.keys(payload).sort()
+    };
+  }
+
+  const propertyNames = payload.features.flatMap((feature) =>
+    isRecord(feature) && isRecord(feature.properties) ? Object.keys(feature.properties) : []
+  );
+  const geometryTypes = payload.features.flatMap((feature) =>
+    isRecord(feature) && isRecord(feature.geometry) && typeof feature.geometry.type === "string"
+      ? [feature.geometry.type]
+      : []
+  );
+
+  return {
+    shape: "featureCollection",
+    featureCount: payload.features.length,
+    metadataFields: isRecord(payload.metadata) ? Object.keys(payload.metadata).sort() : [],
+    propertyFields: [...new Set(propertyNames)].sort(),
+    geometryTypes: [...new Set(geometryTypes)].sort()
+  };
 };
 
 const normalizeSources = (payload: unknown): Array<Record<string, unknown>> => {
@@ -113,18 +189,31 @@ const compactText = (value: unknown): string | undefined => {
 
 const printSummary = (
   runId: string,
+  requestPath: string,
   rawArtifactRef: string,
   cacheStatus: string | null,
   rateLimitHeaders: Array<[string, string]>,
-  sources: Array<Record<string, unknown>>
+  structure: Record<string, unknown>,
+  sources?: Array<Record<string, unknown>>
 ): void => {
   console.log(`Run: ${runId}`);
-  console.log(`Candidates: ${sources.length}`);
+  console.log(`Endpoint: ${requestPath}`);
   console.log(`Raw artifact: ${rawArtifactRef}`);
   console.log(`Cache: ${cacheStatus ?? "not reported"}`);
   console.log(
     `Rate limit: ${rateLimitHeaders.length > 0 ? rateLimitHeaders.map(([name, value]) => `${name}=${value}`).join(", ") : "not reported"}`
   );
+  console.log(`Shape: ${String(structure.shape)}`);
+
+  if (!sources) {
+    const itemCount = structure.itemCount ?? structure.featureCount;
+    if (itemCount !== undefined) {
+      console.log(`Items: ${String(itemCount)}`);
+    }
+    return;
+  }
+
+  console.log(`Candidates: ${sources.length}`);
 
   for (const [index, source] of sources.slice(0, 10).entries()) {
     const title = compactText(source.title) ?? "untitled";
@@ -163,8 +252,8 @@ const main = async (): Promise<void> => {
       throw new Error("SEERIST_API_KEY is not configured.");
     }
 
-    const query = await readQueryPayload(resolve(queryFile));
-    const response = await fetch(buildRequestUrl(query), {
+    const request = await readRequestDefinition(resolve(queryFile));
+    const response = await fetch(buildRequestUrl(request), {
       headers: {
         accept: "application/json",
         "x-api-key": apiKey
@@ -181,9 +270,14 @@ const main = async (): Promise<void> => {
     }
 
     const payload: unknown = JSON.parse(rawResponse.toString("utf8"));
-    const normalizedSources = normalizeSources(payload);
-    const normalizedPath = resolve(runDirectory, "normalized-sources.json");
-    await writeFile(normalizedPath, JSON.stringify(normalizedSources, null, 2), "utf8");
+    const structure = describePayload(payload);
+    const structurePath = resolve(runDirectory, "observed-structure.json");
+    await writeFile(structurePath, JSON.stringify(structure, null, 2), "utf8");
+    const normalizedSources = request.path === DEFAULT_PATH ? normalizeSources(payload) : undefined;
+    if (normalizedSources) {
+      const normalizedPath = resolve(runDirectory, "normalized-sources.json");
+      await writeFile(normalizedPath, JSON.stringify(normalizedSources, null, 2), "utf8");
+    }
     const rateLimitHeaders = Array.from(response.headers.entries()).filter(
       ([name]) => name.includes("rate") || name.includes("quota") || name === "retry-after"
     );
@@ -198,9 +292,11 @@ const main = async (): Promise<void> => {
 
     printSummary(
       runId,
+      request.path,
       rawArtifactRef,
       response.headers.get("x-cache"),
       rateLimitHeaders,
+      structure,
       normalizedSources
     );
   } catch (error) {

@@ -8,6 +8,7 @@
     "dev": "tsx src/index.ts",
     "probe:seerist": "node --env-file=../.env --import tsx src/probes/seerist-probe.ts",
     "start": "node dist/index.js",
+    "test": "node --import tsx --test src/modules/routing/routing.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "keywords": [],
