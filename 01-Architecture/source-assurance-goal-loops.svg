@@ -1,0 +1,237 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1400" viewBox="0 0 2400 1400" role="img" aria-labelledby="title description">
+  <title id="title">Source assurance goal loops</title>
+  <desc id="description">Detailed companion to the canonical memo workflow showing the deterministic controller shared by Find, Sweep, Judge, and Write, their frozen goals and completion conditions, retry semantics, immutable attempts, and committed artifact handoffs.</desc>
+
+  <defs>
+    <style>
+      text { font-family: "VestasSans"; letter-spacing: 0; }
+      .canvas { fill: #FFFFFF; }
+      .board { fill: #FFFFFF; stroke: #E3E5E8; stroke-width: 2; }
+      .panel { fill: #FFFFFF; stroke: #A2A9B1; stroke-width: 1.5; }
+      .panel-header { fill: #1F3144; }
+      .page-title { fill: #1F3144; font-size: 32px; font-weight: 500; }
+      .page-subtitle { fill: #606D7B; font-size: 14px; font-weight: 400; }
+      .panel-title { fill: #FFFFFF; font-size: 18px; font-weight: 500; }
+      .panel-subtitle { fill: #E3E5E8; font-size: 12px; font-weight: 400; }
+      .card-title { fill: #1F3144; font-size: 16px; font-weight: 500; }
+      .section-title { fill: #1F3144; font-size: 13px; font-weight: 500; }
+      .body { fill: #606D7B; font-size: 13px; font-weight: 400; }
+      .caption { fill: #606D7B; font-size: 12px; font-weight: 400; }
+      .small { fill: #606D7B; font-size: 11px; font-weight: 400; }
+      .det-card { fill: #FFFFFF; stroke: #005AFF; stroke-width: 2; }
+      .agent-card { fill: #96C8F0; stroke: #005AFF; stroke-width: 1.5; }
+      .human-card { fill: #FFFFFF; stroke: #19736E; stroke-width: 2; }
+      .gate-card { fill: #FFFFFF; stroke: #772219; stroke-width: 2; }
+      .context-card { fill: #FFFFFF; stroke: #E17D28; stroke-width: 2; }
+      .artifact-card { fill: #E3E5E8; stroke: #A2A9B1; stroke-width: 1.5; }
+      .quiet-card { fill: #FFFFFF; stroke: #A2A9B1; stroke-width: 1.5; }
+      .agent-chip { fill: #96C8F0; }
+      .success-chip { fill: #19736E; }
+      .warning-chip { fill: #E17D28; }
+      .failure-chip { fill: #772219; }
+      .divider { stroke: #E3E5E8; stroke-width: 1; }
+      .primary-line { fill: none; stroke: #005AFF; stroke-width: 2.5; marker-end: url(#arrow-blue); }
+      .retry-line { fill: none; stroke: #E17D28; stroke-width: 2; stroke-dasharray: 8 6; marker-end: url(#arrow-orange); }
+      .failure-line { fill: none; stroke: #772219; stroke-width: 2; marker-end: url(#arrow-red); }
+    </style>
+
+    <marker id="arrow-blue" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 5 L 0 10 z" fill="#005AFF" />
+    </marker>
+    <marker id="arrow-orange" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 5 L 0 10 z" fill="#E17D28" />
+    </marker>
+    <marker id="arrow-red" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 5 L 0 10 z" fill="#772219" />
+    </marker>
+  </defs>
+
+  <rect class="canvas" x="0" y="0" width="2400" height="1400" />
+  <text class="page-title" x="48" y="48">Source assurance goal loops</text>
+  <text class="page-subtitle" x="48" y="76">Detailed companion | The deterministic controller owns every stage; the model acts only inside bounded attempts</text>
+
+  <rect class="det-card" x="1720" y="32" width="16" height="16" />
+  <text class="caption" x="1744" y="45">Controller-owned</text>
+  <rect class="agent-card" x="1888" y="32" width="16" height="16" />
+  <text class="caption" x="1912" y="45">Scoped model action</text>
+  <rect class="context-card" x="2080" y="32" width="16" height="16" />
+  <text class="caption" x="2104" y="45">Retry path</text>
+  <rect class="gate-card" x="2200" y="32" width="16" height="16" />
+  <text class="caption" x="2224" y="45">Failure</text>
+
+  <rect class="board" x="32" y="96" width="2336" height="1272" />
+
+  <!-- COMMON CONTROLLER -->
+  <rect class="panel" x="64" y="128" width="2272" height="304" />
+  <rect class="panel-header" x="64" y="128" width="2272" height="72" />
+  <text class="panel-title" x="88" y="158">1. Common deterministic controller</text>
+  <text class="panel-subtitle" x="88" y="181">The stage plan freezes goal conditions before action; only a committed artifact can cross the stage boundary</text>
+
+  <rect class="det-card" x="88" y="224" width="376" height="152" />
+  <text class="card-title" x="112" y="252">Prepare</text>
+  <text class="body" x="112" y="278">Resolve immutable inputs</text>
+  <text class="caption" x="112" y="304">Freeze goal + blocking conditions</text>
+  <text class="caption" x="112" y="328">Set schema, model, attempts, time, tokens</text>
+  <rect class="success-chip" x="352" y="352" width="88" height="8" />
+
+  <rect class="agent-card" x="488" y="224" width="376" height="152" />
+  <text class="card-title" x="512" y="252">Act</text>
+  <text class="body" x="512" y="278">One scoped model invocation</text>
+  <text class="caption" x="512" y="304">Original inputs + typed retry feedback</text>
+  <text class="caption" x="512" y="328">No tools, state authority, or goal changes</text>
+  <rect class="agent-chip" x="752" y="352" width="88" height="8" />
+
+  <rect class="det-card" x="888" y="224" width="376" height="152" />
+  <text class="card-title" x="912" y="252">Observe</text>
+  <text class="body" x="912" y="278">Parse typed candidate output</text>
+  <text class="caption" x="912" y="304">Evaluate each frozen condition</text>
+  <text class="caption" x="912" y="328">Record evidence, reason, retryability</text>
+
+  <rect class="det-card" x="1288" y="224" width="448" height="152" />
+  <text class="card-title" x="1312" y="252">Goal Check</text>
+  <text class="body" x="1312" y="278">All blocking conditions met?</text>
+  <text class="caption" x="1312" y="304">Yes -> commit immutable stage output</text>
+  <text class="caption" x="1312" y="328">No -> retry if allowed; otherwise fail</text>
+
+  <rect class="artifact-card" x="1760" y="224" width="552" height="152" />
+  <text class="card-title" x="1784" y="252">Controller decision</text>
+  <text class="body" x="1784" y="278">Commit</text>
+  <text class="caption" x="1872" y="278">downstream may consume output</text>
+  <text class="body" x="1784" y="304">Retry</text>
+  <text class="caption" x="1872" y="304">typed failures only; same frozen goal</text>
+  <text class="body" x="1784" y="330">Fail</text>
+  <text class="caption" x="1872" y="330">no output crosses the boundary</text>
+
+  <path class="primary-line" d="M 464 300 L 486 300" />
+  <path class="primary-line" d="M 864 300 L 886 300" />
+  <path class="primary-line" d="M 1264 300 L 1286 300" />
+  <path class="primary-line" d="M 1736 300 L 1758 300" />
+  <path class="retry-line" d="M 2036 376 L 2036 408 L 676 408 L 676 378" />
+  <text class="small" x="1336" y="424">Retry keeps the plan fixed and adds only observed condition failures.</text>
+
+  <!-- STAGE CONTRACTS -->
+  <rect class="panel" x="64" y="456" width="2272" height="576" />
+  <rect class="panel-header" x="64" y="456" width="2272" height="72" />
+  <text class="panel-title" x="88" y="486">2. Stage-owned goals, checks, and committed handoffs</text>
+  <text class="panel-subtitle" x="88" y="509">Find and Sweep are isolated; Judge sees both committed extractions; Write sees only the committed adjudicated brief</text>
+
+  <rect class="det-card" x="88" y="552" width="520" height="448" />
+  <rect class="agent-chip" x="88" y="552" width="8" height="448" />
+  <text class="card-title" x="112" y="582">Find goal loop</text>
+  <text class="section-title" x="112" y="614">Input</text>
+  <text class="caption" x="112" y="638">Approved captured source + approved questions</text>
+  <text class="section-title" x="112" y="670">Frozen goal</text>
+  <text class="body" x="112" y="694">Extract all supportable in-scope observations.</text>
+  <line class="divider" x1="112" y1="714" x2="584" y2="714" />
+  <text class="section-title" x="112" y="742">Blocking conditions</text>
+  <text class="caption" x="112" y="768">Valid schema and approved question IDs</text>
+  <text class="caption" x="112" y="792">Exact support excerpt + resolvable locator</text>
+  <text class="caption" x="112" y="816">Permitted observation kind; no external facts</text>
+  <text class="caption" x="112" y="840">Every question has observation or gap disposition</text>
+  <line class="divider" x1="112" y1="864" x2="584" y2="864" />
+  <text class="section-title" x="112" y="892">Committed output</text>
+  <text class="body" x="112" y="916">SourceExtraction</text>
+  <text class="caption" x="112" y="940">Consumer: Judge after Sweep commits</text>
+  <text class="small" x="112" y="976">Fresh context | blind to all Sweep artifacts</text>
+
+  <rect class="det-card" x="648" y="552" width="520" height="448" />
+  <rect class="agent-chip" x="648" y="552" width="8" height="448" />
+  <text class="card-title" x="672" y="582">Sweep goal loop</text>
+  <text class="section-title" x="672" y="614">Input</text>
+  <text class="caption" x="672" y="638">Same source + questions in a fresh context</text>
+  <text class="section-title" x="672" y="670">Frozen goal</text>
+  <text class="body" x="672" y="694">Independently repeat the coverage pass.</text>
+  <line class="divider" x1="672" y1="714" x2="1144" y2="714" />
+  <text class="section-title" x="672" y="742">Blocking conditions</text>
+  <text class="caption" x="672" y="768">Same support and coverage checks as Find</text>
+  <text class="caption" x="672" y="792">No Find attempt, output, observation, or retry data</text>
+  <text class="caption" x="672" y="816">Independent IDs and direct source support</text>
+  <text class="caption" x="672" y="840">Every question has observation or gap disposition</text>
+  <line class="divider" x1="672" y1="864" x2="1144" y2="864" />
+  <text class="section-title" x="672" y="892">Committed output</text>
+  <text class="body" x="672" y="916">SourceExtraction</text>
+  <text class="caption" x="672" y="940">Consumer: Judge with committed Find output</text>
+  <text class="small" x="672" y="976">Fresh context | blind to all Find artifacts</text>
+
+  <rect class="det-card" x="1208" y="552" width="520" height="448" />
+  <rect class="warning-chip" x="1208" y="552" width="8" height="448" />
+  <text class="card-title" x="1232" y="582">Judge goal loop</text>
+  <text class="section-title" x="1232" y="614">Input</text>
+  <text class="caption" x="1232" y="638">Original source + committed Find and Sweep</text>
+  <text class="section-title" x="1232" y="670">Frozen goal</text>
+  <text class="body" x="1232" y="694">Dispose every extraction against the source.</text>
+  <line class="divider" x1="1232" y1="714" x2="1704" y2="714" />
+  <text class="section-title" x="1232" y="742">Blocking conditions</text>
+  <text class="caption" x="1232" y="768">Every observation accepted, merged, or rejected once</text>
+  <text class="caption" x="1232" y="792">Accepted support resolves to the original source</text>
+  <text class="caption" x="1232" y="816">Judgments cite accepted observations</text>
+  <text class="caption" x="1232" y="840">Disagreement, confidence, caveats, alternatives kept</text>
+  <line class="divider" x1="1232" y1="864" x2="1704" y2="864" />
+  <text class="section-title" x="1232" y="892">Committed output</text>
+  <text class="body" x="1232" y="916">AdjudicatedSourceBrief</text>
+  <text class="caption" x="1232" y="940">Consumer: Write</text>
+  <text class="small" x="1232" y="976">No composite trust score | all dispositions explicit</text>
+
+  <rect class="det-card" x="1768" y="552" width="520" height="448" />
+  <rect class="success-chip" x="1768" y="552" width="8" height="448" />
+  <text class="card-title" x="1792" y="582">Write goal loop</text>
+  <text class="section-title" x="1792" y="614">Input</text>
+  <text class="caption" x="1792" y="638">Committed adjudicated brief</text>
+  <text class="section-title" x="1792" y="670">Frozen goal</text>
+  <text class="body" x="1792" y="694">Produce a faithful source intelligence note.</text>
+  <line class="divider" x1="1792" y1="714" x2="2264" y2="714" />
+  <text class="section-title" x="1792" y="742">Blocking conditions</text>
+  <text class="caption" x="1792" y="768">Every finding resolves to accepted source material</text>
+  <text class="caption" x="1792" y="792">No proposition beyond the adjudicated brief</text>
+  <text class="caption" x="1792" y="816">No stronger confidence or removed qualification</text>
+  <text class="caption" x="1792" y="840">Contradictions, caveats, and gaps preserved</text>
+  <line class="divider" x1="1792" y1="864" x2="2264" y2="864" />
+  <text class="section-title" x="1792" y="892">Committed output</text>
+  <text class="body" x="1792" y="916">SourceIntelligenceNote</text>
+  <text class="caption" x="1792" y="940">Consumer: external claim synthesis</text>
+  <text class="small" x="1792" y="976">No Vestas context | no historical memo facts</text>
+
+  <!-- AUDIT AND HANDOFF -->
+  <rect class="panel" x="64" y="1056" width="2272" height="280" />
+  <rect class="panel-header" x="64" y="1056" width="2272" height="56" />
+  <text class="panel-title" x="88" y="1091">3. Controller authority, immutable attempts, and failure semantics</text>
+  <text class="panel-subtitle" x="696" y="1091">The acting model never grades itself, chooses a retry, commits output, or selects the next stage</text>
+
+  <rect class="artifact-card" x="88" y="1136" width="520" height="176" />
+  <text class="card-title" x="112" y="1166">Attempt artifacts</text>
+  <text class="body" x="112" y="1194">StageGoalPlan</text>
+  <text class="caption" x="256" y="1194">immutable goal, conditions, inputs, budget</text>
+  <text class="body" x="112" y="1222">Candidate output</text>
+  <text class="caption" x="256" y="1222">one scoped model response</text>
+  <text class="body" x="112" y="1250">StageObservation</text>
+  <text class="caption" x="256" y="1250">typed condition results + evidence</text>
+  <text class="body" x="112" y="1278">StageAttempt</text>
+  <text class="caption" x="256" y="1278">retry | commit | fail decision record</text>
+
+  <rect class="det-card" x="632" y="1136" width="520" height="176" />
+  <text class="card-title" x="656" y="1166">Controller owns</text>
+  <text class="body" x="656" y="1194">Ordering | validation | retry policy | budgets</text>
+  <text class="caption" x="656" y="1222">Timeouts, persistence, events, and transition authority</text>
+  <text class="caption" x="656" y="1250">Only committed outputs become downstream inputs.</text>
+  <text class="small" x="656" y="1282">Goal conditions cannot move between attempts.</text>
+
+  <rect class="gate-card" x="1176" y="1136" width="520" height="176" />
+  <text class="card-title" x="1200" y="1166">Failure semantics</text>
+  <text class="body" x="1200" y="1194">Retryable condition</text>
+  <text class="caption" x="1376" y="1194">typed feedback + budget remains</text>
+  <text class="body" x="1200" y="1222">Non-retryable</text>
+  <text class="caption" x="1376" y="1222">stage fails immediately</text>
+  <text class="body" x="1200" y="1250">Budget exhausted</text>
+  <text class="caption" x="1376" y="1250">no committed output</text>
+  <text class="small" x="1200" y="1282">Failed approved sources remain explicit intelligence gaps.</text>
+
+  <rect class="human-card" x="1720" y="1136" width="592" height="176" />
+  <text class="card-title" x="1744" y="1166">Committed handoff chain</text>
+  <text class="body" x="1744" y="1194">Find extraction + Sweep extraction</text>
+  <text class="caption" x="2016" y="1194">-> Judge</text>
+  <text class="body" x="1744" y="1222">Adjudicated source brief</text>
+  <text class="caption" x="2016" y="1222">-> Write</text>
+  <text class="body" x="1744" y="1250">Source intelligence note</text>
+  <text class="caption" x="2016" y="1250">-> synthesis</text>
+  <text class="small" x="1744" y="1282">No candidate attempt may bypass its owning goal loop.</text>
+</svg>

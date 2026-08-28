@@ -2,7 +2,9 @@
 
 Status: Seerist reality-check probe completed 2026-08-28. Current target: one-item evidence intake.
 
-The architecture in `memo-workflow.md` remains a working hypothesis, not a fixed implementation contract.
+The canonical target architecture in `memo-workflow.md` is not a fixed implementation contract. This slice remains the implementation authority.
+
+Implementation structure follows `../01-Architecture/script-architecture.md`.
 
 ## Completed slice: Seerist reality-check probe
 

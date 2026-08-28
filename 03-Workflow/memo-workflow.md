@@ -1,136 +1,90 @@
 # Threat Intelligence Memo Workflow
 
-Status: Working architecture revised from live Seerist behavior; implementation pending.
+Version: 2
+Status: Canonical target architecture. Implementation remains slice-driven.
 Last updated: 2026-08-28
 Visual: `../01-Architecture/memo-workflow-board.svg`
+Source assurance detail: `../01-Architecture/source-assurance-goal-loops.svg`
 Seerist capability visual: `../01-Architecture/seerist-api-capability-board.svg`
-
-The capability visual maps documented and live-tested API possibilities. The live findings determine provider-role boundaries; untested capabilities remain planning inputs rather than workflow contracts.
+Observed provider facts: `seerist-probe-findings.md`
+Implementation constraints: `../01-Architecture/script-architecture.md`
 
 ## Purpose
 
-Turn a user's free-text intelligence need into a human-approved memo using:
+Produce decision-grade threat intelligence from heterogeneous Seerist material while preserving a strict distinction between:
 
-1. A chat-first user experience.
-2. Seerist as the primary threat-intelligence source, with human-approved Firecrawl fallback.
-3. Goal-based agentic reasoning inside deterministic workflow controls.
-4. Evidence-backed findings only.
-5. Human approval before source analysis and before publication.
-6. A complete, append-only analytical audit trail.
+1. External evidence that can support claims.
+2. Collection leads that require resolution or retrieval.
+3. Provider context that can inform orientation or outlook but cannot independently corroborate an event claim.
+4. Vestas context that can establish organizational relevance but cannot rewrite external facts.
+5. A historical memo standard that governs quality and presentation but is never evidence.
 
-## Core principle
+The workflow retains the four-goal `Find -> Sweep -> Judge -> Write` assurance sequence for every human-approved, claim-bearing source. It does not run that sequence against hotspots, generated summaries, unresolved links, scores, or other context-only records.
 
-The model may propose meaning, plans, questions, summaries, and confidence. Deterministic code owns state, permissions, budgets, tool execution, evidence references, and valid transitions. Humans own the approval gates defined below.
+## Design status
 
-## Observed Seerist role boundary
+This is the canonical target architecture, not the current implementation contract. Implementation advances through the slices at the end of this document. Cross-module contracts become active only after the corresponding behavior works and is tested.
 
-Normalization must assign each collected provider item one workflow role before evidence review:
+The retired V1 workflow remains available in `memo-workflow-retired-v1.md` for historical comparison. Version 2 changes the collection and quality model in four material ways:
 
-| Role | Observed surfaces | Permitted use |
+1. Provider records are classified before they are called evidence.
+2. Collection leads are resolved before human evidence approval.
+3. External facts, Vestas relevance, and editorial standards have separate authority domains.
+4. Quality is enforced through typed assurance stages and blocking criteria rather than a single model judgment or composite score.
+
+## Architecture principles
+
+1. Evidence determines what happened.
+2. Vestas context determines why supported external facts may matter to Vestas.
+3. The memo standard determines how approved intelligence is communicated.
+4. No authority may substitute for another.
+5. Model output may propose semantic artifacts but cannot advance workflow state.
+6. Deterministic code owns permissions, budgets, state transitions, artifact identity, validation, and persistence.
+7. Human approval is required before claim-bearing analysis and before publication.
+8. Raw provider responses are immutable inputs and remain traceable from every downstream claim.
+9. Source count never substitutes for source independence.
+10. Uncertainty, contradictions, failed work, and unanswered questions remain visible.
+
+## Authority domains
+
+| Authority | Permitted claims | Prohibited use |
 | --- | --- | --- |
-| Evidence candidate | Analyst reports with captured bodies; source-linked breaking or verified-event records with status retained | Human evidence review; claim use only when content and lineage support the specific claim |
-| Collection lead | News/social summaries, cluster records, hotspot cluster IDs, and Scribe-linked events | Discovery, prioritization, deduplication, or source retrieval; never direct claim support |
-| Context | Country background, risk ratings, Pulse scores and forecasts, and future-event assessments | Attributed background or outlook; never independent corroboration of an event claim |
+| External evidence pack | What a source directly reports or what analysis can defensibly infer from approved sources | Vestas-specific impact without governed context |
+| Vestas context pack | Footprint, exposure, dependency, ownership, relevance, and consequence pathways | Establishing that an external event occurred |
+| Memo standard pack | Structure, voice, analytical depth, confidence language, citation rules, and audience expectations | Introducing historical facts or current intelligence claims |
 
-Provider role is determined from endpoint, source type, provenance, content depth, and retrieval limitations. Narrative wording, provider scores, or generated summaries cannot approve evidence or advance workflow state.
+Historical memos are not passed directly to source analysis or factual synthesis. They are curated into a versioned memo standard pack. Any historical fact appearing in an old memo remains unusable unless it is independently admitted through the current evidence workflow.
 
-## Experience boundary
+## End-to-end topology
 
-Phase 1 uses a simple chat interface.
+```mermaid
+flowchart LR
+    Request[Memo request] --> Scope[Approve scope and questions]
+    Scope --> Collect[Bounded Seerist collection]
+    Collect --> Classify[Classify provider role]
+    Classify -->|Evidence candidate| EvidenceReview[Evidence readiness review]
+    Classify -->|Collection lead| Resolve[Resolve cluster, source, or URL]
+    Classify -->|Context| ProviderContext[Provider context pack]
+    Resolve --> Classify
+    EvidenceReview --> HumanEvidence[Human evidence gate]
+    HumanEvidence --> Assurance[Find -> Sweep -> Judge -> Write]
+    Assurance --> Synthesis[Build -> Challenge -> Adjudicate]
+    Synthesis --> Relevance[Vestas relevance mapping]
+    ProviderContext --> Relevance
+    VestasContext[Vestas context pack] --> Relevance
+    Relevance --> Draft[Memo writer]
+    MemoStandard[Memo standard pack] --> Draft
+    Draft --> Verify[Independent quality verification]
+    Verify --> Publication[Human publication gate]
+```
 
-The user can:
+# Part 1: Intake and Approved Research Intent
 
-- Enter free text.
-- Answer focused questions.
-- Confirm or revise proposals.
-- Approve or reject workflow gates.
-- Provide rejection feedback in free text.
-
-The chat is only the interaction surface. A typed workflow state must exist behind it; the conversation transcript must not be the system of record.
-
-## End-to-end flow
-
-1. Human-approved scope and research questions.
-2. AI-proposed provider-neutral query intents compiled by deterministic code.
-3. Two-pass Seerist collection: discovery, then one bounded gap-fill pass.
-4. Role classification, lead resolution, normalization, deduplication, optional human-approved Firecrawl expansion, and human evidence approval.
-5. One sequential Find -> Sweep -> Judge -> Write worker per approved evidence item.
-6. Claim-centric synthesis by builder, challenger, and senior adjudicator.
-7. Fixed-shell, adaptive-body memo generation with claim-level citations.
-8. Independent AI verification plus deterministic validation, with at most two automatic revisions.
-9. Human publication approval or typed revision routing.
-10. Append-only event logging and immutable artifact versioning throughout the run.
-
-# Part 1: How a Memo Starts
-
-## Approved intake sequence
-
-1. User submits a free-text problem statement.
-2. Agent proposes a structured scope.
-3. Human confirms or revises the scope.
-4. Agent proposes research questions.
-5. Human approves or revises the research questions.
-6. Agent proposes provider-neutral discovery intents; deterministic code validates and compiles them into Seerist operations.
-7. Deterministic code runs discovery and one bounded gap-fill pass, classifies provider roles, resolves eligible leads, then normalizes and deduplicates potential evidence.
-8. If fewer than four usable evidence candidates remain, the agent may propose a Firecrawl expansion for human approval. Context and unresolved leads do not count toward this target.
-9. Agent returns a compact evidence review in chat.
-10. Human approves individual evidence items or selects a targeted return point.
-11. Deterministic code seals the approved evidence snapshot for source analysis.
-
-## Intake state machine
-
-| State | Owner | Entry condition | Permitted next states |
-|---|---|---|---|
-| `memo_requested` | Human | Free-text request submitted | `scope_proposed`, `cancelled` |
-| `scope_proposed` | Agent | Request parsed into required scope fields | `scope_approved`, `scope_revision` |
-| `scope_revision` | Human + agent | Scope rejected or edited | `scope_proposed`, `cancelled` |
-| `scope_approved` | Human | Required scope confirmed | `questions_proposed` |
-| `questions_proposed` | Agent | Research questions generated | `questions_approved`, `questions_revision` |
-| `questions_revision` | Human + agent | Question set rejected or edited | `questions_proposed`, `scope_revision`, `cancelled` |
-| `questions_approved` | Human | Question set confirmed | `query_intents_proposed` |
-| `query_intents_proposed` | Agent | Provider-neutral discovery intents produced | `collection_planned`, `query_revision` |
-| `collection_planned` | Deterministic code | Intents compiled into valid Seerist operations | `collecting_seerist`, `query_revision`, `failed` |
-| `collecting_seerist` | Deterministic code | Discovery and one gap-fill pass execute within budget | `evidence_normalized`, `budget_exhausted`, `failed` |
-| `query_revision` | Agent + deterministic code | Query intent or compilation requires revision | `query_intents_proposed`, `questions_revision`, `failed` |
-| `budget_exhausted` | Deterministic code | API-call or elapsed-time limit reached | `evidence_normalized`, `query_revision`, `cancelled` |
-| `evidence_normalized` | Deterministic code | Results validated, deduplicated, and fingerprinted | `osint_expansion_proposed`, `evidence_ready` |
-| `osint_expansion_proposed` | Agent | Fewer than four usable items remain | `osint_expansion_approved`, `osint_expansion_rejected` |
-| `osint_expansion_approved` | Human | Firecrawl gap-search plan accepted | `collecting_osint` |
-| `osint_expansion_rejected` | Human | Firecrawl expansion declined | `evidence_ready` |
-| `collecting_osint` | Deterministic code | Approved Firecrawl plan executes and results are normalized | `evidence_ready`, `budget_exhausted`, `failed` |
-| `evidence_ready` | Agent + code | Combined evidence review package produced | `evidence_approved`, `evidence_rejected` |
-| `evidence_rejected` | Human | Reviewer supplies feedback and return point | `scope_revision`, `questions_revision`, `query_revision`, `cancelled` |
-| `evidence_approved` | Human | Reviewer accepts one or more normalized items | `source_analysis_ready` |
-| `source_analysis_ready` | Deterministic code | Approved evidence snapshot sealed | Source worker queue |
-| `failed` | Deterministic code | Non-recoverable error recorded | Retry from last valid state or `cancelled` |
-| `cancelled` | Human or policy | Run intentionally stopped | Terminal state |
-
-State transitions must be explicit. An agent response alone cannot advance workflow state.
-
-## Step 1: Free-text problem statement
-
-### Input
-
-A user starts the workflow by describing an intelligence need in natural language.
-
-Example:
-
-> Prepare a memo for regional leadership on cyber and physical threats affecting offshore wind operations in Northern Europe during the last 90 days.
-
-### Required system behavior
-
-1. Preserve the original request unchanged.
-2. Assign a `runId` and timestamp.
-3. Record the requesting user identity when available.
-4. Detect whether the request is empty, incoherent, or outside the memo workflow.
-5. Do not call Seerist at this stage.
-
-### Output artifact
-
-`MemoRequest`
+## Memo request
 
 ```ts
 type MemoRequest = {
+  id: string;
   runId: string;
   originalText: string;
   requestedBy?: string;
@@ -138,137 +92,73 @@ type MemoRequest = {
 };
 ```
 
-## Step 2: Structured scope proposal
+The original request is immutable. Later scope changes produce new scope versions rather than rewriting the request.
 
-The agent converts the problem statement into five required fields.
-
-### Required scope fields
-
-1. `purpose`: What the memo should help the reader understand or decide.
-2. `threatTopic`: Threat, actor, event, issue, or exposure to investigate.
-3. `audience`: Intended reader or decision-maker.
-4. `geography`: Countries, regions, sites, or global scope.
-5. `timeWindow`: Historical period and evidence-freshness boundary.
-
-### Assumption rule
-
-When a required field is absent, the agent proposes a reasonable value rather than immediately blocking the conversation.
-
-Every inferred value must:
-
-1. Be marked as an assumption.
-2. Include a short explanation.
-3. Remain editable by the user.
-4. Be approved before question generation.
-
-### Scope contract
+## Scope proposal
 
 ```ts
-type ScopeValue<T> = {
+type OriginatedValue<T> = {
   value: T;
-  origin: "user" | "inferred";
+  origin: "human" | "inferred";
   assumptionReason?: string;
 };
 
 type MemoScope = {
-  purpose: ScopeValue<string>;
-  threatTopic: ScopeValue<string>;
-  audience: ScopeValue<string>;
-  geography: ScopeValue<string[]>;
-  timeWindow: ScopeValue<{
+  id: string;
+  runId: string;
+  version: number;
+  purpose: OriginatedValue<string>;
+  threatTopic: OriginatedValue<string>;
+  audience: OriginatedValue<string>;
+  geographies: OriginatedValue<string[]>;
+  timeWindow: OriginatedValue<{
     from: string;
     to: string;
   }>;
+  requestedOutput?: OriginatedValue<"brief" | "memo" | "assessment">;
 };
 ```
 
-### Deterministic checks
+Deterministic validation requires all mandatory values, an ordered time window, non-empty geography, and an assumption reason for every inferred value.
 
-- All five fields exist.
-- Strings are not blank.
-- Geography contains at least one value.
-- `timeWindow.from` is before or equal to `timeWindow.to`.
-- Inferred fields contain `assumptionReason`.
-
-## Step 3: Human scope gate
-
-The chat returns a concise scope proposal with visible assumptions.
-
-The user may:
-
-1. Approve it.
-2. Edit one or more fields.
-3. Reject it and provide free-text correction.
-4. Cancel the memo run.
-
-No research questions may be generated until the scope state is `scope_approved`.
-
-## Step 4: Research-question proposal
-
-The agent generates the research questions needed to address the approved scope.
-
-There is no fixed question-count limit. This does not permit unbounded execution: only approved questions may run, and collection remains bounded by runtime budgets.
-
-### Required fields per question
+## Research questions
 
 ```ts
 type ResearchQuestion = {
   id: string;
+  runId: string;
+  scopeVersion: number;
   question: string;
   rationale: string;
-  scope: {
-    threatTopic: string;
-    geography: string[];
-    timeWindow: {
-      from: string;
-      to: string;
-    };
+  geographies: string[];
+  timeWindow: {
+    from: string;
+    to: string;
   };
   status: "proposed" | "approved" | "rejected";
 };
 ```
 
-### Question-quality checks
+Only approved questions can produce provider operations. Questions may not silently expand the approved geography, threat topic, or time window.
 
-Before showing questions to the user, deterministic validation confirms:
+## Human gates
 
-1. Every question has a stable ID.
-2. Every question contains question, rationale, and scope.
-3. Every question maps to the approved memo scope.
-4. Duplicate questions are flagged.
-5. Questions do not silently expand geography or time window.
-6. Questions are researchable using the currently allowed tools.
+1. The human approves the structured scope.
+2. The human approves the research questions.
+3. No provider operation runs before both approvals exist as explicit events.
 
-Semantic quality remains agent-assessed and human-approved.
+# Part 2: Bounded Collection and Provider Integrity
 
-## Step 5: Human question gate
+## Provider-neutral search intent
 
-The user reviews research intent, not Seerist endpoint syntax.
-
-The user may:
-
-1. Approve all questions.
-2. Edit individual questions.
-3. Add or remove questions.
-4. Return to the memo scope.
-5. Cancel the run.
-
-Only questions in `approved` status may be converted into Seerist query operations.
-
-## Step 6: Provider-neutral planning and bounded collection
-
-The agent proposes semantic search intent. It never writes raw provider calls. Deterministic TypeScript validates each intent and compiles it through an allowed provider adapter.
-
-### Query contracts
+The model proposes semantic intent. Deterministic code compiles intent into an allowlisted provider operation.
 
 ```ts
-type SearchPass = "discovery" | "gap-fill" | "osint-gap";
-
 type SearchIntent = {
   id: string;
   runId: string;
   researchQuestionIds: string[];
-  pass: SearchPass;
+  pass: "discovery" | "gap-fill" | "lead-resolution";
   objective: string;
   concepts: {
     events: string[];
@@ -278,375 +168,552 @@ type SearchIntent = {
     from: string;
     to: string;
   };
-  queryVariants: string[];
-  expectedEvidence: string;
+  expectedInformation: string;
   rationale: string;
 };
 
 type ProviderOperation = {
   id: string;
   searchIntentId: string;
-  provider: "seerist" | "firecrawl";
+  provider: "seerist";
+  method: "GET";
   endpoint: string;
   filters: Record<string, string | number | boolean | string[]>;
-};
-
-type CollectionPlan = {
-  id: string;
-  runId: string;
-  pass: SearchPass;
-  intents: SearchIntent[];
-  operations: ProviderOperation[];
-  budgets: {
-    maxApiCalls: number;
-    maxElapsedMs: number;
-    maxResultItems: number;
-  };
+  expectedRole?: "evidence-candidate" | "collection-lead" | "context";
 };
 ```
 
-### Two-pass Seerist strategy
+`expectedRole` is planning metadata. The live response still passes through role classification.
 
-1. Discovery uses only the approved scope and research questions.
-2. Results are normalized before follow-up planning.
-3. The agent may propose one gap-fill pass using entities, actors, events, sectors, and terminology found during discovery.
-4. Deterministic code rejects scope expansion, unsupported filters, invalid dates, and operations outside the configured budget.
-5. There is no open-ended saturation loop in V1.
-
-### Four-source target and Firecrawl fallback
-
-Four usable, distinct evidence items is a collection target, not a hard publication gate. Distinct items may still share a reporting origin; source independence is assessed later.
-
-If fewer than four usable Seerist items remain after normalization:
-
-1. The agent may propose provider-neutral `osint-gap` intents.
-2. Deterministic code compiles them only to the configured Firecrawl adapter.
-3. A human must approve the expansion before Firecrawl executes.
-4. Firecrawl results use the same normalization, provenance, review, and source-worker contracts as Seerist results.
-5. If the combined evidence set still contains fewer than four usable items, analysis proceeds with explicit limited-evidence status and lower confidence where warranted.
-
-### Execution guardrails
-
-1. Only approved research questions may execute.
-2. One `Act` step equals one scoped provider operation.
-3. API-call, elapsed-time, and result-count budgets are mandatory.
-4. Provider credentials come from runtime configuration and never enter prompts, artifacts, or events.
-5. Every request and response is represented by checksum-addressed artifacts.
-
-### Normalized evidence record
+## Collection budget
 
 ```ts
-type SourceContentCompleteness =
+type CollectionBudget = {
+  maxApiCalls: number;
+  maxElapsedMs: number;
+  maxResultItems: number;
+  maxPagesPerOperation: number;
+  maxLeadResolutionDepth: 1;
+};
+```
+
+V2 permits one discovery pass, one evidence-gap pass, and one lead-resolution hop. There is no open-ended saturation loop.
+
+## Raw response contract
+
+```ts
+type RawProviderArtifact = {
+  id: string;
+  runId: string;
+  operationId: string;
+  provider: "seerist";
+  endpoint: string;
+  requestedAt: string;
+  receivedAt: string;
+  httpStatus: number;
+  cacheStatus?: string;
+  mediaType: string;
+  artifactRef: string;
+  sha256: string;
+};
+```
+
+The raw response is persisted before parsing. Provider content is never copied into event payloads.
+
+## Pagination integrity
+
+Live tests demonstrated that adjacent offset pages may come from different CloudFront snapshots. Closed historical windows reduced drift but did not eliminate the need for checks.
+
+```ts
+type PageObservation = {
+  operationId: string;
+  pageOffset: number;
+  pageSize: number;
+  total?: number;
+  newestObservedAt?: string;
+  oldestObservedAt?: string;
+  itemIds: string[];
+  next?: string;
+  prev?: string;
+  cacheStatus?: string;
+};
+
+type PaginationAssessment = {
+  operationId: string;
+  status: "consistent" | "snapshot-drift" | "incomplete" | "not-applicable";
+  observations: PageObservation[];
+  reasons: string[];
+};
+```
+
+Deterministic checks flag:
+
+1. Changing totals across adjacent bounded pages.
+2. Newer timestamps appearing on a later descending page.
+3. Duplicate item IDs across pages.
+4. Missing or contradictory next/prev links.
+5. Budget exhaustion before the planned collection boundary.
+
+Snapshot drift does not silently discard the run. The affected operation is marked inconsistent and its items retain that limitation through evidence review.
+
+# Part 3: Provider Role Classification
+
+## Observed role model
+
+Every parsed provider item becomes exactly one discriminated record.
+
+```ts
+type ContentCompleteness =
   | "full"
   | "substantive-partial"
   | "summary"
-  | "snippet-only";
+  | "metadata-only";
 
-type SourceLineage = {
-  publisher?: string;
-  author?: string;
-  contentType:
-    | "seerist-analysis"
-    | "third-party-reporting"
-    | "official-primary"
-    | "automated-event-data"
-    | "other"
-    | "unknown";
-  evidenceOrder: "primary" | "secondary" | "unknown";
-  upstreamSourceRefs: string[];
-};
-
-type EvidenceRecord = {
-  id: string;
-  runId: string;
-  researchQuestionIds: string[];
-  accessProvider: "seerist" | "firecrawl";
-  providerRecordId?: string;
-  title: string;
-  lineage: SourceLineage;
-  publishedAt?: string;
-  retrievedAt: string;
+type ProvenanceFacts = {
+  providerRecordId: string;
+  provider: "seerist";
+  endpoint: string;
+  sourceType: string;
+  sourceName?: string;
   canonicalUrl?: string;
-  geography: string[];
-  originalLanguage: string;
-  snippet: string;
-  contentCompleteness: SourceContentCompleteness;
-  claimEligibility: "eligible" | "qualified" | "collection-lead-only";
-  retrievalLimitations: string[];
-  contentArtifactRef: string;
-  contentSha256: string;
+  references: string[];
+  clusterId?: string;
+  publishedAt?: string;
+  providerTimestamp?: string;
+  retrievedAt: string;
   rawArtifactRef: string;
   rawSha256: string;
-  fingerprint: string;
-  duplicateOf?: string;
-  reviewStatus: "candidate" | "approved" | "rejected";
+};
+
+type EvidenceCandidate = {
+  role: "evidence-candidate";
+  id: string;
+  researchQuestionIds: string[];
+  provenance: ProvenanceFacts;
+  contentCompleteness: "full" | "substantive-partial";
+  contentArtifactRef: string;
+  contentSha256: string;
+  permittedClaimKinds: Array<
+    "reported-fact" | "source-allegation" | "provider-assessment" | "forecast"
+  >;
+  limitations: string[];
+};
+
+type CollectionLead = {
+  role: "collection-lead";
+  id: string;
+  researchQuestionIds: string[];
+  provenance: ProvenanceFacts;
+  contentCompleteness: "summary" | "metadata-only";
+  resolutionTargets: Array<{
+    kind: "cluster-id" | "source-url" | "provider-record";
+    value: string;
+  }>;
+  limitations: string[];
+};
+
+type ContextItem = {
+  role: "context";
+  id: string;
+  researchQuestionIds: string[];
+  provenance: ProvenanceFacts;
+  contextKind:
+    | "country-background"
+    | "risk-rating"
+    | "stability-score"
+    | "forecast"
+    | "future-event"
+    | "generated-orientation"
+    | "other";
+  contentArtifactRef: string;
+  freshness: "provider-dated" | "retrieval-time-only";
+  limitations: string[];
+};
+
+type ClassifiedProviderItem = EvidenceCandidate | CollectionLead | ContextItem;
+```
+
+## Initial endpoint policy
+
+This policy is based on observed behavior and remains open to new source types.
+
+| Observed surface | Initial role | Required qualification |
+| --- | --- | --- |
+| Analyst report with captured multilingual body | Evidence candidate | Preserve actual provider authorship and cited upstream sources |
+| Breaking or verified event with substantive content and source lineage | Evidence candidate | Retain status, revision history, and provider-attribution limitation |
+| News or social record with title, summary, and link but no body | Collection lead | Retrieve the source before claim-bearing analysis |
+| Cluster and cluster-article records without full source content | Collection lead | Preserve cluster lineage; membership is not corroboration |
+| Hotspot | Collection lead | Resolve cluster IDs through source-linked records |
+| Scribe narrative and linked events | Collection lead or context | Narrative is never evidence; resolve event URLs or cluster IDs |
+| Country background | Context | Attribute to provider; absence of references remains visible |
+| Targeted risk rating | Context | Record retrieval time because observed payload lacked freshness |
+| Pulse score or forecast | Context | Never treat a derived score as independent event support |
+| Future event | Context | Preserve anticipated or scheduled semantics |
+
+Classification uses endpoint, source type, content depth, provenance, and explicit limitations. It never uses persuasive wording, topical relevance, model confidence, or provider scores to determine eligibility.
+
+## Lead resolution
+
+```ts
+type LeadResolution = {
+  id: string;
+  leadId: string;
+  attemptedAt: string;
+  operationIds: string[];
+  outcome: "resolved" | "partially-resolved" | "unresolved" | "rejected";
+  resultingItemIds: string[];
+  limitations: string[];
 };
 ```
 
-One non-duplicate, human-approved `EvidenceRecord` is the execution unit for one source worker. A publisher is not an execution unit, and records are not clustered into events before source analysis.
+Rules:
 
-### Observed source-eligibility rule
+1. A hotspot cluster ID may resolve through World of Data or a cluster endpoint.
+2. A Scribe event may resolve through its cluster ID or source URL.
+3. A summary-only World of Data record requires source-content retrieval before claim-bearing analysis.
+4. Cluster members remain reporting records, not independent sources, until origin relationships are assessed.
+5. Resolution depth is one hop. New leads are recorded as gaps rather than recursively executed.
+6. An unresolved lead remains visible but cannot enter the evidence gate.
 
-1. Full captured content, as observed for Seerist analyst reports, may support claims after lineage checks and human approval.
-2. Substantive partial content may support only narrowly bounded claims, with retrieval limitations carried into Judge and synthesis.
-3. News/social and tested cluster-article records exposed summaries and links but no body. They are collection leads until source content is retrieved.
-4. Hotspots and Scribe-generated narratives are discovery aids. Resolve their source URLs or cluster IDs before evidence review.
-5. Country background, risk ratings, and Pulse are attributed provider context. They do not independently corroborate event claims.
-6. Breaking-event status and revision history must remain visible; future events describe anticipated events rather than proof that an incident occurred.
-7. Access through Seerist does not make Seerist the author. Normalization records the actual publisher, author, content type, evidence order, and cited upstream sources when present.
-8. `@timestamp` may represent ingest time, and targeted risk ratings exposed no freshness field. Preserve provider dates and always record retrieval time.
-9. If authorship or lineage is unclear, source reliability defaults to `unknown`.
+# Part 4: Evidence Readiness and Human Admission
 
-## Step 7: Evidence review package
-
-The agent summarizes the normalized evidence for human review. Deterministic code assembles and validates the package.
-
-### Required review content
-
-1. Coverage by research question: answered, partial, or gap.
-2. Source title and provenance: publisher, timestamp, provider ID, source system, and source link when available.
-3. Short relevance summary for each source.
-4. Known evidence gaps.
-5. Agent confidence assessment.
-
-### Confidence rule
-
-Agent confidence is advisory metadata, not proof. It cannot replace provenance, source references, or human approval.
-
-### Evidence review contract
+## Readiness assessment
 
 ```ts
-type EvidenceReview = {
+type EvidenceReadiness = {
+  evidenceCandidateId: string;
+  verdict: "ready" | "qualified" | "not-ready";
+  checks: {
+    contentSufficient: boolean;
+    providerIdentityPresent: boolean;
+    sourceLineagePresent: boolean;
+    retrievalTracePresent: boolean;
+    questionRelationPresent: boolean;
+    limitationsExplicit: boolean;
+  };
+  permittedClaimKinds: EvidenceCandidate["permittedClaimKinds"];
+  reasons: string[];
+};
+```
+
+`qualified` means the content can support only narrow, explicitly limited statements. `not-ready` items return to lead resolution or remain as collection gaps.
+
+## Evidence review package
+
+The review package separates all three roles. Only ready or qualified evidence candidates can be selected for source assurance.
+
+```ts
+type EvidenceReviewPackage = {
+  id: string;
   runId: string;
-  questions: Array<{
+  researchQuestionCoverage: Array<{
     researchQuestionId: string;
-    coverage: "answered" | "partial" | "gap";
-    evidenceIds: string[];
-    relevanceSummary: string;
-    knownGaps: string[];
-    agentConfidence: "low" | "medium" | "high";
-    confidenceReason: string;
+    status: "covered" | "partial" | "gap";
+    evidenceCandidateIds: string[];
+    leadIds: string[];
+    contextItemIds: string[];
+    gapReasons: string[];
   }>;
+  evidenceCandidates: EvidenceReadiness[];
+  unresolvedLeadIds: string[];
+  contextItemIds: string[];
+  paginationAssessments: PaginationAssessment[];
   budgetOutcome: {
-    apiCallsUsed: number;
+    callsUsed: number;
     elapsedMs: number;
+    itemsCollected: number;
     exhausted: boolean;
   };
-  collectionOutcome: {
-    usableEvidenceCount: number;
-    targetEvidenceCount: 4;
-    firecrawlUsed: boolean;
-    limitedEvidence: boolean;
-  };
 };
 ```
 
-### Deterministic package checks
-
-- Every approved question has one coverage entry.
-- Every cited evidence ID resolves to a normalized evidence record.
-- Every non-gap entry has at least one source.
-- Every gap contains an explanation.
-- Budget usage is present.
-- Every access provider resolves to the adapter that retrieved it.
-- Duplicate records cannot be approved as separate worker inputs.
-- The four-source target outcome and Firecrawl usage are explicit.
-- Collection-lead-only records cannot enter the approved source-worker snapshot.
-
-## Step 8: Human evidence gate
-
-The human has final authority to release individual evidence items into the source-worker queue.
-
-### Approval
-
-Approval causes deterministic code to:
-
-1. Seal an immutable snapshot containing only individually approved evidence items.
-2. Record reviewer identity, timestamp, and approval decision.
-3. Move workflow state to `evidence_approved` and then `source_analysis_ready`.
-4. Prevent later collection from silently modifying the approved snapshot.
-
-### Rejection
-
-The reviewer supplies free-text feedback and selects the exact return point:
-
-1. Structured scope.
-2. Research questions.
-3. Provider-neutral query planning.
+## Human evidence gate
 
 ```ts
-type EvidenceReviewDecision = {
+type EvidenceAdmissionDecision = {
+  id: string;
   runId: string;
-  decision: "approved" | "rejected";
+  reviewPackageId: string;
   reviewerId?: string;
   decidedAt: string;
+  decision: "approved" | "rejected" | "revision-requested";
+  approvedEvidenceCandidateIds: string[];
+  rejectedEvidenceCandidateIds: string[];
   feedback?: string;
-  approvedEvidenceIds?: string[];
-  rejectedEvidenceIds?: string[];
-  returnTo?: "scope" | "questions" | "query_plan";
+  returnTo?: "scope" | "questions" | "collection" | "lead-resolution";
 };
 ```
 
-A rejection must not restart the entire run unless the reviewer selects scope or cancels it.
+Approval creates an immutable evidence snapshot. Context and unresolved leads remain attached to the run but are excluded from the source-assurance queue.
 
-## Chat interaction requirements
+# Part 5: Four-Goal Source Assurance
 
-The chat should expose only the information needed for the current decision.
+## Applicability
 
-### Scope response
+Every admitted evidence candidate runs through four explicit goals:
 
-- Show the five scope fields.
-- Clearly label inferred assumptions.
-- Offer approve, edit, or cancel actions.
+1. `Find`: extract supported observations.
+2. `Sweep`: independently extract supported observations in a fresh context.
+3. `Judge`: compare both passes against the original source and adjudicate.
+4. `Write`: produce a constrained source intelligence note from the adjudicated brief.
 
-### Research-question response
+The four goals may use the same configured model, but each goal is a separate controller-owned stage with a typed contract and bounded attempts. Each attempt contains one scoped model invocation. `Find` and `Sweep` are blind to one another. No goal has provider tools, workflow permissions, or access to Vestas context or historical memos.
 
-- Show question, rationale, and scope.
-- Do not show low-level Seerist API mechanics by default.
-- Offer approve, edit, add, remove, return to scope, or cancel.
+## Deterministic goal-loop controller
 
-### Evidence-review response
+Each of the four stages is a bounded goal loop. A stage is not complete merely because a model returned syntactically valid output.
 
-- Group evidence by research question.
-- Show compact provenance and relevance.
-- Show gaps and confidence visibly.
-- Offer approve or reject.
-- On rejection, collect feedback and return-point choice.
+```text
+Prepare plan + freeze goal conditions
+  -> Act through one scoped model call
+  -> Observe the typed result
+  -> Check every goal condition
+  -> Commit when met | retry when retryable | fail when exhausted
+```
 
-The user may respond with free text at every gate. Buttons are conveniences, not required protocol.
+### Goal-loop contracts
 
-## Intake invariants
+```ts
+type AssuranceStage = "find" | "sweep" | "judge" | "write";
 
-1. No Seerist call before scope and questions are approved.
-2. No unapproved research question may execute.
-3. One `Act` step equals one scoped tool call.
-4. Every evidence record retains provenance.
-5. Agent confidence never substitutes for a source.
-6. No source means no finding.
-7. Evidence cannot enter a source worker without human approval.
-8. Rejection returns to an explicit state.
-9. Every transition is logged.
-10. The approved evidence snapshot is immutable.
+type GoalCondition = {
+  id: string;
+  description: string;
+  checker:
+    | "schema"
+    | "reference-integrity"
+    | "source-exactness"
+    | "policy"
+    | "independent-semantic";
+  blocking: boolean;
+};
 
-## Intake run artifacts
+type StageGoalPlan = {
+  id: string;
+  runId: string;
+  stage: AssuranceStage;
+  goal: string;
+  immutableInputArtifactRefs: string[];
+  allowedAction: {
+    kind: "model-call";
+    outputSchema: string;
+    promptVersion: string;
+    modelConfigurationRef: string;
+  };
+  goalConditions: GoalCondition[];
+  budget: {
+    maxAttempts: number;
+    maxElapsedMs: number;
+    maxInputTokens: number;
+    maxOutputTokens: number;
+  };
+  preparedAt: string;
+};
 
-The logical run package contains:
+type GoalConditionResult = {
+  conditionId: string;
+  met: boolean;
+  retryable: boolean;
+  evidenceRefs: string[];
+  reason: string;
+};
 
-- `memo-request.json`
-- `scope.json`
-- `research-questions.json`
-- `search-intents.json`
-- `collection-plans.json`
-- `evidence-records.json`
-- `evidence-review.json`
-- `review-decisions.json`
-- `run-events.jsonl`
-- `run-manifest.json`
+type StageObservation = {
+  id: string;
+  stageGoalPlanId: string;
+  attempt: number;
+  candidateOutputArtifactRef: string;
+  schemaValid: boolean;
+  conditionResults: GoalConditionResult[];
+  observedAt: string;
+};
 
-Proposed workspace location during development:
+type StageAttempt = {
+  id: string;
+  stageGoalPlanId: string;
+  attempt: number;
+  actionStartedAt: string;
+  actionCompletedAt: string;
+  candidateOutputArtifactRef: string;
+  observationArtifactRef: string;
+  decision: "retry" | "commit" | "fail";
+  retryInputArtifactRef?: string;
+};
 
-`01-Intelligence/01-Analysis/runs/<runId>/`
+type GoalLoopExecution = {
+  id: string;
+  runId: string;
+  stage: AssuranceStage;
+  stageGoalPlanArtifactRef: string;
+  attempts: StageAttempt[];
+  committedOutputArtifactRef?: string;
+  status: "goal-met" | "goal-unmet" | "budget-exhausted" | "failed";
+};
+```
 
-Storage implementation and retention remain configurable. The workflow contracts do not depend on a database or filesystem.
+### Loop semantics
 
-# Part 2: Per-Source Analysis and Cross-Source Synthesis
+1. `Prepare`: code resolves immutable inputs and creates a `StageGoalPlan` containing the stage goal, allowed action, frozen completion conditions, output schema, and attempt budget.
+2. `Act`: code makes one scoped model call. The acting model cannot use tools, alter the plan, widen scope, or decide completion.
+3. `Observe`: a stage-specific observer parses the candidate output and evaluates every goal condition against source artifacts, input IDs, policy, and schema.
+4. `Goal Check`: code commits only when all blocking conditions are met. It creates a typed retry input when unmet conditions are retryable.
+5. `Retry`: the next attempt receives the original immutable inputs plus only the typed condition failures needed for correction. The goal and conditions cannot move between attempts.
+6. `Fail`: a non-retryable condition or exhausted budget ends the stage with no committed output. Downstream stages cannot consume an uncommitted attempt.
+7. `Commit`: the accepted candidate becomes the immutable stage output and the controller emits the next-state event.
 
-## Approved topology
+The observer uses deterministic checks wherever possible: schema validation, ID resolution, exact excerpt matching, allowed-value policy, required coverage, and graph integrity. A semantic condition that cannot be reduced to code may use a separate, scoped checker invocation. That checker returns only typed `GoalConditionResult` values; deterministic code still owns the retry or commit decision.
 
-Analysis fans out logically by source, but V1 executes workers sequentially:
+Every attempt is retained for audit, but only the committed output can become downstream input. The acting model never grades itself and cannot select its next stage or retry itself.
 
-1. Take the next approved normalized evidence item.
-2. Run Find without access to Sweep output.
-3. Run Sweep as a blind second extraction without access to Find output.
-4. Give the original source and both extractions to Judge.
-5. Give the adjudicated Judge brief to Write.
-6. Persist one typed source intelligence note.
-7. Continue to the next evidence item.
-8. After all workers finish, synthesize across the completed notes.
+### Ownership boundary
 
-V1 uses the strongest approved model for every semantic stage. Deterministic code records the model identifier, model configuration, prompt-template version, attempt, timing, and artifact references for every invocation.
+The deterministic goal-loop controller owns the stage lifecycle. A stage definition supplies the stage-specific preparation, action, observation, and commit functions, but none of those functions may bypass the controller decision.
 
-Find and Sweep use separate, fresh model contexts with the same versioned extraction instructions and output schema. V1 may use the same strongest approved model for both passes; the model identity remains configurable so comparative testing can later evaluate separate model families.
+```ts
+type GoalLoopDecision<TStageError extends string> =
+  | { outcome: "commit" }
+  | { outcome: "retry"; retryInputArtifactRef: string }
+  | { outcome: "fail"; errorCode: TStageError };
 
-## Deterministic stage envelope
+type GoalLoopControllerError<TStageError extends string> =
+  | TStageError
+  | "GOAL_LOOP_BUDGET_EXHAUSTED";
 
-Every semantic stage runs inside the same code-owned envelope:
+type GoalStageDefinition<TInput, TCandidate, TCommitted, TError extends string> = {
+  stage: AssuranceStage;
+  prepare: (input: TInput) => Result<StageGoalPlan, TError>;
+  act: (
+    plan: StageGoalPlan,
+    attempt: number,
+    retryInputArtifactRef?: string
+  ) => Promise<Result<TCandidate, TError>>;
+  observe: (
+    plan: StageGoalPlan,
+    attempt: number,
+    candidate: TCandidate
+  ) => Promise<Result<StageObservation, TError>>;
+  decide: (
+    plan: StageGoalPlan,
+    observation: StageObservation
+  ) => Result<GoalLoopDecision<TError>, TError>;
+  commit: (
+    plan: StageGoalPlan,
+    candidate: TCandidate,
+    observation: StageObservation
+  ) => Promise<Result<TCommitted, TError>>;
+};
+```
 
-1. `Reason`: create visible task metadata containing the stage goal, inputs, and allowed action. This is not hidden model chain-of-thought.
-2. `Act`: perform one approved model or tool call.
-3. `Observe`: validate and persist the returned artifact.
-4. `Evidence Check`: accept the artifact, retry within budget, or record stage failure.
+The controller algorithm is fixed:
 
-Agents cannot advance state, alter budgets, admit evidence, or overwrite artifacts.
+```ts
+const executeGoalLoop = async <TInput, TCandidate, TCommitted, TError extends string>(
+  definition: GoalStageDefinition<TInput, TCandidate, TCommitted, TError>,
+  input: TInput
+): Promise<Result<TCommitted, GoalLoopControllerError<TError>>> => {
+  const planResult = definition.prepare(input);
+  if (!planResult.ok) return err(planResult.error);
 
-All retrieved source content is untrusted data. Source workers have no provider tools and cannot follow source-embedded instructions, alter scope, change contracts, or advance workflow state. Suspicious instruction-like content is flagged as source text rather than executed.
+  const plan = planResult.value;
+  let retryInputArtifactRef: string | undefined;
 
-## Find and Sweep
+  for (let attempt = 1; attempt <= plan.budget.maxAttempts; attempt += 1) {
+    const candidateResult = await definition.act(plan, attempt, retryInputArtifactRef);
+    if (!candidateResult.ok) return err(candidateResult.error);
 
-Find and Sweep use the same typed extraction contract. Each receives the approved source content, approved scope, and research questions. Sweep does not receive Find output, reducing anchoring and making agreement or disagreement meaningful.
+    const observationResult = await definition.observe(
+      plan,
+      attempt,
+      candidateResult.value
+    );
+    if (!observationResult.ok) return err(observationResult.error);
 
-V1 expects the complete captured source to fit within the configured model-input budget. It does not silently truncate, chunk, or select excerpts. An exceptional oversized source is recorded and routed for analyst handling.
+    const decisionResult = definition.decide(plan, observationResult.value);
+    if (!decisionResult.ok) return err(decisionResult.error);
 
-Non-English sources are analyzed in their original language. Source support preserves the original excerpt and an English translation; the final memo is written in English. Translation ambiguity becomes an explicit caveat.
+    if (decisionResult.value.outcome === "commit") {
+      return definition.commit(plan, candidateResult.value, observationResult.value);
+    }
 
-Find and Sweep each produce:
+    if (decisionResult.value.outcome === "fail") {
+      return err(decisionResult.value.errorCode);
+    }
 
-1. A concise descriptive source synopsis.
-2. Atomic observations linked to one or more research questions.
-3. Minimal direct support and a resolvable source location.
-4. Dates and named entities when present.
+    retryInputArtifactRef = decisionResult.value.retryInputArtifactRef;
+  }
+
+  return err("GOAL_LOOP_BUDGET_EXHAUSTED");
+};
+```
+
+The pseudocode shows ownership and ordering, not a settled shared API. When implemented, timeout checks, event emission, artifact persistence, and retryable action failures must also remain controller-owned. A transport or model-call failure may be retried only when policy marks it retryable and budget remains.
+
+## Stage goals and completion conditions
+
+| Stage | Frozen goal | Blocking completion conditions | Committed output and consumer |
+| --- | --- | --- | --- |
+| `Find` | Extract all supportable, in-scope observations relevant to the approved questions | Valid schema; every observation has a permitted kind, exact support, resolvable locator, valid question IDs, and no unsupported text; every approved question has a coverage or gap disposition | `SourceExtraction` for `Judge` after `Sweep` completes |
+| `Sweep` | Independently repeat extraction to reduce omission and anchoring risk | Same conditions as `Find`; fresh context; no access to any `Find` attempt, output, observation, or retry feedback | Independent `SourceExtraction` for `Judge` |
+| `Judge` | Reconcile both extractions against the original source | Every input observation is disposed exactly once; every accepted observation resolves to source support; disagreements and duplicates are explicit; every judgment cites accepted observations; all confidence factors, caveats, alternatives, and gaps are present | `AdjudicatedSourceBrief` for `Write` |
+| `Write` | Produce a faithful source note from the adjudicated brief | Every finding resolves to accepted observations or judgments; no unsupported proposition; confidence is not raised; all material caveats, contradictions, and gaps are preserved; every question has a coverage disposition | `SourceIntelligenceNote` for external synthesis |
+
+`Find` and `Sweep` write structured extraction artifacts for `Judge`. `Judge` writes the adjudicated source brief for `Write`. `Write` writes the source intelligence note for cross-source synthesis. No stage writes directly into another stage's candidate artifact.
+
+## Find and Sweep contract
 
 ```ts
 type ExtractionPass = "find" | "sweep";
 
+type SourceLocator = {
+  kind: "page" | "paragraph" | "section" | "timestamp" | "text-offset";
+  value: string;
+};
+
 type ExtractedObservation = {
   id: string;
   researchQuestionIds: string[];
-  scopeRelation: "approved-question" | "bounded-emergent";
-  emergenceRationale?: string;
   statement: string;
-  kind: "reported-fact" | "source-allegation" | "context" | "forecast";
-  eventDate?: string;
-  publishedAt?: string;
-  temporalCaveat?: string;
-  entities: string[];
-  sourceLocator: {
-    kind: "page" | "paragraph" | "section" | "timestamp" | "text-offset";
-    value: string;
-  };
+  kind: "reported-fact" | "source-allegation" | "provider-assessment" | "forecast";
+  sourceLocator: SourceLocator;
   originalLanguage: string;
   originalSupportExcerpt: string;
-  supportTranslationEnglish: string;
+  supportTranslationEnglish?: string;
+  eventDate?: string;
+  publishedAt?: string;
+  entities: string[];
   upstreamSourceRefs: string[];
+  caveats: string[];
 };
 
 type SourceExtraction = {
   id: string;
   runId: string;
-  evidenceId: string;
+  evidenceCandidateId: string;
   pass: ExtractionPass;
-  synopsis: string;
+  sourceSynopsis: string;
   observations: ExtractedObservation[];
+  unansweredQuestionIds: string[];
   createdAt: string;
 };
 ```
 
-The synopsis is descriptive. Atomic observations remain the authoritative evidence units.
+An extraction cannot contain an observation without a source locator and direct support. The source synopsis is descriptive and never substitutes for the atomic observations.
 
-Material emergent observations may be retained when they remain inside the approved threat topic, geography, and time window. They must be labeled `bounded-emergent` and explain their relevance; they cannot silently expand collection scope.
+### Find and Sweep goal checks
 
-## Judge
+The observer must be able to compute or independently verify:
 
-Judge acts as the senior threat-intelligence analyst for one source. It receives the original source plus both independent extractions and must:
+1. Every `researchQuestionId` belongs to the approved immutable question set.
+2. Every support excerpt exists exactly in the captured source or has a recorded extraction-normalization rule.
+3. Every locator resolves inside the captured source boundary.
+4. Every observation kind is permitted by the evidence-readiness decision.
+5. No observation relies on provider context, Vestas context, historical memos, model memory, or another source.
+6. Every approved question appears in either an observation or `unansweredQuestionIds`.
+7. Observation IDs and support spans are unique or explicitly identified as duplicates.
 
-1. Compare both passes against the source.
-2. Merge duplicate observations.
-3. Accept, qualify, or reject candidate observations.
-4. Separate reported facts, source allegations, forecasts, and analytical judgments.
-5. Preserve material disagreement, caveats, and missing information.
-6. Assess source reliability from actual lineage and observable sourcing signals, not provider access or unsupported model memory.
-7. Assess source reliability, information credibility, and analytic confidence separately.
-8. Produce a typed brief plus a bounded analyst rationale for Write.
+An unmet structural or reference condition triggers a bounded retry. Apparent semantic incompleteness is not solved through an unbounded self-search loop; the blind second extraction and `Judge` provide the independent coverage check.
+
+## Judge contract
 
 ```ts
 type QualitativeAssessment = {
@@ -659,7 +726,7 @@ type AnalyticConfidence = QualitativeAssessment & {
     evidenceDirectness: string;
     informationCredibility: string;
     sourceIndependence: string;
-    consistency: string;
+    internalConsistency: string;
     alternativeExplanations: string;
     materialGaps: string;
   };
@@ -669,7 +736,7 @@ type AnalyticConfidence = QualitativeAssessment & {
 type AdjudicatedSourceBrief = {
   id: string;
   runId: string;
-  evidenceId: string;
+  evidenceCandidateId: string;
   findExtractionId: string;
   sweepExtractionId: string;
   acceptedObservations: Array<{
@@ -678,9 +745,8 @@ type AdjudicatedSourceBrief = {
     derivedFromObservationIds: string[];
     researchQuestionIds: string[];
     kind: ExtractedObservation["kind"];
-    sourceLocator: ExtractedObservation["sourceLocator"];
-    originalSupportExcerpt: string;
-    supportTranslationEnglish: string;
+    sourceLocator: SourceLocator;
+    supportExcerpt: string;
     qualification?: string;
   }>;
   rejectedObservations: Array<{
@@ -691,6 +757,8 @@ type AdjudicatedSourceBrief = {
     id: string;
     statement: string;
     supportingObservationIds: string[];
+    assumptions: string[];
+    alternatives: string[];
     confidence: AnalyticConfidence;
   }>;
   sourceReliability: QualitativeAssessment;
@@ -698,23 +766,31 @@ type AdjudicatedSourceBrief = {
   contradictions: string[];
   caveats: string[];
   intelligenceGaps: string[];
-  analystRationale: string;
 };
 ```
 
-No composite trust score is permitted. A high source-reliability rating does not automatically make every statement credible, and analytic confidence must state its own rationale.
+Judge receives the original source and both extractions. It cannot accept an observation without resolving it back to the source. Source reliability, information credibility, and analytic confidence remain separate assessments.
 
-The AI assigns analytic confidence using the governed factors in `AnalyticConfidence`. TypeScript verifies that all factors, evidence links, rationale, and change indicators are present; it does not calculate a numeric confidence score.
+### Judge goal checks
 
-## Write
+The observer requires:
 
-Write turns the adjudicated brief into one concise, typed source intelligence note. It may improve ordering and language, but it may not introduce a new factual claim, raise confidence, remove a caveat, or resolve a contradiction.
+1. Every `Find` and `Sweep` observation ID appears in an accepted, merged, or rejected disposition exactly once.
+2. Every accepted observation retains resolvable source support and valid question links.
+3. Every analytic judgment references accepted observations and distinguishes inference from source reporting.
+4. Material disagreement between `Find` and `Sweep` is preserved or explicitly resolved with source-based rationale.
+5. Source reliability, information credibility, and analytic confidence are all present and not collapsed into one score.
+6. All confidence factors, assumptions, alternatives, change indicators, contradictions, caveats, and gaps required by the schema are populated.
+
+If a retry is required, `Judge` receives the original source, both committed extractions, and typed unmet-condition results. It never receives hidden reasoning from the previous attempt.
+
+## Write contract
 
 ```ts
 type SourceIntelligenceNote = {
   id: string;
   runId: string;
-  evidenceId: string;
+  evidenceCandidateId: string;
   adjudicatedBriefId: string;
   questionCoverage: Array<{
     researchQuestionId: string;
@@ -729,64 +805,40 @@ type SourceIntelligenceNote = {
     analyticJudgmentIds: string[];
   }>;
   narrative: string;
-  sourceReliability: QualitativeAssessment;
-  informationCredibility: QualitativeAssessment;
   contradictions: string[];
   caveats: string[];
   intelligenceGaps: string[];
 };
 ```
 
-Deterministic validation rejects any finding without a resolvable accepted observation or analytic judgment.
+Write may improve ordering and clarity. It cannot add factual content, raise confidence, remove caveats, or resolve contradictions.
 
-## Worker scheduling and failure
+### Write goal checks
 
-1. V1 processes source workers sequentially in stable evidence-ID order.
-2. Stage retries are bounded by configuration.
-3. A source that still fails is recorded as failed and excluded from synthesis.
-4. The run continues automatically with successful notes.
-5. Every failed approved source appears as an intelligence gap in synthesis and the memo.
-6. Failed work never counts toward the four-source target.
+The observer requires:
 
-## Supplemental upstream-source cycle
+1. Every key finding resolves to accepted observations or analytic judgments in the committed `AdjudicatedSourceBrief`.
+2. An independent semantic conformance check finds no proposition beyond the adjudicated brief.
+3. Question coverage exactly matches resolvable accepted observations and declared gaps.
+4. Source reliability, information credibility, and confidence are not strengthened.
+5. Contradictions, caveats, and intelligence gaps are preserved without material dilution.
+6. The note contains no Vestas-specific conclusion and no factual material from the memo standard or historical memos.
 
-Workers record every cited upstream source, but unseen upstream material is never independent corroboration. Judge may nominate an upstream source for one post-worker retrieval cycle only when it could:
+Only a goal-met `SourceIntelligenceNote` enters external synthesis. A failed `Write` stage is recorded as a failed approved source and remains an explicit intelligence gap.
 
-1. Establish or refute a key fact.
-2. Resolve a material contradiction.
-3. Change a key judgment or its confidence.
-4. Close an approved research-question gap.
-5. Determine whether several reports share one original source.
+# Part 6: External Claim Synthesis
 
-```ts
-type SupplementalSourceLead = {
-  id: string;
-  runId: string;
-  discoveredInEvidenceId: string;
-  sourceReference: string;
-  materialityCategory:
-    | "key-fact"
-    | "contradiction"
-    | "judgment-or-confidence"
-    | "question-gap"
-    | "reporting-dependency";
-  rationale: string;
-  proposedQueryIntentId?: string;
-  status: "recorded" | "proposed" | "approved" | "rejected" | "unretrievable";
-};
-```
+## Assurance goals
 
-After the initial worker queue completes, deterministic code consolidates nominated leads and permits one bounded supplemental retrieval cycle. A human approves candidate evidence before it enters new source workers. Approved additions are analyzed before synthesis; no newly discovered lead can trigger another supplemental cycle.
+Synthesis operates only on completed source notes and their underlying adjudicated briefs.
 
-## Claim-centric synthesis
+1. `Build`: propose atomic claims, support links, conflicts, source relationships, and question coverage.
+2. `Challenge`: independently test false corroboration, reporting dependency, unsupported inference, missing alternatives, hidden contradictions, and confidence inflation.
+3. `Adjudicate`: resolve every challenge against source notes and admitted evidence, then seal the external intelligence picture.
 
-Cross-source synthesis does not merge prose. It builds and adjudicates a claim ledger:
+These are semantic goals inside deterministic envelopes, not autonomous agents with workflow authority.
 
-1. `Builder` clusters equivalent claims, proposes support and conflict links, identifies reporting dependencies, and drafts question coverage.
-2. `Challenger` independently tests bad merges, missed merges, circular reporting, false corroboration, unsupported judgments, hidden contradictions, and missing caveats.
-3. `Adjudicator` acts as the senior analyst, resolves each challenge against the source notes and original evidence, and seals the final ledger.
-
-The challenger cannot mutate the builder artifact. The adjudicator must explicitly dispose of every challenge.
+## Claim graph
 
 ```ts
 type ReportingRelationship =
@@ -795,9 +847,9 @@ type ReportingRelationship =
   | "shared-origin"
   | "unknown";
 
-type ClaimLedgerEntry = {
+type ExternalClaim = {
   id: string;
-  linkedFindingId: string;
+  runId: string;
   statement: string;
   kind: "reported-fact" | "assessment" | "forecast";
   researchQuestionIds: string[];
@@ -805,117 +857,173 @@ type ClaimLedgerEntry = {
   supportingSourceNoteIds: string[];
   contradictingObservationIds: string[];
   sourceRelationships: Array<{
-    leftEvidenceId: string;
-    rightEvidenceId: string;
+    leftEvidenceCandidateId: string;
+    rightEvidenceCandidateId: string;
     relationship: ReportingRelationship;
     rationale: string;
   }>;
-  informationCredibility: QualitativeAssessment;
+  assumptions: string[];
+  alternativeExplanations: string[];
+  caveats: string[];
   analyticConfidence: AnalyticConfidence;
   singleSourceDependent: boolean;
-  caveats: string[];
   status: "accepted" | "contested" | "rejected";
 };
 
-type LinkedFinding = {
-  id: string;
-  title: string;
-  significance: string;
-  claimLedgerIds: string[];
-};
-
-type EvidenceToJudgmentRecord = {
-  id: string;
-  judgmentClaimId: string;
-  supportingFactClaimIds: string[];
-  conflictingClaimIds: string[];
-  inference: string;
-  assumptions: string[];
-  alternativeExplanations: string[];
-  analyticConfidence: AnalyticConfidence;
-};
-
-type SynthesisChallenge = {
-  id: string;
-  claimLedgerEntryId?: string;
-  category:
-    | "bad-merge"
-    | "missed-merge"
-    | "source-dependency"
-    | "unsupported-claim"
-    | "missed-contradiction"
-    | "missing-caveat";
-  issue: string;
-  evidenceRefs: string[];
-  proposedResolution: string;
-};
-
-type AdjudicatedSynthesis = {
+type ExternalSynthesis = {
   id: string;
   runId: string;
   sourceNoteIds: string[];
-  failedEvidenceIds: string[];
-  claimLedger: ClaimLedgerEntry[];
-  linkedFindings: LinkedFinding[];
-  evidenceToJudgmentRecords: EvidenceToJudgmentRecord[];
-  challengeDispositions: Array<{
-    challengeId: string;
-    decision: "accepted" | "partially-accepted" | "rejected";
-    rationale: string;
-  }>;
+  failedEvidenceCandidateIds: string[];
+  claims: ExternalClaim[];
   keyJudgmentClaimIds: string[];
-  questionCoverage: Array<{
-    researchQuestionId: string;
-    coverage: "answered" | "partial" | "gap";
-    claimIds: string[];
-  }>;
   unresolvedContradictions: string[];
   intelligenceGaps: string[];
   limitedEvidence: boolean;
 };
 ```
 
-Each ledger entry contains one independently testable proposition. Actor, action, target, timing, attribution, and consequence are split when they rely on different evidence or confidence. `LinkedFinding` recombines related atomic claims for readable analysis.
+Atomic claims separate actor, action, target, timing, attribution, and consequence when those elements rely on different support or confidence. Single-source claims are permitted only when dependence and limitations remain explicit.
 
-Single-source claims may become key judgments when directness and credibility warrant it. `singleSourceDependent` must remain visible, confidence must account for the dependence, and the collection gap must be stated.
+# Part 7: Vestas Relevance Without Evidence Contamination
 
-## Analysis invariants
+## Sequencing rule
 
-1. Find and Sweep are independent extractions.
-2. Judge checks both extractions against the original source.
-3. Write cannot add claims or remove qualifications.
-4. Every source note resolves to one approved evidence item.
-5. Source count never substitutes for source independence.
-6. Builder, challenger, and adjudicator outputs are separate immutable artifacts.
-7. Every accepted ledger claim resolves to admitted source evidence.
-8. Contradictions and failed sources remain visible.
-9. No source means no finding.
-10. Every analytical judgment has one evidence-to-judgment record.
-11. Unseen upstream citations never count as independent support.
-12. Source-embedded instructions are never executable workflow input.
+Vestas context enters only after external claims are adjudicated. This prevents organizational expectations from biasing source extraction or changing what external evidence says.
 
-# Part 3: Memo Output, Verification, and Publication
+Provider context may accompany this stage as attributed orientation. It cannot be counted as a second independent source for an external claim.
 
-## Memo structure
+## Vestas context pack
 
-V1 produces canonical structured JSON and a deterministic Markdown rendering. The memo uses a fixed assurance shell with an adaptive analytical body.
+```ts
+type VestasContextRecord = {
+  id: string;
+  contextKind:
+    | "location"
+    | "site"
+    | "project"
+    | "asset"
+    | "technology"
+    | "supplier"
+    | "dependency"
+    | "business-activity"
+    | "ownership";
+  statement: string;
+  validityFrom?: string;
+  validityTo?: string;
+  classification: string;
+  sourceArtifactRef: string;
+  sourceSha256: string;
+  approvedAt: string;
+};
 
-Required shell:
+type VestasContextPack = {
+  id: string;
+  version: number;
+  createdAt: string;
+  recordIds: string[];
+  approvedBy?: string;
+};
+```
 
-1. Scope and time window.
-2. BLUF.
-3. Key judgments with analytic confidence.
-4. Adaptive analysis sections driven by the approved research questions and evidence.
-5. Uncertainties and competing explanations.
-6. Intelligence gaps, including failed approved sources.
-7. Outlook and watch indicators.
-8. Traceable source appendix.
+Only records valid for the memo time boundary and authorized for the output classification can be used.
+
+## Relevance assessment
+
+```ts
+type VestasRelevanceAssessment = {
+  id: string;
+  runId: string;
+  externalClaimIds: string[];
+  contextRecordIds: string[];
+  providerContextItemIds: string[];
+  relevance: "direct" | "indirect" | "watch" | "none" | "unknown";
+  exposurePathways: string[];
+  consequencePathways: string[];
+  timeHorizon: "current" | "near-term" | "longer-term";
+  assessment: string;
+  assumptions: string[];
+  unknowns: string[];
+  changeIndicators: string[];
+  confidence: AnalyticConfidence;
+};
+```
+
+Every Vestas-specific implication must resolve to at least one accepted external claim and one governed context record. When either side is absent, the output is an explicit information gap rather than a relevance judgment.
+
+# Part 8: Memo Standard From Historical Memos
+
+## Standard, not evidence
+
+Historical memos establish the expected intelligence product standard. They do not enter source analysis, external synthesis, or relevance assessment as factual input.
+
+An authorized curation process extracts stable editorial rules into a versioned pack:
+
+```ts
+type MemoStandardPack = {
+  id: string;
+  version: number;
+  approvedAt: string;
+  approvedBy?: string;
+  sourceMemoRefs: Array<{
+    artifactRef: string;
+    sha256: string;
+    purpose: "structure" | "voice" | "analysis-depth" | "confidence" | "citation";
+  }>;
+  audienceProfile: string;
+  requiredSections: string[];
+  optionalSections: string[];
+  blufPolicy: string[];
+  judgmentPolicy: string[];
+  confidenceLexicon: Record<"low" | "moderate" | "high", string>;
+  uncertaintyRules: string[];
+  citationRules: string[];
+  styleRules: string[];
+  prohibitedPatterns: string[];
+  qualityExemplars: Array<{
+    id: string;
+    purpose: string;
+    abstractedPattern: string;
+    sourceMemoRef: string;
+  }>;
+};
+```
+
+The curation process should abstract patterns instead of copying historical narrative into the generation prompt. Any exemplar containing entities, events, dates, or judgments must be scrubbed or explicitly blocked from factual reuse.
+
+## Standard invariants
+
+1. The standard pack cannot create or support an intelligence claim.
+2. It cannot override evidence limitations or confidence.
+3. It cannot require a conclusion that the evidence does not support.
+4. Its version is recorded on every memo draft.
+5. Standard changes require explicit approval and regression review.
+
+# Part 9: Memo Composition
+
+## Writer inputs
+
+The memo writer receives only:
+
+1. Approved scope and research questions.
+2. Adjudicated external synthesis.
+3. Vestas relevance assessments.
+4. Provider context items selected for attributed orientation.
+5. The approved memo standard pack.
+6. Explicit unresolved contradictions, limitations, and gaps.
+
+It does not receive raw historical memos or unresolved collection leads.
+
+## Canonical memo contract
 
 ```ts
 type MemoStatement = {
   id: string;
   text: string;
-  claimLedgerIds: string[];
+  statementKind: "external-fact" | "analytic-judgment" | "vestas-implication" | "context";
+  externalClaimIds: string[];
+  relevanceAssessmentIds: string[];
+  providerContextItemIds: string[];
 };
 
 type MemoSection = {
@@ -929,305 +1037,266 @@ type MemoDocument = {
   runId: string;
   version: number;
   status: "draft" | "approved" | "rejected";
-  scope: MemoScope;
+  memoStandardPackId: string;
+  memoStandardVersion: number;
+  scopeId: string;
+  researchQuestionIds: string[];
   bluf: MemoStatement[];
   keyJudgments: Array<{
     statement: MemoStatement;
-    analyticConfidence: QualitativeAssessment;
+    confidence: QualitativeAssessment;
   }>;
-  adaptiveAnalysis: MemoSection[];
+  analysis: MemoSection[];
+  vestasRelevance: MemoSection[];
   uncertainties: MemoStatement[];
   competingExplanations: MemoStatement[];
   intelligenceGaps: string[];
   outlook: MemoStatement[];
   watchIndicators: MemoStatement[];
-  sourceEvidenceIds: string[];
+  sourceEvidenceCandidateIds: string[];
+  contextRecordIds: string[];
   createdAt: string;
 };
 ```
 
-Every factual assertion and analytical judgment must carry one or more claim-ledger IDs. The Markdown renderer converts these links into concise claim-level citations and a provenance appendix.
+Statement rules:
 
-## Independent AI verification
+1. `external-fact` and `analytic-judgment` require accepted external claim IDs.
+2. `vestas-implication` requires both external claim IDs and relevance-assessment IDs.
+3. `context` requires provider-context or Vestas-context lineage and explicit attribution.
+4. A statement cannot cite a collection lead.
+5. Markdown and other presentation formats are deterministic renderings of the canonical JSON.
 
-The memo writer cannot approve its own work. An independent AI verifier compares the draft against the adjudicated synthesis and reports:
+# Part 10: Quality Assurance and Publication
 
-1. Unsupported or invented claims.
-2. Misstated source content.
-3. Confidence inflation.
-4. Omitted caveats or contradictions.
-5. Citation mismatch.
-6. Missing research-question coverage.
-7. Internal inconsistency.
-8. Omitted key judgments or bounded emergent findings.
-9. Buried significance or distorted emphasis.
-10. Missing competing explanations.
+## Deterministic verification
+
+Before semantic verification, code checks:
+
+1. Contract and schema validity.
+2. Required memo-standard sections.
+3. Statement-to-claim resolution.
+4. Vestas implication dual lineage.
+5. Claim-to-observation-to-source resolution.
+6. Citation and source appendix completeness.
+7. Version and artifact consistency.
+8. Presence of declared limitations, single-source dependence, and unresolved contradictions.
+9. Absence of unresolved lead IDs from memo statements.
+10. Output classification compatibility with context records.
+
+Any deterministic failure blocks human publication review.
+
+## Independent semantic verification
+
+The verifier receives the draft and the authoritative packs but not the writer's hidden reasoning. It evaluates each dimension independently:
 
 ```ts
+type QualityDimension =
+  | "evidence-fidelity"
+  | "citation-integrity"
+  | "source-independence"
+  | "fact-assessment-separation"
+  | "confidence-calibration"
+  | "alternative-analysis"
+  | "question-coverage"
+  | "vestas-relevance"
+  | "decision-utility"
+  | "memo-standard-adherence";
+
+type QualityFinding = {
+  id: string;
+  dimension: QualityDimension;
+  severity: "low" | "medium" | "high" | "critical";
+  memoStatementIds: string[];
+  externalClaimIds: string[];
+  issue: string;
+  requiredAction: string;
+};
+
 type MemoVerification = {
   id: string;
   runId: string;
   memoId: string;
   memoVersion: number;
-  verdict: "pass" | "revise" | "escalate";
-  findings: Array<{
-    id: string;
-    severity: "low" | "medium" | "high";
-    category:
-      | "unsupported-claim"
-      | "source-misstatement"
-      | "confidence-inflation"
-      | "missing-caveat"
-      | "citation-mismatch"
-      | "coverage-gap"
-      | "internal-inconsistency"
-      | "omitted-key-judgment"
-      | "buried-significance"
-      | "missing-alternative"
-      | "distorted-emphasis";
-    memoStatementId?: string;
-    claimLedgerIds: string[];
-    issue: string;
-    requiredAction: string;
-  }>;
+  verifierConfigurationRef: string;
+  dimensionVerdicts: Record<QualityDimension, "pass" | "revise" | "block">;
+  findings: QualityFinding[];
+  overallVerdict: "pass" | "revise" | "escalate";
 };
 ```
 
-Deterministic code separately validates schemas, mandatory sections, claim and citation resolution, artifact versions, evidence-chain completeness, and checksums.
+There is no weighted composite quality score. A strength in presentation cannot offset a failure in evidence fidelity.
 
-The writer and verifier may complete at most two automatic correction cycles. Unresolved findings then require human action.
+## Blocking quality policy
+
+The memo cannot pass when any of the following exists:
+
+1. An unsupported factual assertion or analytical judgment.
+2. A citation that does not support its statement.
+3. A Vestas implication without external and internal lineage.
+4. Hidden single-source or shared-origin dependence.
+5. Confidence stronger than the underlying adjudicated claim.
+6. A material contradiction, caveat, or alternative removed during writing.
+7. A historical-memo fact introduced through the standard pack.
+8. A collection lead presented as evidence.
+9. A critical approved research question omitted without a visible gap.
+10. Output that violates its information classification boundary.
+
+The writer and verifier may complete at most two deterministic revision cycles. Remaining blocking findings escalate to a human.
 
 ## Human publication gate
 
-All generated memos remain `draft` until a human approves publication. A reviewer may approve, reject, or request revision.
-
 ```ts
-type MemoReviewDecision = {
+type MemoPublicationDecision = {
   id: string;
   runId: string;
   memoId: string;
   memoVersion: number;
-  decision: "approved" | "rejected" | "revision-requested";
   reviewerId?: string;
   decidedAt: string;
+  decision: "approved" | "rejected" | "revision-requested";
+  issueType?:
+    | "editorial"
+    | "external-judgment"
+    | "source-analysis"
+    | "vestas-relevance"
+    | "evidence-gap"
+    | "standard-policy";
   feedback?: string;
-  issueType?: "editorial" | "judgment" | "source" | "evidence-gap";
 };
 ```
 
-Revision routing is owned by deterministic code:
+Revision routing returns to the stage that owns the defect. Reopened stages create new immutable artifact versions.
 
-| Issue type | Return stage |
-|---|---|
-| `editorial` | Memo writer |
-| `judgment` | Synthesis builder, challenger, and adjudicator |
-| `source` | A new version of the affected source worker |
-| `evidence-gap` | Bounded query planning and renewed human evidence approval |
+# Part 11: State Machine
 
-Reopened stages create new artifact versions. Prior versions remain immutable and linked in the event history.
+| State | Owner | Permitted next states |
+| --- | --- | --- |
+| `memo_requested` | Human | `scope_proposed`, `cancelled` |
+| `scope_proposed` | Semantic stage | `scope_approved`, `scope_revision`, `cancelled` |
+| `scope_approved` | Human | `questions_proposed` |
+| `questions_proposed` | Semantic stage | `questions_approved`, `questions_revision` |
+| `questions_approved` | Human | `collection_planned` |
+| `collection_planned` | Deterministic code | `collecting`, `planning_revision`, `failed` |
+| `collecting` | Deterministic code | `items_classified`, `budget_exhausted`, `failed` |
+| `items_classified` | Deterministic code | `resolving_leads`, `evidence_review_ready` |
+| `resolving_leads` | Deterministic code | `items_classified`, `evidence_review_ready`, `budget_exhausted` |
+| `evidence_review_ready` | Deterministic code | `evidence_approved`, `evidence_revision`, `cancelled` |
+| `evidence_approved` | Human | `source_assurance_ready` |
+| `source_assurance_ready` | Deterministic code | `source_assurance_running` |
+| `source_assurance_running` | Deterministic code | `external_synthesis_ready`, `source_assurance_partial`, `failed` |
+| `external_synthesis_ready` | Deterministic code | `external_synthesis_running` |
+| `external_synthesis_running` | Deterministic code | `vestas_relevance_ready`, `failed` |
+| `vestas_relevance_ready` | Deterministic code | `vestas_relevance_running`, `memo_drafting` |
+| `vestas_relevance_running` | Deterministic code | `memo_drafting`, `failed` |
+| `memo_drafting` | Deterministic code | `memo_verifying`, `failed` |
+| `memo_verifying` | Deterministic code | `publication_review`, `memo_revision`, `verification_escalated` |
+| `publication_review` | Human | `approved`, `revision_requested`, `rejected` |
+| `approved` | Human | Terminal |
+| `rejected` | Human | Terminal |
+| `cancelled` | Human or policy | Terminal |
+| `failed` | Deterministic code | Retry from last valid checkpoint or `cancelled` |
 
-## Output invariants
+No model response is itself a state transition. A transition occurs only after deterministic validation and event emission.
 
-1. Canonical JSON is the system of record; Markdown is a rendering.
-2. A memo cannot enter human review until AI and deterministic verification pass or explicitly escalate.
-3. Every factual assertion and judgment has a claim-level citation.
-4. Limited evidence, conflicts, failed sources, and unanswered questions remain visible.
-5. Only a human can change memo status to `approved`.
-6. Revision returns to the stage that owns the issue.
-
-# Part 4: Built-In Event Log and Artifact Integrity
-
-## Purpose
-
-Every run writes a complete analytical audit trail from request creation through completion, failure, cancellation, or restart. V1 saves this log in the background; a timeline UI and audit export are deferred to V2.
-
-The event log is canonical, append-only, and compact. Full sources, prompts, model responses, analyses, and memo versions live in the controlled artifact store. Events reference those artifacts by stable ID and SHA-256 checksum.
-
-## Event envelope
-
-```ts
-type ArtifactReference = {
-  id: string;
-  path: string;
-  mediaType: string;
-  version: number;
-  sha256: string;
-};
-
-type RunEvent = {
-  schemaVersion: 1;
-  eventId: string;
-  runId: string;
-  sequence: number;
-  occurredAt: string;
-  actor: {
-    type: "human" | "agent" | "system" | "tool";
-    id?: string;
-  };
-  stage: string;
-  eventType: string;
-  status: "started" | "completed" | "failed" | "cancelled";
-  correlationId?: string;
-  causationEventId?: string;
-  inputArtifacts: ArtifactReference[];
-  outputArtifacts: ArtifactReference[];
-  decision?: {
-    outcome: string;
-    rationale?: string;
-  };
-  modelInvocation?: {
-    provider: string;
-    model: string;
-    configurationRef: string;
-    promptTemplateVersion: string;
-    attempt: number;
-    durationMs?: number;
-    inputTokens?: number;
-    outputTokens?: number;
-  };
-  error?: {
-    code: string;
-    message: string;
-    retryable: boolean;
-  };
-  previousEventHash: string;
-  eventHash: string;
-};
-```
-
-The event payload must never contain credentials, API keys, access tokens, or hidden model chain-of-thought.
-
-## Required event families
-
-At minimum, the event writer records:
-
-1. Run creation, recovery, restart, cancellation, failure, and completion.
-2. Scope, question, OSINT-expansion, evidence, and publication decisions.
-3. Query intent proposal, plan validation, provider calls, normalization, deduplication, and budgets.
-4. Every Find, Sweep, Judge, Write, builder, challenger, adjudicator, writer, and verifier invocation.
-5. Artifact creation, validation, rejection, replacement, and version linkage.
-6. Worker retries and permanent source failures.
-7. Deterministic validation results and revision routing.
-
-## Single writer and hash chain
-
-One deterministic event writer owns sequence assignment and append operations. This remains true even if worker execution becomes parallel in a later version.
-
-For each event:
-
-1. Assign the next monotonic sequence number.
-2. Set `previousEventHash` to the preceding event hash, or the configured genesis value for sequence 1.
-3. Canonicalize the event without `eventHash`.
-4. Calculate and store its SHA-256 `eventHash`.
-5. Append exactly one JSON object to `run-events.jsonl`.
-
-The chain is tamper-evident, not digitally signed.
-
-## Sealed run manifest
-
-Completion, failure, or cancellation creates a manifest:
-
-```ts
-type RunManifest = {
-  schemaVersion: 1;
-  runId: string;
-  status: "completed" | "failed" | "cancelled" | "restarted";
-  createdAt: string;
-  sealedAt: string;
-  eventCount: number;
-  firstEventHash: string;
-  finalEventHash: string;
-  eventLog: ArtifactReference;
-  artifacts: ArtifactReference[];
-  previousRunId?: string;
-  manifestSha256: string;
-};
-```
-
-The manifest inventories every retained artifact and seals the final event-chain hash. Managed digital signing may be added later if independent non-repudiation becomes a requirement.
-
-## Recovery
-
-When an interrupted run is opened:
-
-1. Deterministic code verifies the event chain and all referenced artifact checksums.
-2. The system identifies the first incomplete stage after the last valid checkpoint.
-3. The analyst chooses either `resume` or `restart`.
-4. Resume continues without rerunning valid completed stages.
-5. Restart creates a new run ID and links the new manifest to the prior run.
-6. The choice is itself an event.
+# Part 12: Artifact and Audit Model
 
 ## Logical run package
 
 ```text
 runs/<runId>/
-  memo-request.json
-  scope.json
-  research-questions.json
+  request/
+    memo-request.json
+    scope.v<version>.json
+    research-questions.v<version>.json
   collection/
+    search-intents.json
+    provider-operations.json
+    raw/<operationId>.json
+    pagination-assessments.json
+    classified-items.json
+    lead-resolutions.json
   evidence/
-  source-workers/<evidenceId>/
+    readiness.json
+    review-package.json
+    admission-decisions.json
+    approved-snapshot.json
+  source-assurance/<evidenceCandidateId>/
     find.json
     sweep.json
     judge.json
     source-note.json
   synthesis/
-    builder.json
-    challenger.json
-    adjudicated.json
+    build.json
+    challenge.json
+    adjudicated-external.json
+  context/
+    provider-context.json
+    vestas-context-pack.ref.json
+    relevance-assessments.json
+  standard/
+    memo-standard-pack.ref.json
   memo/
     memo.v<version>.json
     memo.v<version>.md
     verification.v<version>.json
-    review-decisions.json
+    publication-decisions.json
   run-events.jsonl
   run-manifest.json
 ```
 
-## V1 and V2 boundary
+## Event requirements
 
-V1 ends with a trusted external threat-intelligence memo. It does not use Vestas internal context to influence extraction, source judgment, or factual synthesis.
+Every event records stable input and output artifact references, actor type, stage, event type, status, correlation, causation, and typed errors. Model calls additionally record model configuration, prompt version, attempt, duration, and token usage when available.
 
-When an approved V1 question asks what an event means for Vestas, V1 answers the external facts and generic wind-sector implications, then explicitly defers Vestas-specific conclusions to the governed V2 context stage.
+Events never contain credentials, full provider content, full prompts, hidden chain-of-thought, or sensitive Vestas context. Those remain controlled artifacts referenced by ID and checksum.
 
-V2 may add, after factual synthesis:
+## Security boundaries
 
-1. A separate Vestas relevance and impact-mapping stage using explicitly approved internal context.
-2. Event-log timeline, search, filtering, and audit-package export.
-3. Parallel source-worker scheduling without changing worker contracts.
-4. Managed signing of sealed manifests if required.
+1. Provider and source content is untrusted data, never executable instruction.
+2. Source-assurance stages have no provider, filesystem, or workflow-state tools.
+3. Vestas context access is read-only, scoped, classification-aware, and logged.
+4. The memo standard pack is versioned and read-only during a run.
+5. Credentials remain runtime configuration and never enter model inputs or retained artifacts.
+6. Publication cannot lower the classification required by any included context record.
 
-### Designed V2 Vestas-context tool
+# Part 13: Implementation Sequence
 
-The future stage uses a deterministic, read-only adapter to a governed Vestas information database after external synthesis. The agent queries only for context relevant to adjudicated external claims. External facts and Vestas impact judgments remain separate artifacts and use separate citations.
+The architecture is implemented through narrow, testable slices:
 
-The database should eventually provide authoritative, time-bounded context for Vestas footprint, including relevant locations, sites, projects, service operations, business activities, assets, technologies, suppliers, dependencies, and ownership. Exact context taxonomy and source governance require a dedicated V2 design exercise.
+1. One-item provider role classification and deterministic routing.
+2. One approved full-content item through `Find -> Sweep -> Judge -> Write`.
+3. Sequential execution over multiple approved evidence items.
+4. External `Build -> Challenge -> Adjudicate` synthesis with source-dependency tracking.
+5. Read-only Vestas context pack and dual-lineage relevance assessment.
+6. Curated memo standard pack from approved historical memos.
+7. Canonical memo writer, deterministic renderer, and independent verifier.
+8. Human publication decision and targeted revision routing.
+9. Audit hardening, recovery, and sealed manifests only after the functional flow works.
 
-```ts
-type VestasContextAssessment = {
-  id: string;
-  runId: string;
-  externalClaimIds: string[];
-  footprintMatches: Array<{
-    contextRecordId: string;
-    relationship: string;
-    validityFrom?: string;
-    validityTo?: string;
-    sourceArtifactRef: string;
-  }>;
-  riskNarrative: string;
-  contextRecordIds: string[];
-  caveats: string[];
-  unknowns: string[];
-};
-```
+Each slice reuses plain functions and the dependency boundaries in `script-architecture.md`. Provider frameworks, plugin registries, dependency-injection containers, event buses, generic repositories, and parallel orchestration remain deferred until repeated working code demonstrates the need.
 
-The V2 output is a footprint match plus an evidence-linked Vestas risk narrative. Detailed consequence pathways, recommendation logic, access classification, freshness policy, and database schema remain deliberately open until the V2 grill.
+## Open decisions
 
-## Implementation parameters still to set
+1. Provider retention and derived-fixture policy.
+2. Exact evidence-readiness thresholds for each observed source type.
+3. Source-content retrieval mechanism for summary-only links.
+4. Model and prompt configurations for each assurance goal.
+5. Numeric collection, model-call, retry, and token budgets.
+6. Governance, classification, and freshness rules for the Vestas context pack.
+7. Selection, curation, approval, and regression process for historical memo standards.
+8. Required output formats and audience-specific standard-pack variants.
+9. Artifact retention, access control, signing, and recovery requirements.
 
-1. Exact Seerist endpoint and filter mappings.
-2. Numeric provider budgets and source-stage retry limits.
-3. Approved model identifier and runtime configuration.
-4. Artifact retention period and access-control implementation.
-5. Source-content eligibility thresholds calibrated from real Seerist outputs.
+## Acceptance criteria for this architecture
+
+The design is ready to supersede the previous workflow only after working slices demonstrate that:
+
+1. Role classification prevents leads and context from entering claim-bearing analysis.
+2. Lead resolution preserves provenance and does not manufacture corroboration.
+3. The four-goal source loop materially improves extraction coverage or error detection over a single pass.
+4. Cross-source challenge identifies reporting dependencies and unsupported synthesis.
+5. Vestas context adds decision relevance without altering external factual judgments.
+6. The memo standard improves communication without leaking historical claims.
+7. Verification reliably blocks unsupported, mis-cited, overconfident, or context-contaminated output.
+8. Human reviewers can trace every published statement to the appropriate authority domain.

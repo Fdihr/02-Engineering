@@ -115,10 +115,18 @@ The current modules are starter examples, not proof that the memo workflow is im
 
 ## Current design artifacts
 
+- Canonical workflow: `02-Engineering/03-Workflow/memo-workflow.md`
 - Canonical visual: `02-Engineering/01-Architecture/memo-workflow-board.svg`
+- Source assurance detail: `02-Engineering/01-Architecture/source-assurance-goal-loops.svg`
+- Script structure: `02-Engineering/01-Architecture/script-architecture.md`
 - KISS rules: `02-Engineering/03-Workflow/kiss-reset-plan.md`
 - Immediate slice: `02-Engineering/03-Workflow/first-slice.md`
 - Legacy PoC boundary: `02-Engineering/00-PoC-Reference/`
+
+Retired V1 references are preserved only for historical comparison:
+
+- `02-Engineering/03-Workflow/memo-workflow-retired-v1.md`
+- `02-Engineering/01-Architecture/memo-workflow-board-retired-v1.svg`
 
 The workflow and SVG currently describe:
 

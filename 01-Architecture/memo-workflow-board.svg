@@ -1,295 +1,281 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1400" viewBox="0 0 2400 1400" role="img" aria-labelledby="title description">
   <title id="title">Threat intelligence memo workflow</title>
-  <desc id="description">Chat-first intake flows into sequential per-source analysis, claim-centric synthesis, verified memo output, human publication approval, and a built-in hash-chained event log.</desc>
+  <desc id="description">Canonical version 2 evidence-first threat intelligence workflow showing bounded Seerist collection, provider role classification, human evidence admission, four-goal source assurance, external claim synthesis, separate Vestas context and memo-standard authorities, quality verification, and human publication approval.</desc>
 
   <defs>
     <style>
-      text { font-family: "VestasSans", "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: 0; }
+      text { font-family: "VestasSans"; letter-spacing: 0; }
       .canvas { fill: #FFFFFF; }
       .board { fill: #FFFFFF; stroke: #E3E5E8; stroke-width: 2; }
       .panel { fill: #FFFFFF; stroke: #A2A9B1; stroke-width: 1.5; }
       .panel-header { fill: #1F3144; }
-      .panel-title { fill: #FFFFFF; font-size: 20px; font-weight: 500; }
-      .panel-subtitle { fill: #E3E5E8; font-size: 12px; font-weight: 400; }
       .page-title { fill: #1F3144; font-size: 32px; font-weight: 500; }
       .page-subtitle { fill: #606D7B; font-size: 14px; font-weight: 400; }
+      .panel-title { fill: #FFFFFF; font-size: 18px; font-weight: 500; }
+      .panel-subtitle { fill: #E3E5E8; font-size: 12px; font-weight: 400; }
       .card-title { fill: #1F3144; font-size: 15px; font-weight: 500; }
       .body { fill: #606D7B; font-size: 13px; font-weight: 400; }
       .caption { fill: #606D7B; font-size: 12px; font-weight: 400; }
-      .white-caption { fill: #FFFFFF; font-size: 12px; font-weight: 400; }
-      .intake-card { fill: #FFFFFF; stroke: #4BA6F7; stroke-width: 1.5; }
-      .agent-card { fill: #96C8F0; stroke: #005AFF; stroke-width: 1.5; }
+      .small { fill: #606D7B; font-size: 11px; font-weight: 400; }
+      .white-small { fill: #FFFFFF; font-size: 11px; font-weight: 500; }
       .det-card { fill: #FFFFFF; stroke: #005AFF; stroke-width: 2; }
-      .gate-card { fill: #FFFFFF; stroke: #772219; stroke-width: 2; }
+      .agent-card { fill: #96C8F0; stroke: #005AFF; stroke-width: 1.5; }
       .human-card { fill: #FFFFFF; stroke: #19736E; stroke-width: 2; }
+      .gate-card { fill: #FFFFFF; stroke: #772219; stroke-width: 2; }
+      .context-card { fill: #FFFFFF; stroke: #E17D28; stroke-width: 2; }
       .artifact-card { fill: #E3E5E8; stroke: #A2A9B1; stroke-width: 1.5; }
-      .tool-card { fill: #FFFFFF; stroke: #A2A9B1; stroke-width: 1.5; }
-      .audit-card { fill: #E3E5E8; stroke: #1F3144; stroke-width: 1.5; }
+      .quiet-card { fill: #FFFFFF; stroke: #A2A9B1; stroke-width: 1.5; }
+      .tested-chip { fill: #19736E; }
       .warning-chip { fill: #E17D28; }
-      .success-chip { fill: #19736E; }
+      .state-chip { fill: #772219; }
       .primary-line { fill: none; stroke: #005AFF; stroke-width: 2.5; marker-end: url(#arrow-blue); }
-      .primary-line-no-arrow { fill: none; stroke: #005AFF; stroke-width: 2.5; }
+      .authority-line { fill: none; stroke: #E17D28; stroke-width: 2; stroke-dasharray: 8 6; marker-end: url(#arrow-orange); }
       .feedback-line { fill: none; stroke: #772219; stroke-width: 2; stroke-dasharray: 8 6; marker-end: url(#arrow-red); }
-      .tool-line { fill: none; stroke: #606D7B; stroke-width: 2; stroke-dasharray: 8 6; marker-end: url(#arrow-grey); }
-      .repeat-line { fill: none; stroke: #606D7B; stroke-width: 2; stroke-dasharray: 8 6; marker-end: url(#arrow-grey); }
       .divider { stroke: #E3E5E8; stroke-width: 1; }
     </style>
 
     <marker id="arrow-blue" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto" markerUnits="strokeWidth">
       <path d="M 0 0 L 12 5 L 0 10 z" fill="#005AFF" />
     </marker>
+    <marker id="arrow-orange" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 5 L 0 10 z" fill="#E17D28" />
+    </marker>
     <marker id="arrow-red" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto" markerUnits="strokeWidth">
       <path d="M 0 0 L 12 5 L 0 10 z" fill="#772219" />
-    </marker>
-    <marker id="arrow-grey" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto" markerUnits="strokeWidth">
-      <path d="M 0 0 L 12 5 L 0 10 z" fill="#606D7B" />
     </marker>
   </defs>
 
   <rect class="canvas" x="0" y="0" width="2400" height="1400" />
   <text class="page-title" x="48" y="48">Threat intelligence memo workflow</text>
-  <text class="page-subtitle" x="48" y="76">Classified and approved evidence, independent source analysis, challenged synthesis, verified writing, and complete audit history</text>
+  <text class="page-subtitle" x="48" y="76">Version 2 | Evidence-first collection, stage-owned source assurance, separated context, and standard-governed output</text>
+
+  <rect class="det-card" x="1696" y="32" width="16" height="16" />
+  <text class="caption" x="1720" y="45">Deterministic</text>
+  <rect class="agent-card" x="1824" y="32" width="16" height="16" />
+  <text class="caption" x="1848" y="45">Semantic goal</text>
+  <rect class="human-card" x="1968" y="32" width="16" height="16" />
+  <text class="caption" x="1992" y="45">Human gate</text>
+  <rect class="context-card" x="2088" y="32" width="16" height="16" />
+  <text class="caption" x="2112" y="45">Separate authority</text>
 
   <rect class="board" x="32" y="96" width="2336" height="1272" />
 
-  <!-- LEFT: INTAKE -->
-  <rect class="panel" x="64" y="128" width="560" height="940" />
-  <rect class="panel-header" x="64" y="128" width="560" height="72" />
-  <text class="panel-title" x="88" y="158">1. How a memo starts</text>
-  <text class="panel-subtitle" x="88" y="181">One chat, explicit human gates, typed workflow state behind it</text>
+  <!-- PANEL 1: INTAKE, COLLECTION, CLASSIFICATION -->
+  <rect class="panel" x="64" y="128" width="552" height="936" />
+  <rect class="panel-header" x="64" y="128" width="552" height="72" />
+  <text class="panel-title" x="88" y="158">1. Intent, collection, and admission</text>
+  <text class="panel-subtitle" x="88" y="181">Provider records are classified before they can become evidence</text>
 
-  <rect class="intake-card" x="88" y="224" width="512" height="80" />
-  <text class="card-title" x="112" y="250">1. Free-text problem statement</text>
-  <text class="body" x="112" y="274">User describes the intelligence need in chat.</text>
-  <text class="caption" x="112" y="293">System preserves the original request and assigns a run ID.</text>
+  <rect class="human-card" x="88" y="224" width="504" height="112" />
+  <text class="card-title" x="112" y="252">Approve scope and research questions</text>
+  <text class="body" x="112" y="278">Purpose | audience | geography | time window | questions</text>
+  <text class="caption" x="112" y="302">No provider call before both explicit human approvals.</text>
+  <rect class="tested-chip" x="480" y="312" width="88" height="8" />
 
-  <rect class="agent-card" x="88" y="320" width="512" height="96" />
-  <text class="card-title" x="112" y="346">2. Agent proposes structured scope</text>
-  <text class="body" x="112" y="370">Purpose | threat topic | audience | geography | time window</text>
-  <text class="caption" x="112" y="391">Missing values become visible, editable assumptions.</text>
+  <rect class="det-card" x="88" y="360" width="504" height="136" />
+  <text class="card-title" x="112" y="388">Bounded Seerist collection</text>
+  <text class="body" x="112" y="414">Discovery -> one gap-fill pass -> one lead-resolution hop</text>
+  <text class="caption" x="112" y="440">Persist raw response before parsing; enforce call, time, item, and page budgets.</text>
+  <text class="caption" x="112" y="464">Detect changing totals, duplicate IDs, timestamp inversions, and incomplete pages.</text>
 
-  <rect class="gate-card" x="88" y="432" width="512" height="80" />
-  <text class="card-title" x="112" y="458">3. Human scope gate</text>
-  <text class="body" x="112" y="482">Confirm, revise, or cancel before question generation.</text>
-  <text class="caption" x="112" y="501">No approval means no research plan.</text>
+  <rect class="det-card" x="88" y="520" width="504" height="184" />
+  <text class="card-title" x="112" y="548">Classify every provider item</text>
+  <line class="divider" x1="112" y1="564" x2="568" y2="564" />
+  <text class="body" x="112" y="592">Evidence candidate</text>
+  <text class="caption" x="280" y="592">Captured content + provenance -> readiness</text>
+  <text class="body" x="112" y="624">Collection lead</text>
+  <text class="caption" x="280" y="624">Summary, hotspot, cluster, URL -> resolve</text>
+  <text class="body" x="112" y="656">Context</text>
+  <text class="caption" x="280" y="656">Pulse, risk, background, future -> orient</text>
+  <text class="small" x="112" y="684">Endpoint + source type + content depth + lineage determine role.</text>
 
-  <rect class="agent-card" x="88" y="528" width="512" height="96" />
-  <text class="card-title" x="112" y="554">4. Research-question composer</text>
-  <text class="body" x="112" y="578">Each proposal contains question, rationale, and scope.</text>
-  <text class="caption" x="112" y="599">No fixed count; questions cannot expand the approved scope.</text>
+  <rect class="context-card" x="88" y="728" width="504" height="112" />
+  <text class="card-title" x="112" y="756">Resolve collection leads</text>
+  <text class="body" x="112" y="782">Cluster ID | source URL | provider record</text>
+  <text class="caption" x="112" y="806">One hop only; unresolved leads remain explicit collection gaps.</text>
 
-  <rect class="gate-card" x="88" y="640" width="512" height="80" />
-  <text class="card-title" x="112" y="666">5. Human question gate</text>
-  <text class="body" x="112" y="690">Approve, edit, add, or remove research questions.</text>
-  <text class="caption" x="112" y="709">Only approved questions may execute.</text>
+  <rect class="human-card" x="88" y="864" width="504" height="168" />
+  <text class="card-title" x="112" y="892">Evidence readiness + human gate</text>
+  <text class="body" x="112" y="918">Content sufficiency | identity | lineage | trace | limitations</text>
+  <text class="caption" x="112" y="944">Only ready or qualified evidence candidates may be selected.</text>
+  <text class="caption" x="112" y="968">Context and unresolved leads remain attached but are never admitted.</text>
+  <text class="small" x="112" y="1000">Output: immutable, individually approved evidence snapshot</text>
+  <rect class="tested-chip" x="480" y="1008" width="88" height="8" />
 
-  <rect class="det-card" x="88" y="736" width="512" height="96" />
-  <text class="card-title" x="112" y="762">6. Collect, classify, resolve</text>
-  <text class="body" x="112" y="786">Seerist items -> evidence candidates | leads | context</text>
-  <text class="caption" x="112" y="807">Resolve leads; context cannot satisfy the evidence target.</text>
+  <path class="primary-line" d="M 340 336 L 340 358" />
+  <path class="primary-line" d="M 340 496 L 340 518" />
+  <path class="authority-line" d="M 340 704 L 340 726" />
+  <path class="primary-line" d="M 340 840 L 340 862" />
+  <path class="feedback-line" d="M 88 784 L 48 784 L 48 612 L 86 612" />
 
-  <rect class="agent-card" x="88" y="848" width="512" height="96" />
-  <text class="card-title" x="112" y="874">7. Potential evidence review</text>
-  <text class="body" x="112" y="898">Content depth | lineage | relevance | duplicates | gaps</text>
-  <text class="caption" x="112" y="919">Only sufficient captured content can reach the evidence gate.</text>
+  <!-- PANEL 2: FOUR-GOAL SOURCE ASSURANCE -->
+  <rect class="panel" x="640" y="128" width="704" height="936" />
+  <rect class="panel-header" x="640" y="128" width="704" height="72" />
+  <text class="panel-title" x="664" y="158">2. Stage-owned source assurance</text>
+  <text class="panel-subtitle" x="664" y="181">Four bounded deterministic goal loops own execution and handoff</text>
 
-  <rect class="human-card" x="88" y="960" width="512" height="80" />
-  <text class="card-title" x="112" y="986">8. Human evidence gate</text>
-  <text class="body" x="112" y="1010">Approve individual items for source analysis.</text>
-  <text class="caption" x="112" y="1029">Return options: scope | questions | query plan</text>
+  <rect class="artifact-card" x="664" y="224" width="656" height="64" />
+  <text class="card-title" x="688" y="250">Approved evidence snapshot</text>
+  <text class="caption" x="688" y="272">Stable ID | captured content | provenance | permitted claim kinds | limitations</text>
 
-  <path class="primary-line" d="M 344 304 L 344 318" />
-  <path class="primary-line" d="M 344 416 L 344 430" />
-  <path class="primary-line" d="M 344 512 L 344 526" />
-  <path class="primary-line" d="M 344 624 L 344 638" />
-  <path class="primary-line" d="M 344 720 L 344 734" />
-  <path class="primary-line" d="M 344 832 L 344 846" />
-  <path class="primary-line" d="M 344 944 L 344 958" />
+  <rect class="agent-card" x="664" y="320" width="312" height="136" />
+  <text class="card-title" x="688" y="348">Find goal loop</text>
+  <text class="body" x="688" y="374">Goal: supported atomic observations</text>
+  <text class="caption" x="688" y="400">Prepare -> Act -> Observe -> Check</text>
+  <text class="caption" x="688" y="424">Commit extraction for Judge</text>
 
-  <!-- Intake rejection stays in a dedicated outer gutter. -->
-  <path class="feedback-line" d="M 88 1000 L 48 1000 L 48 368 L 86 368" />
-  <text class="caption" x="88" y="1056">Rejected: reviewer selects the exact state to revise.</text>
+  <rect class="agent-card" x="1008" y="320" width="312" height="136" />
+  <text class="card-title" x="1032" y="348">Sweep goal loop</text>
+  <text class="body" x="1032" y="374">Goal: independent coverage pass</text>
+  <text class="caption" x="1032" y="400">Prepare -> Act -> Observe -> Check</text>
+  <text class="caption" x="1032" y="424">Commit blind extraction for Judge</text>
 
-  <!-- MIDDLE: PER-SOURCE ANALYSIS + SYNTHESIS -->
-  <rect class="panel" x="680" y="128" width="1040" height="940" />
-  <rect class="panel-header" x="680" y="128" width="1040" height="72" />
-  <text class="panel-title" x="704" y="158">2. Per-source analysis and cross-source synthesis</text>
-  <text class="panel-subtitle" x="704" y="181">V1 runs approved sources sequentially, then reconciles evidence by claim</text>
+  <rect class="agent-card" x="664" y="488" width="656" height="144" />
+  <text class="card-title" x="688" y="516">Judge goal loop</text>
+  <text class="body" x="688" y="542">Goal: dispose every extraction against the original source.</text>
+  <text class="caption" x="688" y="568">Prepare -> Act -> Observe -> Check; retry when required conditions are unmet</text>
+  <text class="caption" x="688" y="592">Commit adjudicated source brief for Write</text>
+  <rect class="warning-chip" x="1208" y="608" width="88" height="8" />
 
-  <rect class="artifact-card" x="704" y="224" width="992" height="56" />
-  <text class="card-title" x="728" y="248">Human-approved evidence queue</text>
-  <text class="caption" x="728" y="268">Claim-eligible captured content | actual source lineage | one item per worker | stable order</text>
+  <rect class="agent-card" x="664" y="664" width="656" height="120" />
+  <text class="card-title" x="688" y="692">Write goal loop</text>
+  <text class="body" x="688" y="718">Goal: faithful source note from the adjudicated brief.</text>
+  <text class="caption" x="688" y="744">Prepare -> Act -> Observe -> Check; commit only when no new claim is introduced</text>
 
-  <rect class="agent-card" x="704" y="304" width="304" height="112" />
-  <text class="card-title" x="728" y="332">Find - extraction pass A</text>
-  <text class="body" x="728" y="356">Atomic supported observations + synopsis</text>
-  <text class="caption" x="728" y="380">Fresh context | identical versioned prompt</text>
-  <text class="caption" x="728" y="400">Untrusted source data | no tools | blind to Sweep</text>
+  <rect class="artifact-card" x="664" y="816" width="656" height="80" />
+  <text class="card-title" x="688" y="844">Typed source intelligence note</text>
+  <text class="caption" x="688" y="870">Accepted observations | judgments | question coverage | caveats | gaps</text>
 
-  <rect class="agent-card" x="704" y="432" width="304" height="112" />
-  <text class="card-title" x="728" y="460">Sweep - blind extraction pass B</text>
-  <text class="body" x="728" y="484">Independent observations + synopsis</text>
-  <text class="caption" x="728" y="508">Fresh context | identical versioned prompt</text>
-  <text class="caption" x="728" y="528">Original-language source | blind to Find</text>
+  <rect class="quiet-card" x="664" y="928" width="656" height="104" />
+  <text class="card-title" x="688" y="956">Stage-owned deterministic controller</text>
+  <text class="body" x="688" y="982">Frozen goal + conditions -> scoped call -> observation -> retry or commit</text>
+  <text class="small" x="688" y="1008">Immutable attempts | bounded failure | model never chooses transition or next stage</text>
 
-  <rect class="agent-card" x="1040" y="344" width="304" height="160" />
-  <text class="card-title" x="1064" y="372">Judge - senior CTI analyst</text>
-  <text class="body" x="1064" y="398">Adjudicate both passes against source</text>
-  <text class="caption" x="1064" y="424">Accept | qualify | reject | preserve conflicts</text>
-  <text class="caption" x="1064" y="448">Actual-origin reliability | credibility | confidence</text>
-  <text class="caption" x="1064" y="480">Output: typed brief + rationale</text>
+  <path class="primary-line" d="M 820 288 L 820 318" />
+  <path class="primary-line" d="M 1164 288 L 1164 318" />
+  <path class="primary-line" d="M 820 456 L 820 472 L 992 472 L 992 486" />
+  <path class="primary-line" d="M 1164 456 L 1164 472 L 992 472 L 992 486" />
+  <path class="primary-line" d="M 992 632 L 992 662" />
+  <path class="primary-line" d="M 992 784 L 992 814" />
 
-  <rect class="agent-card" x="1376" y="344" width="320" height="160" />
-  <text class="card-title" x="1400" y="372">Write - source intelligence note</text>
-  <text class="body" x="1400" y="398">Constrained narrative + typed findings</text>
-  <text class="caption" x="1400" y="424">No new claims or confidence inflation</text>
-  <text class="caption" x="1400" y="448">Caveats and contradictions preserved</text>
-  <text class="caption" x="1400" y="480">One versioned note per source</text>
+  <!-- Approved evidence enters source assurance. -->
+  <path class="primary-line" d="M 592 948 L 628 948 L 628 256 L 662 256" />
 
-  <path class="primary-line" d="M 1008 360 L 1038 384" />
-  <path class="primary-line" d="M 1008 488 L 1038 464" />
-  <path class="primary-line" d="M 1344 424 L 1374 424" />
+  <!-- PANEL 3: SYNTHESIS, CONTEXT, STANDARD, OUTPUT -->
+  <rect class="panel" x="1368" y="128" width="968" height="936" />
+  <rect class="panel-header" x="1368" y="128" width="968" height="72" />
+  <text class="panel-title" x="1392" y="158">3. Synthesis, relevance, quality, and publication</text>
+  <text class="panel-subtitle" x="1392" y="181">External facts first; Vestas context and memo standards remain separate authorities</text>
 
-  <rect class="artifact-card" x="704" y="568" width="992" height="72" />
-  <text class="card-title" x="728" y="596">Typed source intelligence note</text>
-  <text class="caption" x="728" y="620">Original + English support | findings | question coverage | assessments | caveats | gaps</text>
-  <path class="primary-line" d="M 1536 504 L 1536 566" />
-  <path class="repeat-line" d="M 1696 604 L 1712 604 L 1712 252 L 1698 252" />
-  <text class="caption" x="1056" y="660">After queue: one human-approved supplemental cycle for material upstream leads</text>
+  <rect class="agent-card" x="1392" y="224" width="272" height="112" />
+  <text class="card-title" x="1416" y="252">Build</text>
+  <text class="body" x="1416" y="278">Atomic external claims</text>
+  <text class="caption" x="1416" y="302">Support | conflicts | dependencies</text>
 
-  <text class="card-title" x="704" y="692">Cross-source claim synthesis after all workers complete</text>
+  <rect class="gate-card" x="1688" y="224" width="272" height="112" />
+  <text class="card-title" x="1712" y="252">Challenge</text>
+  <text class="body" x="1712" y="278">Attack false corroboration</text>
+  <text class="caption" x="1712" y="302">Alternatives | gaps | inflation</text>
 
-  <rect class="agent-card" x="704" y="712" width="304" height="112" />
-  <text class="card-title" x="728" y="740">Builder</text>
-  <text class="body" x="728" y="764">Build atomic, testable claims</text>
-  <text class="caption" x="728" y="788">Linked findings | support | conflicts</text>
-  <text class="caption" x="728" y="808">Inference records | reporting dependency</text>
+  <rect class="agent-card" x="1984" y="224" width="328" height="112" />
+  <text class="card-title" x="2008" y="252">Adjudicate</text>
+  <text class="body" x="2008" y="278">Resolve every challenge</text>
+  <text class="caption" x="2008" y="302">Seal accepted, contested, rejected</text>
 
-  <rect class="gate-card" x="1048" y="712" width="304" height="112" />
-  <text class="card-title" x="1072" y="740">Challenger</text>
-  <text class="body" x="1072" y="764">Attack clusters and corroboration</text>
-  <text class="caption" x="1072" y="788">Missed conflicts | circular reporting</text>
-  <text class="caption" x="1072" y="808">Cannot mutate builder artifact</text>
+  <path class="primary-line" d="M 1664 280 L 1686 280" />
+  <path class="primary-line" d="M 1960 280 L 1982 280" />
 
-  <rect class="agent-card" x="1392" y="712" width="304" height="112" />
-  <text class="card-title" x="1416" y="740">Senior adjudicator</text>
-  <text class="body" x="1416" y="764">Resolve every challenge</text>
-  <text class="caption" x="1416" y="788">Preserve uncertainty and alternatives</text>
-  <text class="caption" x="1416" y="808">Seal accepted, contested, rejected</text>
+  <rect class="artifact-card" x="1392" y="360" width="920" height="72" />
+  <text class="card-title" x="1416" y="388">Adjudicated external claim graph</text>
+  <text class="caption" x="1416" y="412">Claim-to-observation lineage | source relationships | confidence | contradictions | gaps</text>
+  <path class="primary-line" d="M 2148 336 L 2148 358" />
 
-  <path class="primary-line" d="M 1008 768 L 1046 768" />
-  <path class="primary-line" d="M 1352 768 L 1390 768" />
+  <rect class="context-card" x="1392" y="464" width="280" height="112" />
+  <text class="card-title" x="1416" y="492">Provider context</text>
+  <text class="body" x="1416" y="518">Pulse | ratings | background</text>
+  <text class="caption" x="1416" y="542">Attributed orientation only</text>
 
-  <rect class="artifact-card" x="704" y="856" width="992" height="72" />
-  <text class="card-title" x="728" y="884">Adjudicated claim ledger</text>
-  <text class="caption" x="728" y="908">Atomic claims | linked findings | evidence-to-judgment records | confidence factors | gaps</text>
-  <path class="primary-line" d="M 1544 824 L 1544 854" />
+  <rect class="context-card" x="1696" y="464" width="280" height="112" />
+  <text class="card-title" x="1720" y="492">Vestas context pack</text>
+  <text class="body" x="1720" y="518">Footprint | assets | dependencies</text>
+  <text class="caption" x="1720" y="542">Governed, valid, classified</text>
 
-  <rect class="det-card" x="704" y="952" width="992" height="72" />
-  <text class="card-title" x="728" y="980">Deterministic envelope: Reason -> Act -> Observe -> Evidence Check</text>
-  <text class="caption" x="728" y="1004">Code owns state, budgets, retries, schemas, evidence references, versions, and event emission.</text>
+  <rect class="context-card" x="2000" y="464" width="312" height="112" />
+  <text class="card-title" x="2024" y="492">Memo standard pack</text>
+  <text class="body" x="2024" y="518">Structure | voice | confidence</text>
+  <text class="caption" x="2024" y="542">Old memos set standard, never facts</text>
 
-  <!-- Approved intake enters through the gap between left and middle. -->
-  <path class="primary-line" d="M 600 1000 L 652 1000 L 652 252 L 702 252" />
-  <text class="caption" x="632" y="1048">Approved evidence snapshot</text>
+  <rect class="agent-card" x="1392" y="608" width="584" height="120" />
+  <text class="card-title" x="1416" y="636">Vestas relevance mapping</text>
+  <text class="body" x="1416" y="662">External claim + governed context -> exposure and consequence pathways</text>
+  <text class="caption" x="1416" y="688">Every implication needs dual lineage; unknown remains an explicit gap.</text>
 
-  <!-- RIGHT: OUTPUT -->
-  <rect class="panel" x="1776" y="128" width="560" height="940" />
-  <rect class="panel-header" x="1776" y="128" width="560" height="72" />
-  <text class="panel-title" x="1800" y="158">3. Verified memo and human approval</text>
-  <text class="panel-subtitle" x="1800" y="181">Canonical JSON, Markdown rendering, claim-level citations</text>
+  <rect class="agent-card" x="2000" y="608" width="312" height="120" />
+  <text class="card-title" x="2024" y="636">Memo writer</text>
+  <text class="body" x="2024" y="662">Evidence + relevance + standard</text>
+  <text class="caption" x="2024" y="688">Canonical JSON first</text>
 
-  <rect class="agent-card" x="1800" y="224" width="512" height="96" />
-  <text class="card-title" x="1824" y="252">Memo writer</text>
-  <text class="body" x="1824" y="276">Fixed assurance shell + adaptive analysis</text>
-  <text class="caption" x="1824" y="300">Uses adjudicated claim IDs; cannot add evidence.</text>
+  <path class="authority-line" d="M 1532 576 L 1532 606" />
+  <path class="authority-line" d="M 1836 576 L 1836 606" />
+  <path class="primary-line" d="M 1684 432 L 1684 606" />
+  <path class="authority-line" d="M 2156 576 L 2156 606" />
+  <path class="primary-line" d="M 1976 668 L 1998 668" />
 
-  <rect class="artifact-card" x="1800" y="344" width="512" height="96" />
-  <text class="card-title" x="1824" y="372">Draft memo vN</text>
-  <text class="body" x="1824" y="396">Canonical JSON + deterministic Markdown</text>
-  <text class="caption" x="1824" y="420">BLUF | judgments | uncertainty | gaps | outlook | sources</text>
+  <rect class="artifact-card" x="1392" y="760" width="920" height="72" />
+  <text class="card-title" x="1416" y="788">Draft memo vN</text>
+  <text class="caption" x="1416" y="812">Claim-level citations | dual-lineage implications | standard version | limitations | gaps</text>
+  <path class="primary-line" d="M 2156 728 L 2156 758" />
 
-  <rect class="agent-card" x="1800" y="464" width="512" height="112" />
-  <text class="card-title" x="1824" y="492">Independent AI verifier</text>
-  <text class="body" x="1824" y="516">Test fidelity, completeness, and analytical emphasis</text>
-  <text class="caption" x="1824" y="540">Unsupported | omitted | buried | distorted | mismatched</text>
-  <text class="caption" x="1824" y="560">Maximum two writer-verifier correction cycles</text>
+  <rect class="det-card" x="1392" y="864" width="584" height="144" />
+  <text class="card-title" x="1416" y="892">Deterministic + independent quality verification</text>
+  <text class="body" x="1416" y="918">Fidelity | citations | independence | calibration | alternatives | relevance</text>
+  <text class="caption" x="1416" y="944">No weighted score: one blocking authority failure blocks publication review.</text>
+  <text class="small" x="1416" y="976">Maximum two revision cycles; unresolved findings escalate.</text>
 
-  <rect class="det-card" x="1800" y="600" width="512" height="96" />
-  <text class="card-title" x="1824" y="628">Deterministic memo checks</text>
-  <text class="body" x="1824" y="652">Schema | sections | citations | versions | checksums</text>
-  <text class="caption" x="1824" y="676">Unresolved verifier findings escalate after cycle two.</text>
+  <rect class="human-card" x="2000" y="864" width="312" height="144" />
+  <text class="card-title" x="2024" y="892">Human publication gate</text>
+  <text class="body" x="2024" y="918">Approve | reject | targeted revision</text>
+  <text class="caption" x="2024" y="944">Only a human can approve.</text>
+  <text class="small" x="2024" y="976">Prior versions remain immutable.</text>
+  <rect class="tested-chip" x="2200" y="984" width="88" height="8" />
 
-  <rect class="human-card" x="1800" y="720" width="512" height="96" />
-  <text class="card-title" x="1824" y="748">Human publication gate</text>
-  <text class="body" x="1824" y="772">Approve, reject, or request a revision.</text>
-  <text class="caption" x="1824" y="796">Generated output remains DRAFT until human approval.</text>
+  <path class="primary-line" d="M 1852 832 L 1852 862" />
+  <path class="primary-line" d="M 1976 936 L 1998 936" />
+  <path class="feedback-line" d="M 2156 864 L 2156 840 L 2336 840 L 2336 668 L 2314 668" />
 
-  <rect class="human-card" x="1800" y="856" width="240" height="96" />
-  <text class="card-title" x="1824" y="884">Approved memo</text>
-  <text class="body" x="1824" y="908">Immutable JSON + Markdown</text>
-  <text class="caption" x="1824" y="932">Human-approved version</text>
-  <rect class="success-chip" x="1824" y="940" width="88" height="8" />
+  <!-- Source notes enter external synthesis. -->
+  <path class="primary-line" d="M 1320 856 L 1352 856 L 1352 280 L 1390 280" />
 
-  <rect class="audit-card" x="2072" y="856" width="240" height="96" />
-  <text class="card-title" x="2096" y="884">Sealed run</text>
-  <text class="body" x="2096" y="908">Final event hash</text>
-  <text class="caption" x="2096" y="932">Manifest + artifact inventory</text>
+  <!-- FOUNDATION -->
+  <rect class="panel" x="64" y="1088" width="2272" height="248" />
+  <rect class="panel-header" x="64" y="1088" width="2272" height="56" />
+  <text class="panel-title" x="88" y="1123">4. Trust and implementation foundation</text>
+  <text class="panel-subtitle" x="480" y="1123">Explicit authorities, typed artifacts, deterministic transitions, and incremental delivery</text>
 
-  <rect class="gate-card" x="1800" y="976" width="512" height="64" />
-  <text class="card-title" x="1824" y="1002">Typed revision routing</text>
-  <text class="caption" x="1824" y="1024">Editorial -> writer | judgment -> synthesis | source -> worker | gap -> search</text>
+  <rect class="quiet-card" x="88" y="1168" width="520" height="144" />
+  <text class="card-title" x="112" y="1196">Three authorities never substitute</text>
+  <text class="body" x="112" y="1222">Evidence</text>
+  <text class="caption" x="208" y="1222">what happened</text>
+  <text class="body" x="112" y="1248">Vestas context</text>
+  <text class="caption" x="208" y="1248">why it matters</text>
+  <text class="body" x="112" y="1274">Memo standard</text>
+  <text class="caption" x="208" y="1274">how it is communicated</text>
 
-  <path class="primary-line" d="M 2056 320 L 2056 342" />
-  <path class="primary-line" d="M 2056 440 L 2056 462" />
-  <path class="primary-line" d="M 2056 576 L 2056 598" />
-  <path class="primary-line" d="M 2056 696 L 2056 718" />
-  <path class="primary-line-no-arrow" d="M 2056 816 L 2056 840 L 1920 840" />
-  <path class="primary-line" d="M 1920 840 L 1920 854" />
-  <path class="primary-line" d="M 2056 840 L 2192 840 L 2192 854" />
-  <text class="caption" x="1968" y="836">approved</text>
+  <rect class="det-card" x="632" y="1168" width="520" height="144" />
+  <text class="card-title" x="656" y="1196">Code owns control</text>
+  <text class="body" x="656" y="1222">State | permissions | budgets | retries | validation</text>
+  <text class="caption" x="656" y="1248">Model output proposes artifacts; it never advances state.</text>
+  <text class="caption" x="656" y="1274">Raw inputs and every accepted claim remain traceable.</text>
 
-  <!-- Verifier and human revision routes stay in the outer gutter. -->
-  <path class="feedback-line" d="M 2312 520 L 2320 520 L 2320 272 L 2314 272" />
-  <text class="caption" x="2152" y="452">revise, max 2</text>
-  <path class="feedback-line" d="M 2312 768 L 2336 768 L 2336 1008 L 2314 1008" />
-  <path class="feedback-line" d="M 1800 1008 L 1744 1008 L 1744 884 L 1698 884" />
+  <rect class="gate-card" x="1176" y="1168" width="520" height="144" />
+  <text class="card-title" x="1200" y="1196">Non-negotiable quality blockers</text>
+  <text class="body" x="1200" y="1222">Unsupported claim | bad citation | hidden dependency</text>
+  <text class="caption" x="1200" y="1248">No context-only corroboration or historical-fact leakage.</text>
+  <text class="caption" x="1200" y="1274">No confidence inflation or suppressed contradiction.</text>
 
-  <text class="caption" x="1800" y="1056">V2: governed Vestas context tool -> footprint match + cited risk narrative</text>
-
-  <!-- Analysis handoff stays in the gutter between middle and right. -->
-  <path class="primary-line" d="M 1696 892 L 1736 892 L 1736 272 L 1798 272" />
-
-  <!-- PROVIDER + AUDIT FOUNDATION -->
-  <rect class="panel" x="64" y="1112" width="2272" height="224" />
-  <rect class="panel-header" x="64" y="1112" width="2272" height="56" />
-  <text class="panel-title" x="88" y="1146">4. Provider and audit foundation</text>
-  <text class="panel-subtitle" x="400" y="1146">Every call, decision, transition, artifact, retry, failure, and approval becomes a typed event</text>
-
-  <rect class="tool-card" x="88" y="1192" width="512" height="120" />
-  <text class="card-title" x="112" y="1220">Seerist API - primary collection</text>
-  <text class="body" x="112" y="1246">Discovery + one bounded gap-fill pass</text>
-  <text class="caption" x="112" y="1270">Classify each item; resolve lead cluster IDs or URLs.</text>
-  <text class="caption" x="112" y="1292">Context informs analysis; it does not corroborate claims.</text>
-
-  <rect class="tool-card" x="616" y="1192" width="512" height="120" />
-  <text class="card-title" x="640" y="1220">Firecrawl API - OSINT fallback</text>
-  <text class="body" x="640" y="1246">Gap-fill when fewer than four evidence candidates remain</text>
-  <text class="caption" x="640" y="1270">Human approves expansion and candidate evidence.</text>
-  <text class="caption" x="640" y="1292">Same normalization, provenance, and worker contracts.</text>
-
-  <rect class="audit-card" x="1144" y="1192" width="512" height="120" />
-  <text class="card-title" x="1168" y="1220">Single append-only event writer</text>
-  <text class="body" x="1168" y="1246">Monotonic sequence + previous event hash</text>
-  <text class="caption" x="1168" y="1270">One compact JSON event per stateful operation.</text>
-  <text class="caption" x="1168" y="1292">Complete, failed, cancelled, resumed, and restarted runs.</text>
-
-  <rect class="audit-card" x="1672" y="1192" width="640" height="120" />
-  <text class="card-title" x="1696" y="1220">Controlled artifact store + sealed manifest</text>
-  <text class="body" x="1696" y="1246">Sources | prompts | model outputs | notes | ledgers | memo versions</text>
-  <text class="caption" x="1696" y="1270">Events use stable references and SHA-256 checksums.</text>
-  <text class="caption" x="1696" y="1292">Manifest inventories artifacts and seals the final event hash.</text>
-
-  <!-- A single vertical bus shows that the foundation supports all stages. -->
-  <path class="tool-line" d="M 1200 1068 L 1200 1110" />
+  <rect class="det-card" x="1720" y="1168" width="592" height="144" />
+  <text class="card-title" x="1744" y="1196">Current implementation slice</text>
+  <text class="body" x="1744" y="1222">One saved provider item -> classify -> route -> ledger</text>
+  <text class="caption" x="1744" y="1248">Next: one approved source through Find -> Sweep -> Judge -> Write.</text>
+  <text class="caption" x="1744" y="1274">Scale only after each behavior works and is measured.</text>
 </svg>
