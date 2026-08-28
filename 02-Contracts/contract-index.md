@@ -2,12 +2,15 @@
 
 Use this file as the index of active contracts.
 
+## Active contracts
+
+1. [Provider item role and provenance](provider-item-role-and-provenance.md)
+
 ## Planned contracts
 
-1. Provider item role and provenance contract (next slice; promote only after one-item behavior is validated).
-2. Intake manifest contract.
-3. Routing decision contract.
-4. Source ledger entry contract.
-5. Batch summary contract.
+1. Intake manifest contract.
+2. Routing decision contract.
+3. Source ledger entry contract.
+4. Batch summary contract.
 
 Add one file per contract in this folder and link it here.

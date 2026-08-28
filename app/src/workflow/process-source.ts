@@ -1,31 +1,38 @@
-import type { LedgerEntry, SourceRecord } from "../core/types.js";
-import { validateSource } from "../modules/intake/intake.js";
-import { decideRoute } from "../modules/routing/routing.js";
-import { createLedgerEntry } from "../modules/ledger/ledger.js";
+import type { LedgerEntry, ProviderItem, RouteDecision } from "../core/types.js";
 import { err, ok, type Result } from "../core/result.js";
+import { validateSource, type IntakeError } from "../modules/intake/intake.js";
+import { createLedgerEntry } from "../modules/ledger/ledger.js";
+import { decideRoute } from "../modules/routing/routing.js";
 
-export type ProcessError = "INTAKE_VALIDATION_FAILED";
+export type ProcessError = {
+  code: "INTAKE_VALIDATION_FAILED";
+  cause: IntakeError;
+};
 
 export type ProcessOutput = {
-  source: SourceRecord;
-  decision: ReturnType<typeof decideRoute>;
+  item: ProviderItem;
+  decision: RouteDecision;
   ledgerEntry: LedgerEntry;
 };
 
 export const processSource = (
   runId: string,
-  raw: Partial<SourceRecord>
+  occurredAt: string,
+  raw: unknown
 ): Result<ProcessOutput, ProcessError> => {
   const sourceResult = validateSource(raw);
   if (!sourceResult.ok) {
-    return err("INTAKE_VALIDATION_FAILED");
+    return err({
+      code: "INTAKE_VALIDATION_FAILED",
+      cause: sourceResult.error
+    });
   }
 
   const decision = decideRoute(sourceResult.value);
-  const ledgerEntry = createLedgerEntry(runId, decision);
+  const ledgerEntry = createLedgerEntry(runId, occurredAt, sourceResult.value);
 
   return ok({
-    source: sourceResult.value,
+    item: sourceResult.value,
     decision,
     ledgerEntry
   });

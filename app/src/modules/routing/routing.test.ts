@@ -1,26 +1,42 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { SourceRecord } from "../../core/types.js";
+import type { CollectionLead, EvidenceCandidate } from "../../core/types.js";
 import { decideRoute } from "./routing.js";
 
-const source = (overrides: Partial<SourceRecord> = {}): SourceRecord => ({
-  sourceId: "SRC-TEST-001",
-  title: "Routine source",
-  body: "Collected material awaiting review.",
-  confidentiality: "internal",
-  ...overrides
+const base = {
+  provider: "seerist" as const,
+  endpoint: "/v1/wod",
+  retrievedAt: "2026-08-28T09:55:00.000Z",
+  rawArtifactRef: "runs/probe-001/raw-response.json",
+  sourceLinks: [],
+  referenceCount: 0,
+  hasSourceMetadata: false
+};
+
+test("routes evidence candidates to human review", () => {
+  const candidate: EvidenceCandidate = {
+    ...base,
+    providerItemId: "analysis-001",
+    sourceType: "analysis",
+    role: "evidence_candidate",
+    contentCompleteness: "captured_content"
+  };
+  const decision = decideRoute(candidate);
+
+  assert.equal(decision.destination, "human_review");
+  assert.equal(decision.approvalStatus, "pending_human_review");
 });
 
-test("routes restricted content to controlled handling", () => {
-  const decision = decideRoute(source({ confidentiality: "restricted" }));
+test("routes collection leads to source retrieval", () => {
+  const lead: CollectionLead = {
+    ...base,
+    providerItemId: "news-001",
+    sourceType: "news",
+    role: "collection_lead",
+    contentCompleteness: "summary_only"
+  };
+  const decision = decideRoute(lead);
 
-  assert.equal(decision.destination, "archive");
-  assert.equal(decision.ruleId, "RULE-RESTRICTED-001");
-});
-
-test("does not approve content based on delivery-like wording", () => {
-  const decision = decideRoute(source({ title: "Final Report Executive Summary" }));
-
-  assert.equal(decision.destination, "analysis");
-  assert.equal(decision.ruleId, "RULE-HUMAN-REVIEW-002");
+  assert.equal(decision.destination, "source_retrieval");
+  assert.equal(decision.approvalStatus, "not_applicable");
 });

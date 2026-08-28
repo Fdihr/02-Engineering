@@ -1,7 +1,7 @@
 # CTI Engineering Handoff
 
 Date: 2026-08-28
-Status: Seerist reality-check complete; one-item evidence intake is next
+Status: Seerist reality-check and one-item evidence intake complete; next slice not yet accepted
 Workspace root: `CTI/`
 Source domain: Agentic App Engineering
 Authority class: Current implementation direction and next-action handoff
@@ -46,11 +46,12 @@ Do not implement the complete workflow next.
 Build small scripts and grow the architecture only when working behavior requires it:
 
 1. Seerist reality-check probe (complete).
-2. One-item evidence intake and provider-role classification (next).
-3. One-source analysis script.
-4. Sequential multi-source runner.
-5. Cross-source claim synthesis.
-6. Memo writer and verifier.
+2. One-item evidence intake and provider-role classification (complete).
+3. Accept the next bounded slice before implementation.
+4. One-source analysis only after retrieval and human-approval prerequisites work.
+5. Sequential multi-source runner.
+6. Cross-source claim synthesis.
+7. Memo writer and verifier.
 
 Avoid UI work, orchestration frameworks, databases, plugin systems, Firecrawl integration, and Vestas-context integration until the earlier scripts work.
 
@@ -70,9 +71,9 @@ Key findings:
 
 Use `02-Engineering/03-Workflow/seerist-probe-findings.md` as the observed-fact record.
 
-## Immediate next slice: one-item evidence intake
+## Completed slice: one-item evidence intake
 
-Extend the existing deterministic `validate -> route -> ledger` flow with the smallest script that can:
+The deterministic `validate -> classify -> route -> ledger` script now:
 
 1. Accept one manually selected item from a saved Seerist probe response.
 2. Validate only fields observed for that endpoint and source type.
@@ -81,7 +82,15 @@ Extend the existing deterministic `validate -> route -> ledger` flow with the sm
 5. Route every non-restricted item to human review or retrieval; no narrative text may trigger approval.
 6. Append the deterministic decision to the ledger.
 
-Do not begin source analysis until this role boundary works for one item and has focused tests.
+The command is:
+
+```powershell
+npm run intake:seerist -- <raw-response.json> <provider-item-id> <retrieved-at-ISO-8601> [run-id]
+```
+
+Eight focused tests cover all roles, invalid input, observed numeric IDs, country context, explicit ledger time, and the no-automatic-approval invariant. One saved analyst-report feature completed as `evidence_candidate -> human_review -> pending_human_review`.
+
+The active boundary is `02-Engineering/02-Contracts/provider-item-role-and-provenance.md`. Do not begin source analysis until the required retrieval and explicit human-approval slices are accepted and implemented.
 
 ## Event-log boundary
 
@@ -106,12 +115,14 @@ Available commands:
 
 ```powershell
 npm run dev
+npm run intake:seerist -- <raw-response.json> <provider-item-id> <retrieved-at-ISO-8601> [run-id]
+npm test
 npm run typecheck
 npm run build
 npm run start
 ```
 
-The current modules are starter examples, not proof that the memo workflow is implemented. The unsafe content-triggered automatic approval branch has been removed, and focused routing tests now enforce the human-review boundary. Preserve only patterns that help the current one-item slice.
+The modules implement the bounded one-item intake baseline, not the full memo workflow. The command selects one saved `/v1/wod` feature, classifies it structurally, persists canonical narrative-free JSON plus a read-only Markdown review, appends a minimal event, and cannot produce an approved state.
 
 ## Current design artifacts
 
@@ -143,9 +154,9 @@ These are design hypotheses. Keep what testing supports; simplify or revise what
 
 ## Remaining open questions
 
-1. Which minimum fields should form the provider item role and provenance contract?
-2. Which source types can become evidence candidates without external source-page retrieval?
-3. How should missing authorship, ambiguous timestamps, and provider references affect eligibility?
+1. Which additional source types can become evidence candidates without external source-page retrieval?
+2. How should missing authorship, ambiguous timestamps, and provider references affect eligibility?
+3. Should the next slice prove one collection-lead retrieval or the explicit human-approval transition first?
 4. Do bounded pages remain stable across source types and repeated runs?
 5. What provider restrictions govern retention of raw responses and test fixtures?
 
@@ -153,7 +164,7 @@ These are design hypotheses. Keep what testing supports; simplify or revise what
 
 - Do not build the final application architecture in one pass.
 - Do not implement the chat UI.
-- Do not implement Firecrawl in the one-item classification slice.
+- Do not implement retrieval until its bounded slice is accepted.
 - Do not implement the full Find/Sweep/Judge/Write chain yet.
 - Do not build the Vestas context database yet.
 - Do not treat TypeScript types in the workflow document as settled API contracts.
@@ -166,12 +177,14 @@ At this handoff:
 - The Seerist probe completed 22 successful read-only calls across 12 endpoint paths.
 - Findings and the capability board record the observed provider behavior.
 - Routing no longer auto-approves content based on narrative wording.
-- Focused routing tests, TypeScript typecheck, and build pass.
+- Eight focused intake and routing tests pass.
+- One saved analyst-report item reaches human review with approval pending.
+- TypeScript typecheck and build pass.
 - Raw provider artifacts remain only in the ignored local `app/runs/` folder.
 
 ## Suggested opening prompt
 
-> Read `00-Second Brain/agent.md`, the engineering source route, `HANDOFF.md`, and `02-Engineering/03-Workflow/seerist-probe-findings.md`. Implement the one-item evidence-intake slice defined in `02-Engineering/03-Workflow/first-slice.md`. Keep it deterministic and single-item. Classify one observed Seerist record as evidence candidate, collection lead, or context, preserve its raw-artifact lineage, and never auto-approve it. Add focused tests, then run test, typecheck, and build.
+> Read `00-Second Brain/agent.md`, the engineering source route, `HANDOFF.md`, and the completed baseline in `02-Engineering/03-Workflow/first-slice.md`. Propose the smallest next slice needed before source assurance, choosing between one collection-lead retrieval and one explicit human-approval transition. Do not implement until the slice and its definition of done are accepted.
 
 ## Human input required
 

@@ -1,8 +1,8 @@
 # Current Workflow Slice
 
-Status: Seerist reality-check probe completed 2026-08-28. Current target: one-item evidence intake.
+Status: One-item evidence intake completed and validated 2026-08-28. No subsequent slice is yet accepted.
 
-The canonical target architecture in `memo-workflow.md` is not a fixed implementation contract. This slice remains the implementation authority.
+The canonical target architecture in `memo-workflow.md` is not a fixed implementation contract. This completed slice remains the implementation baseline until a subsequent slice is accepted.
 
 Implementation structure follows `../01-Architecture/script-architecture.md`.
 
@@ -21,11 +21,21 @@ The probe established three provider roles:
 2. Collection leads: news/social summaries, cluster records, hotspots, and Scribe events that require source resolution or retrieval.
 3. Context: country background, risk ratings, Pulse, and future-looking provider assessments that may inform analysis but do not independently corroborate claims.
 
-## Current slice: one-item evidence intake
+## Completed slice: one-item evidence intake
 
 One manually selected Seerist item -> validate observed fields -> classify provider role -> deterministic route -> ledger entry.
 
-This slice must prove the boundary between collection leads, context, and potential evidence before source analysis begins.
+The implementation proves the boundary between collection leads, context, and potential evidence before source analysis begins.
+
+Run the executable path from `app/`:
+
+```powershell
+npm run intake:seerist -- <raw-response.json> <provider-item-id> <retrieved-at-ISO-8601> [run-id]
+```
+
+The command selects exactly one `/v1/wod` feature by provider ID, processes it, writes canonical `runs/<runId>/intake-result.json`, writes derived read-only `runs/<runId>/intake-summary.md`, appends `runs/intake-events.jsonl`, and prints a narrative-free status summary.
+
+Open `intake-summary.md` in VS Code and use `Ctrl+Shift+V` for the rendered review. The Markdown report has no workflow controls and cannot advance state.
 
 ## KISS boundary
 
@@ -42,7 +52,7 @@ Do not add:
 7. Automatic evidence approval.
 8. Hash chaining or sealed manifests.
 
-## Definition of done
+## Completion evidence
 
 1. One manually selected item from a saved probe response reaches the existing `validate -> route -> ledger` flow.
 2. Classification uses endpoint, source type, provenance fields, and observed content depth rather than narrative wording.
@@ -62,12 +72,14 @@ Do not add:
 4. Treat provider taxonomies and source discriminators as open values.
 5. Record local retrieval time when provider freshness is absent or ambiguous.
 
-## What this slice should teach us
+## What this slice established
 
-1. The smallest stable envelope shared by heterogeneous provider responses.
-2. Which deterministic facts are sufficient to assign a workflow role.
-3. Which records require retrieval before source analysis.
-4. Which fields belong in an active cross-module intake contract.
+1. The stable selected-item envelope is provider, endpoint, local retrieval time, raw artifact reference, and an unknown item object.
+2. Endpoint, open source discriminator, and structural content depth are sufficient for this first bounded role decision.
+3. Analyst records with captured content can enter human review; summary-only news remains a collection lead.
+4. Country-background material remains context even when returned through the aggregate `/v1/wod` endpoint.
+5. Observed provider IDs may be numeric and are normalized to strings.
+6. The active cross-module baseline is `../02-Contracts/provider-item-role-and-provenance.md`.
 
 ## Legacy PoC input rule
 

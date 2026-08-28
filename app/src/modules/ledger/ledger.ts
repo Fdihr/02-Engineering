@@ -1,10 +1,27 @@
-import type { LedgerEntry, RouteDecision } from "../../core/types.js";
+import type { LedgerEntry, ProviderItem } from "../../core/types.js";
 
-export const createLedgerEntry = (runId: string, decision: RouteDecision): LedgerEntry => ({
+export const createLedgerEntry = (
+  runId: string,
+  occurredAt: string,
+  item: ProviderItem
+): LedgerEntry => ({
   runId,
-  sourceId: decision.sourceId,
-  destination: decision.destination,
-  ruleId: decision.ruleId,
-  reason: decision.reason,
-  timestamp: new Date().toISOString()
+  occurredAt,
+  eventType: "intake.item.routed",
+  status: "completed",
+  artifactRef: item.rawArtifactRef
+});
+
+export const createFailedLedgerEntry = (
+  runId: string,
+  occurredAt: string,
+  artifactRef: string | undefined,
+  error: string
+): LedgerEntry => ({
+  runId,
+  occurredAt,
+  eventType: "intake.item.failed",
+  status: "failed",
+  artifactRef,
+  error
 });

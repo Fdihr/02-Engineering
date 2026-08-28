@@ -2,7 +2,7 @@
 
 ## Sources of Truth
 
-- Treat this as a workflow-first TypeScript prototype. Start with the current target in [03-Workflow/first-slice.md](03-Workflow/first-slice.md); the canonical target architecture in [03-Workflow/memo-workflow.md](03-Workflow/memo-workflow.md) is not the current implementation contract.
+- Treat this as a workflow-first TypeScript prototype. Start with the implemented baseline in [03-Workflow/first-slice.md](03-Workflow/first-slice.md); the canonical target architecture in [03-Workflow/memo-workflow.md](03-Workflow/memo-workflow.md) is not the current implementation contract.
 - Follow the thin dependency and side-effect boundaries in [01-Architecture/script-architecture.md](01-Architecture/script-architecture.md).
 - Keep changes within the KISS constraints and non-goals in [03-Workflow/kiss-reset-plan.md](03-Workflow/kiss-reset-plan.md) and [03-Workflow/non-goals-from-poc.md](03-Workflow/non-goals-from-poc.md).
 - Treat `00-PoC-Reference/` as reference material only. Before translating legacy behavior into `app/src/`, follow [03-Workflow/poc-to-workflow-intake.md](03-Workflow/poc-to-workflow-intake.md) and require an accepted note based on the [mapping template](00-PoC-Reference/03-Mapping/mapping-template.md).

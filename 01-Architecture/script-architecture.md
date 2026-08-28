@@ -64,7 +64,7 @@ The command layer owns:
 
 Domain functions receive these values as inputs and return data describing what should be recorded. They do not hide writes or wall-clock reads.
 
-The existing ledger helper currently reads the wall clock directly. The one-item intake slice should move that timestamp to an explicit input when it touches the helper.
+The one-item intake workflow supplies ledger timestamps explicitly. The ledger helper does not read the wall clock.
 
 ## Current one-item flow
 

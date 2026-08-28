@@ -1,8 +1,15 @@
-export const createLedgerEntry = (runId, decision) => ({
+export const createLedgerEntry = (runId, occurredAt, item) => ({
     runId,
-    sourceId: decision.sourceId,
-    destination: decision.destination,
-    ruleId: decision.ruleId,
-    reason: decision.reason,
-    timestamp: new Date().toISOString()
+    occurredAt,
+    eventType: "intake.item.routed",
+    status: "completed",
+    artifactRef: item.rawArtifactRef
+});
+export const createFailedLedgerEntry = (runId, occurredAt, artifactRef, error) => ({
+    runId,
+    occurredAt,
+    eventType: "intake.item.failed",
+    status: "failed",
+    artifactRef,
+    error
 });
