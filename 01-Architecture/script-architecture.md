@@ -13,13 +13,19 @@ Scalability comes from explicit data and replaceable functions, not from framewo
 ```mermaid
 flowchart LR
     Command[Thin command] --> Workflow[Workflow function]
+    Question[Human question approval] --> Operation[Validate provider operation]
+    Operation --> Reader[API or artifact reader]
     Reader[API or artifact reader] --> Intake[Provider intake]
     Intake --> Workflow
     Workflow --> Validate[Validate]
     Workflow --> Classify[Classify role]
     Workflow --> Route[Route]
     Workflow --> Ledger[Create ledger event]
+    Review[Human review command] --> Approval[Validate evidence admission]
+    Approval --> Snapshot[Decision or approved snapshot]
     Command --> Persist[Persist artifacts and events]
+    Review --> Persist
+    Question --> Persist
 ```
 
 Dependencies point inward:
@@ -69,7 +75,12 @@ The one-item intake workflow supplies ledger timestamps explicitly. The ledger h
 ## Current one-item flow
 
 ```text
-saved raw artifact + selected item
+approved research question + bound provider operation
+  -> validate approval, chronology, question ID, run ID, and endpoint allowlist
+  -> perform one read-only Seerist request or one bounded multi-query discovery plan
+  -> preserve response and question lineage
+  -> for discovery, deduplicate and deterministically rank candidates
+  -> saved raw artifact + selected item
   -> validate observed envelope
   -> extract provider-neutral facts
   -> classify as evidence candidate | collection lead | context
@@ -78,7 +89,23 @@ saved raw artifact + selected item
   -> command persists output
 ```
 
-No route in this flow may produce `approved`. Approval requires a later explicit human action and auditable transition.
+Provider credentials and HTTP remain inaccessible until the research-intent gate succeeds. No intake route may produce evidence status `approved`; evidence approval requires a later explicit human action and auditable transition.
+
+Bounded discovery is sequential, capped by explicit query, page, call, and result limits, and preserves each raw page. It is not a general batch runner and does not automatically advance any candidate into intake.
+
+## Current evidence-admission flow
+
+```text
+persisted intake result + explicit reviewer decision
+  -> reconstruct and validate eligible evidence candidate
+  -> validate reviewer, timestamp, reason, and item identity
+  -> hash referenced raw provider artifact
+  -> record approved or rejected decision
+  -> create non-overwritable approved snapshot only for approval
+  -> append human-attributed event
+```
+
+The Markdown decision receipt is a derived read-only view. It has no controls and no state authority.
 
 ## Testing layers
 

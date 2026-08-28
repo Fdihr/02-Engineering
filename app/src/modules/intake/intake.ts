@@ -1,5 +1,9 @@
 import type { ContentCompleteness, ProviderItem } from "../../core/types.js";
 import { err, ok, type Result } from "../../core/result.js";
+import {
+  validateApprovedResearchQuestion,
+  type ResearchQuestionError
+} from "../research/research-question.js";
 
 export type IntakeError =
   | "INVALID_SELECTION"
@@ -9,7 +13,8 @@ export type IntakeError =
   | "MISSING_RAW_ARTIFACT_REF"
   | "INVALID_ITEM"
   | "MISSING_PROVIDER_ITEM_ID"
-  | "MISSING_SOURCE_TYPE";
+  | "MISSING_SOURCE_TYPE"
+  | ResearchQuestionError;
 
 export type ArtifactSelectionError =
   | "INVALID_FEATURE_COLLECTION"
@@ -131,6 +136,14 @@ export const validateSource = (input: unknown): Result<ProviderItem, IntakeError
     return err("MISSING_RAW_ARTIFACT_REF");
   }
 
+  const researchQuestionResult = validateApprovedResearchQuestion(
+    input.researchQuestion,
+    retrievedAt
+  );
+  if (!researchQuestionResult.ok) {
+    return researchQuestionResult;
+  }
+
   if (!isRecord(input.item)) {
     return err("INVALID_ITEM");
   }
@@ -156,7 +169,8 @@ export const validateSource = (input: unknown): Result<ProviderItem, IntakeError
       sourceValue?.startsWith("http") ? sourceValue : undefined
     ),
     referenceCount: references.length,
-    hasSourceMetadata: isRecord(item.source_metadata)
+    hasSourceMetadata: isRecord(item.source_metadata),
+    researchQuestion: researchQuestionResult.value
   };
 
   if (isContextEndpoint(endpoint) || sourceType === "country-background") {

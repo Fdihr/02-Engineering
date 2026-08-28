@@ -14,6 +14,23 @@ const item: EvidenceCandidate = {
   sourceLinks: ["https://example.invalid/source?a=1&b=2"],
   referenceCount: 2,
   hasSourceMetadata: true,
+  researchQuestion: {
+    id: "rq-001",
+    runId: "research-run-001",
+    scopeVersion: 1,
+    question: "What developments could affect operational continuity?",
+    rationale: "Bound synthetic reporting test.",
+    geographies: ["Pakistan"],
+    timeWindow: {
+      from: "2026-08-01T00:00:00.000Z",
+      to: "2026-08-28T23:59:59.999Z"
+    },
+    status: "approved",
+    approvedBy: "analyst-001",
+    approvedAt: "2026-08-27T10:00:00.000Z",
+    artifactRef: "runs/research-run-001/approved-research-question.json",
+    artifactSha256: "a".repeat(64)
+  },
   role: "evidence_candidate",
   contentCompleteness: "captured_content"
 };
@@ -46,9 +63,10 @@ test("renders a read-only intake summary from canonical output", () => {
   assert.match(summary, /human_review/);
   assert.match(summary, /pending_human_review/);
   assert.match(summary, /captured_content/);
+  assert.match(summary, /What developments could affect operational continuity\?/);
   assert.match(summary, /runs\/probe-001\/raw-response\.json/);
   assert.match(summary, /2026-08-28T09:00:00\.000Z/);
-  assert.doesNotMatch(summary, /<button|approve|reject/i);
+  assert.doesNotMatch(summary, /<(?:button|form|input)|\]\([^)]*(?:approve|reject)/i);
   assert.equal(summary.endsWith("\n"), true);
 });
 

@@ -6,7 +6,7 @@ Implementation: `../app/src/core/types.ts`, `../app/src/modules/intake/intake.ts
 
 ## Scope
 
-This contract covers one manually selected Seerist item. The executable command currently selects one feature by provider ID from a saved `/v1/wod` GeoJSON response. It does not define batch ingestion, source retrieval, human approval, or source assurance.
+This contract covers one manually selected Seerist item. The executable command currently selects one feature by provider ID from a saved `/v1/wod` GeoJSON response and requires the approved research-question artifact that existed before collection. It does not define batch ingestion, source retrieval, or source assurance. The upstream relevance boundary is defined in [Research Question and Provider Operation](research-question-and-provider-operation.md); the subsequent human gate is defined in [Evidence Admission](evidence-admission.md).
 
 ## Selected item input
 
@@ -18,6 +18,7 @@ The workflow receives:
 | `endpoint` | Must be an explicitly supported observed endpoint. |
 | `retrievedAt` | Must be a valid timestamp supplied by the side-effect boundary. |
 | `rawArtifactRef` | Must be a non-empty reference to the preserved provider response. |
+| `researchQuestion` | Must contain approved, pre-retrieval question lineage including artifact reference and SHA-256. |
 | `item` | Must be a JSON object or GeoJSON feature with a `properties` object. |
 
 The intake module accepts string or finite numeric provider IDs and normalizes them to strings. Source discriminators remain open strings.
@@ -31,6 +32,7 @@ Every accepted item records:
 - Source discriminator when present and not itself a URL.
 - Provider timestamp when present.
 - Local retrieval time and raw artifact reference.
+- Approved research-question content, approval metadata, artifact reference, and checksum.
 - Available source URLs, provider-reference count, and source-metadata presence.
 - Content completeness and provider role.
 
@@ -67,16 +69,14 @@ An evidence candidate requires a provider item ID. Classification uses endpoint,
 | `collection_lead` | `source_retrieval` | `not_applicable` |
 | `context` | `context_only` | `not_applicable` |
 
-No output type contains an `approved` destination or status. Approval requires a later explicit human transition.
+No intake output type contains an `approved` destination or status. Approval requires the separate explicit human transition defined by the evidence-admission contract.
 
 ## Expected failures
 
-Validation and selection return discriminated `Result<T, E>` values with literal errors. Current failures cover invalid selections, unsupported providers or endpoints, invalid retrieval time, missing raw lineage, invalid items, missing required provider IDs or source types, invalid feature collections, missing item IDs, missing selected items, and duplicate IDs.
+Validation and selection return discriminated `Result<T, E>` values with literal errors. Current failures cover invalid selections, unsupported providers or endpoints, invalid retrieval time, missing or late research-question approval, missing raw lineage, invalid items, missing required provider IDs or source types, invalid feature collections, missing item IDs, missing selected items, and duplicate IDs.
 
 ## Proven boundary
 
-Synthetic tests cover all three roles, invalid input, numeric IDs, aggregate country context, explicit ledger time, and the no-automatic-approval invariant. A saved analyst-report feature completed the executable path as:
-
-`evidence_candidate -> human_review -> pending_human_review`
+Synthetic tests cover all three roles, invalid input, numeric IDs, aggregate country context, explicit ledger time, approved-question chronology, and the no-automatic-approval invariant. The earlier saved analyst-report smoke run predates the research-question contract and is non-admissible; it must not be retrofitted with invented intent.
 
 Additional provider source types or response shapes require new observed evidence and focused tests before this contract expands.

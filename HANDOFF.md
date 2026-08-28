@@ -1,7 +1,7 @@
 # CTI Engineering Handoff
 
 Date: 2026-08-28
-Status: Seerist reality-check and one-item evidence intake complete; next slice not yet accepted
+Status: Approved research intent, bounded Seerist collection, one-item intake, and explicit evidence admission complete
 Workspace root: `CTI/`
 Source domain: Agentic App Engineering
 Authority class: Current implementation direction and next-action handoff
@@ -29,13 +29,14 @@ Build a modular TypeScript application that turns Seerist evidence into a trustw
 
 The intended shape is:
 
-1. Collect evidence from Seerist.
-2. Review and approve evidence.
-3. Analyze each source.
-4. Synthesize claims across sources.
-5. Write and verify a memo.
-6. Require human approval before publication.
-7. Maintain an event log throughout the run.
+1. Define and approve research questions.
+2. Collect question-bound material from Seerist.
+3. Review and approve evidence.
+4. Analyze each source.
+5. Synthesize claims across sources.
+6. Write and verify a memo.
+7. Require human approval before publication.
+8. Maintain an event log throughout the run.
 
 This shape is provisional. Real provider behavior and working scripts should determine the final contracts.
 
@@ -46,12 +47,14 @@ Do not implement the complete workflow next.
 Build small scripts and grow the architecture only when working behavior requires it:
 
 1. Seerist reality-check probe (complete).
-2. One-item evidence intake and provider-role classification (complete).
-3. Accept the next bounded slice before implementation.
-4. One-source analysis only after retrieval and human-approval prerequisites work.
-5. Sequential multi-source runner.
-6. Cross-source claim synthesis.
-7. Memo writer and verifier.
+2. Explicit research-question approval and bounded Seerist collection (complete).
+3. One-item evidence intake and provider-role classification (complete).
+4. Explicit human evidence admission (complete).
+5. Accept the next bounded slice before implementation.
+6. One-source analysis after a real human-approved snapshot exists.
+7. Sequential multi-source runner.
+8. Cross-source claim synthesis.
+9. Memo writer and verifier.
 
 Avoid UI work, orchestration frameworks, databases, plugin systems, Firecrawl integration, and Vestas-context integration until the earlier scripts work.
 
@@ -85,12 +88,33 @@ The deterministic `validate -> classify -> route -> ledger` script now:
 The command is:
 
 ```powershell
-npm run intake:seerist -- <raw-response.json> <provider-item-id> <retrieved-at-ISO-8601> [run-id]
+npm run intake:seerist -- <raw-response.json> <provider-item-id> <retrieved-at-ISO-8601> <approved-research-question.json> [run-id]
 ```
 
 Eight focused tests cover all roles, invalid input, observed numeric IDs, country context, explicit ledger time, and the no-automatic-approval invariant. One saved analyst-report feature completed as `evidence_candidate -> human_review -> pending_human_review`.
 
-The active boundary is `02-Engineering/02-Contracts/provider-item-role-and-provenance.md`. Do not begin source analysis until the required retrieval and explicit human-approval slices are accepted and implemented.
+The active intake boundary is `02-Engineering/02-Contracts/provider-item-role-and-provenance.md`.
+
+## Completed slice: approved research intent and bounded collection
+
+Research questions now cross an explicit human approval boundary before production provider access. The canonical artifact is immutable, carries reviewer and approval time, and is externally hashed when a consumer binds it. One Seerist operation must match the approved question ID and run ID and may target only the proven `GET /v1/wod` endpoint.
+
+```powershell
+npm run approve:question -- <research-question-proposal.json> <reviewer-id>
+npm run collect:seerist -- <provider-operation.json> <approved-research-question.json>
+```
+
+Validation occurs before credential lookup or `fetch`. The active boundary is `02-Engineering/02-Contracts/research-question-and-provider-operation.md`. Earlier smoke item `1030013` has no approved pre-collection question lineage and remains non-admissible.
+
+## Completed slice: explicit evidence admission
+
+The new human-review command accepts one persisted intake result, `approve` or `reject`, reviewer ID, reason, and an optional decision ID. It reconstructs and validates the intake artifact, hashes the referenced raw response, writes a canonical decision and read-only Markdown receipt, and appends a human-attributed event. Approval alone creates a non-overwritable approved evidence snapshot.
+
+```powershell
+npm run review:evidence -- <intake-result.json> <approve|reject> <reviewer-id> <reason> [decision-id]
+```
+
+The active boundary is `02-Engineering/02-Contracts/evidence-admission.md`. Validation used synthetic temporary artifacts; no real Seerist item was approved or rejected.
 
 ## Event-log boundary
 
@@ -115,14 +139,18 @@ Available commands:
 
 ```powershell
 npm run dev
-npm run intake:seerist -- <raw-response.json> <provider-item-id> <retrieved-at-ISO-8601> [run-id]
+npm run approve:question -- <research-question-proposal.json> <reviewer-id>
+npm run collect:seerist -- <provider-operation.json> <approved-research-question.json>
+npm run discover:seerist -- <discovery-plan.json> <approved-research-question.json>
+npm run intake:seerist -- <raw-response.json> <provider-item-id> <retrieved-at-ISO-8601> <approved-research-question.json> [run-id]
+npm run review:evidence -- <intake-result.json> <approve|reject> <reviewer-id> <reason> [decision-id]
 npm test
 npm run typecheck
 npm run build
 npm run start
 ```
 
-The modules implement the bounded one-item intake baseline, not the full memo workflow. The command selects one saved `/v1/wod` feature, classifies it structurally, persists canonical narrative-free JSON plus a read-only Markdown review, appends a minimal event, and cannot produce an approved state.
+The modules implement explicit research-question approval, bounded question-linked collection and discovery, one-item intake, and explicit human evidence admission, not the full memo workflow. Discovery may run multiple explicit query pages under a hard budget but cannot advance candidates into intake. Intake cannot approve an item. Only the separate review command can create an approved snapshot, and only from an eligible pending evidence candidate with explicit reviewer metadata.
 
 ## Current design artifacts
 
@@ -156,7 +184,7 @@ These are design hypotheses. Keep what testing supports; simplify or revise what
 
 1. Which additional source types can become evidence candidates without external source-page retrieval?
 2. How should missing authorship, ambiguous timestamps, and provider references affect eligibility?
-3. Should the next slice prove one collection-lead retrieval or the explicit human-approval transition first?
+3. Should the next slice prove one collection-lead retrieval or begin `Find` on a genuinely human-approved analyst report?
 4. Do bounded pages remain stable across source types and repeated runs?
 5. What provider restrictions govern retention of raw responses and test fixtures?
 
@@ -177,14 +205,18 @@ At this handoff:
 - The Seerist probe completed 22 successful read-only calls across 12 endpoint paths.
 - Findings and the capability board record the observed provider behavior.
 - Routing no longer auto-approves content based on narrative wording.
-- Eight focused intake and routing tests pass.
-- One saved analyst-report item reaches human review with approval pending.
+- Production Seerist collection rejects absent, unapproved, late-approved, or mismatched research intent before credential or network access.
+- Bounded discovery uses supported `/v1/wod` query variants, limited pagination, deduplication, and deterministic local ranking; it surfaced 50 unique URLs for the CIA Director Moscow test.
+- AskAnna citation UUIDs are not reproducible through tested `/v1/wod` ID or cluster-ID filters and remain manually supplied leads only.
+- Intake, reporting, approval workflow, and isolated command tests pass.
+- The earlier saved analyst-report item is retained only as non-admissible historical output because it has no approved pre-collection question lineage.
+- Explicit approval and rejection are implemented; no real item has been decided.
 - TypeScript typecheck and build pass.
 - Raw provider artifacts remain only in the ignored local `app/runs/` folder.
 
 ## Suggested opening prompt
 
-> Read `00-Second Brain/agent.md`, the engineering source route, `HANDOFF.md`, and the completed baseline in `02-Engineering/03-Workflow/first-slice.md`. Propose the smallest next slice needed before source assurance, choosing between one collection-lead retrieval and one explicit human-approval transition. Do not implement until the slice and its definition of done are accepted.
+> Read `00-Second Brain/agent.md`, the engineering source route, `HANDOFF.md`, and the completed baseline in `02-Engineering/03-Workflow/first-slice.md`. Propose the smallest next slice, choosing between one collection-lead retrieval and a bounded `Find` stage after a real analyst decision. Do not treat the synthetic approval test as approval of real provider evidence.
 
 ## Human input required
 

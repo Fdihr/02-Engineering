@@ -5,11 +5,34 @@ import { processSource } from "./process-source.js";
 const runId = "run-intake-test-001";
 const occurredAt = "2026-08-28T10:00:00.000Z";
 
-const selectedItem = (item: Record<string, unknown>, endpoint = "/v1/wod") => ({
+const researchQuestion = {
+  id: "rq-001",
+  runId: "research-run-001",
+  scopeVersion: 1,
+  question: "What political developments could affect operational continuity in Pakistan?",
+  rationale: "Bound collection to operational continuity indicators.",
+  geographies: ["Pakistan"],
+  timeWindow: {
+    from: "2026-08-01T00:00:00.000Z",
+    to: "2026-08-28T23:59:59.999Z"
+  },
+  status: "approved" as const,
+  approvedBy: "analyst-001",
+  approvedAt: "2026-08-27T10:00:00.000Z",
+  artifactRef: "runs/research-run-001/approved-research-question.json",
+  artifactSha256: "a".repeat(64)
+};
+
+const selectedItem = (
+  item: Record<string, unknown>,
+  endpoint = "/v1/wod",
+  question: unknown = researchQuestion
+) => ({
   provider: "seerist" as const,
   endpoint,
   retrievedAt: "2026-08-28T09:55:00.000Z",
   rawArtifactRef: "runs/probe-001/raw-response.json",
+  researchQuestion: question,
   item
 });
 
@@ -34,6 +57,8 @@ test("routes a captured analyst report to human review", () => {
 
   assert.equal(result.value.item.role, "evidence_candidate");
   assert.equal(result.value.item.providerItemId, "1030013");
+  assert.equal(result.value.item.researchQuestion.id, "rq-001");
+  assert.equal(result.value.item.researchQuestion.status, "approved");
   assert.equal(result.value.item.contentCompleteness, "captured_content");
   assert.equal(result.value.decision.destination, "human_review");
   assert.equal(result.value.decision.approvalStatus, "pending_human_review");
@@ -148,4 +173,53 @@ test("delivery-like wording cannot advance an item to approval", () => {
 
   assert.equal(result.value.decision.destination, "human_review");
   assert.equal(result.value.decision.approvalStatus, "pending_human_review");
+});
+
+test("rejects intake without approved research-question lineage", () => {
+  const result = processSource(runId, occurredAt, {
+    provider: "seerist",
+    endpoint: "/v1/wod",
+    retrievedAt: "2026-08-28T09:55:00.000Z",
+    rawArtifactRef: "runs/probe-001/raw-response.json",
+    item: {
+      id: "analysis-unbound",
+      source: "analysis",
+      sanitizedBody: { en: "Synthetic captured report content." }
+    }
+  });
+
+  assert.deepEqual(result, {
+    ok: false,
+    error: {
+      code: "INTAKE_VALIDATION_FAILED",
+      cause: "MISSING_RESEARCH_QUESTION"
+    }
+  });
+});
+
+test("rejects a question approved after provider retrieval", () => {
+  const result = processSource(
+    runId,
+    occurredAt,
+    selectedItem(
+      {
+        id: "analysis-late-question",
+        source: "analysis",
+        sanitizedBody: { en: "Synthetic captured report content." }
+      },
+      "/v1/wod",
+      {
+        ...researchQuestion,
+        approvedAt: "2026-08-28T10:00:00.000Z"
+      }
+    )
+  );
+
+  assert.deepEqual(result, {
+    ok: false,
+    error: {
+      code: "INTAKE_VALIDATION_FAILED",
+      cause: "QUESTION_APPROVED_AFTER_RETRIEVAL"
+    }
+  });
 });

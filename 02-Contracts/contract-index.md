@@ -5,6 +5,8 @@ Use this file as the index of active contracts.
 ## Active contracts
 
 1. [Provider item role and provenance](provider-item-role-and-provenance.md)
+2. [Evidence admission](evidence-admission.md)
+3. [Research question and provider operation](research-question-and-provider-operation.md)
 
 ## Planned contracts
 

@@ -5,11 +5,15 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "approve:question": "node --import tsx src/commands/approve-research-question.ts",
+    "collect:seerist": "node --env-file=../.env --import tsx src/commands/collect-seerist.ts",
+    "discover:seerist": "node --env-file=../.env --import tsx src/commands/discover-seerist.ts",
     "dev": "tsx src/index.ts",
     "intake:seerist": "node --import tsx src/commands/intake-seerist.ts",
     "probe:seerist": "node --env-file=../.env --import tsx src/probes/seerist-probe.ts",
+    "review:evidence": "node --import tsx src/commands/review-evidence.ts",
     "start": "node dist/index.js",
-    "test": "node --import tsx --test src/modules/reporting/intake-summary.test.ts src/modules/routing/routing.test.ts src/workflow/process-source.test.ts",
+    "test": "node --import tsx --test src/commands/approve-research-question.test.ts src/commands/collect-seerist.test.ts src/commands/discover-seerist.test.ts src/commands/review-evidence.test.ts src/modules/collection/seerist-collection.test.ts src/modules/discovery/seerist-discovery.test.ts src/modules/reporting/evidence-decision-summary.test.ts src/modules/reporting/intake-summary.test.ts src/modules/research/research-question.test.ts src/modules/routing/routing.test.ts src/workflow/process-source.test.ts src/workflow/review-evidence.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "keywords": [],

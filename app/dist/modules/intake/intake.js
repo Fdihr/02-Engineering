@@ -1,4 +1,5 @@
 import { err, ok } from "../../core/result.js";
+import { validateApprovedResearchQuestion } from "../research/research-question.js";
 const CONTEXT_ENDPOINT_PREFIXES = [
     "/v1/wod/country-background/",
     "/v1/wod/risk-rating/",
@@ -80,6 +81,10 @@ export const validateSource = (input) => {
     if (!rawArtifactRef) {
         return err("MISSING_RAW_ARTIFACT_REF");
     }
+    const researchQuestionResult = validateApprovedResearchQuestion(input.researchQuestion, retrievedAt);
+    if (!researchQuestionResult.ok) {
+        return researchQuestionResult;
+    }
     if (!isRecord(input.item)) {
         return err("INVALID_ITEM");
     }
@@ -100,7 +105,8 @@ export const validateSource = (input) => {
         rawArtifactRef,
         sourceLinks: stringValues(item.link, item.source_url, sourceValue?.startsWith("http") ? sourceValue : undefined),
         referenceCount: references.length,
-        hasSourceMetadata: isRecord(item.source_metadata)
+        hasSourceMetadata: isRecord(item.source_metadata),
+        researchQuestion: researchQuestionResult.value
     };
     if (isContextEndpoint(endpoint) || sourceType === "country-background") {
         return ok({

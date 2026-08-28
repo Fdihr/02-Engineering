@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { selectSeeristFeature } from "../modules/intake/intake.js";
@@ -10,15 +10,16 @@ type CommandOptions = {
   artifactPath: string;
   itemId: string;
   retrievedAt: string;
+  researchQuestionPath: string;
   runId?: string;
 };
 
 const usage =
-  "Usage: npm run intake:seerist -- <raw-response.json> <item-id> <retrieved-at-ISO-8601> [run-id]";
+  "Usage: npm run intake:seerist -- <raw-response.json> <item-id> <retrieved-at-ISO-8601> <approved-research-question.json> [run-id]";
 
 const parseOptions = (args: string[]): CommandOptions => {
-  const [artifactPath, itemId, retrievedAt, runId, ...extra] = args;
-  if (!artifactPath || !itemId || !retrievedAt || extra.length > 0) {
+  const [artifactPath, itemId, retrievedAt, researchQuestionPath, runId, ...extra] = args;
+  if (!artifactPath || !itemId || !retrievedAt || !researchQuestionPath || extra.length > 0) {
     throw new Error(usage);
   }
 
@@ -26,9 +27,13 @@ const parseOptions = (args: string[]): CommandOptions => {
     artifactPath,
     itemId,
     retrievedAt,
+    researchQuestionPath,
     runId
   };
 };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const artifactRef = (path: string): string =>
   relative(process.cwd(), path).replaceAll("\\", "/");
@@ -49,6 +54,16 @@ const main = async (): Promise<void> => {
     const artifactPath = resolve(options.artifactPath);
     rawArtifactRef = artifactRef(artifactPath);
     const payload: unknown = JSON.parse(await readFile(artifactPath, "utf8"));
+    const researchQuestionPath = resolve(options.researchQuestionPath);
+    const researchQuestionBytes = await readFile(researchQuestionPath);
+    const researchQuestionValue: unknown = JSON.parse(researchQuestionBytes.toString("utf8"));
+    const researchQuestion = isRecord(researchQuestionValue)
+      ? {
+          ...researchQuestionValue,
+          artifactRef: artifactRef(researchQuestionPath),
+          artifactSha256: createHash("sha256").update(researchQuestionBytes).digest("hex")
+        }
+      : researchQuestionValue;
     const selected = selectSeeristFeature(payload, options.itemId);
     if (!selected.ok) {
       throw new Error(`Item selection failed: ${selected.error}`);
@@ -59,6 +74,7 @@ const main = async (): Promise<void> => {
       endpoint: "/v1/wod",
       retrievedAt: options.retrievedAt,
       rawArtifactRef,
+      researchQuestion,
       item: selected.value
     });
     if (!result.ok) {

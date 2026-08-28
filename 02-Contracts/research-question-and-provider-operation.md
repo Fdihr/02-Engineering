@@ -1,0 +1,64 @@
+# Research Question and Provider Operation Contract
+
+Status: Active baseline
+Validated: 2026-08-28
+Implementation: `../app/src/modules/research/research-question.ts`, `../app/src/modules/collection/seerist-collection.ts`
+
+## Controlling rule
+
+Relevance originates in explicit research intent, not in material returned by Seerist. A provider operation cannot become executable until a human-approved research-question artifact exists.
+
+The mandatory order is:
+
+`proposed question -> explicit human approval -> bound provider operation -> Seerist request -> item intake`
+
+## Question approval
+
+A proposal contains a stable question ID, research run ID, scope version, question, rationale, non-empty geographies, ordered time window, and `status: "proposed"`.
+
+Approval requires a non-empty human reviewer ID and valid approval timestamp. The canonical approved artifact replaces the status with `approved` and records `approvedBy` and `approvedAt`. It does not contain its own path or checksum; consumers bind those values after reading and hashing the artifact.
+
+The approval command writes a non-overwritable JSON artifact and a derived read-only Markdown review under:
+
+`runs/<runId>/research-questions/<questionId>/`
+
+## Provider operation
+
+The current operation contract supports one read-only Seerist `/v1/wod` GET with scalar filters. It records an operation ID, run ID, research-question ID, provider, method, endpoint, and filters.
+
+Before credentials are read or HTTP is attempted, deterministic validation requires:
+
+1. A structurally valid approved-question artifact and external SHA-256 lineage.
+2. An approval time no later than the request time.
+3. Exact question-ID and run-ID agreement between the operation and approved question.
+4. The allowlisted provider, method, endpoint, and filter value types.
+
+A reference to an approved question establishes relevance lineage. It does not prove that arbitrary filters faithfully compile the question semantics; deterministic search-intent compilation remains outside this bounded contract.
+
+## Collection output
+
+The collection command preserves the response body, request manifest, response manifest, checksums, timestamps, HTTP status, question lineage, and append-only events under:
+
+`runs/<runId>/provider-operations/<operationId>/`
+
+The developer probe remains separate and does not satisfy this production contract.
+
+## Bounded discovery
+
+When one provider operation does not provide sufficient recall, an explicit discovery plan may define up to ten lexical query variants. Each plan records its run and research-question IDs, query IDs, search text, source filters, deterministic ranking terms, page size, page limit, API-call budget, result limit, and minimum score.
+
+The discovery command:
+
+1. Validates the complete plan and approved-question chronology before reading credentials.
+2. Applies the approved question's time window to every generated operation.
+3. Runs queries sequentially and follows provider pagination only within the recorded limits.
+4. Preserves every raw page with request metadata and SHA-256.
+5. Deduplicates by provider item ID and records every matching query and raw artifact.
+6. Scores explicit ranking-term matches in titles and summaries, then sorts deterministically by score, provider timestamp, and item ID.
+7. Writes canonical JSON and a read-only Markdown review; it does not intake or approve candidates.
+
+The current implementation does not reproduce AskAnna ranking or citation UUIDs. AskAnna citations may be retained as human-supplied leads, but production coverage uses the supported `/v1/wod` contract.
+
+## Non-retroactivity
+
+Material collected without approved research-question lineage cannot be made admissible by inventing or approving a question afterward. It may remain as historical provider-discovery material only.
