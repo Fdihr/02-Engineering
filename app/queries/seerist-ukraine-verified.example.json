@@ -1,0 +1,8 @@
+{
+  "aoiId": "ua",
+  "sources": "political,maritime",
+  "eventType": "verified",
+  "pageSize": 5,
+  "pageOffset": 0,
+  "sortDirection": "desc"
+}

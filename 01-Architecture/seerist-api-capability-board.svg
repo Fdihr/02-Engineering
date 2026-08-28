@@ -1,0 +1,244 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1400" viewBox="0 0 2400 1400" role="img" aria-labelledby="title description">
+  <title id="title">Seerist API capability map</title>
+  <desc id="description">Companion board to the threat intelligence memo workflow, showing documented Seerist evidence, context, foresight, taxonomy, and saved-search capabilities together with live-test status and workflow opportunities.</desc>
+
+  <defs>
+    <style>
+      text { font-family: "VestasSans", "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: 0; }
+      .canvas { fill: #FFFFFF; }
+      .board { fill: #FFFFFF; stroke: #E3E5E8; stroke-width: 2; }
+      .panel { fill: #FFFFFF; stroke: #A2A9B1; stroke-width: 1.5; }
+      .panel-header { fill: #1F3144; }
+      .page-title { fill: #1F3144; font-size: 32px; font-weight: 500; }
+      .page-subtitle { fill: #606D7B; font-size: 14px; font-weight: 400; }
+      .panel-title { fill: #FFFFFF; font-size: 20px; font-weight: 500; }
+      .panel-subtitle { fill: #E3E5E8; font-size: 12px; font-weight: 400; }
+      .section-title { fill: #1F3144; font-size: 17px; font-weight: 500; }
+      .card-title { fill: #1F3144; font-size: 15px; font-weight: 500; }
+      .endpoint { fill: #1F3144; font-size: 13px; font-weight: 500; }
+      .body { fill: #606D7B; font-size: 13px; font-weight: 400; }
+      .caption { fill: #606D7B; font-size: 12px; font-weight: 400; }
+      .small { fill: #606D7B; font-size: 11px; font-weight: 400; }
+      .white-small { fill: #FFFFFF; font-size: 11px; font-weight: 500; }
+      .documented-card { fill: #FFFFFF; stroke: #005AFF; stroke-width: 1.5; }
+      .tested-card { fill: #FFFFFF; stroke: #19736E; stroke-width: 2; }
+      .caution-card { fill: #FFFFFF; stroke: #E17D28; stroke-width: 2; }
+      .state-card { fill: #FFFFFF; stroke: #772219; stroke-width: 2; }
+      .quiet-card { fill: #E3E5E8; stroke: #A2A9B1; stroke-width: 1.5; }
+      .workflow-card { fill: #96C8F0; stroke: #005AFF; stroke-width: 1.5; }
+      .tested-chip { fill: #19736E; }
+      .documented-chip { fill: #005AFF; }
+      .caution-chip { fill: #E17D28; }
+      .state-chip { fill: #772219; }
+      .divider { stroke: #E3E5E8; stroke-width: 1; }
+      .flow-line { fill: none; stroke: #005AFF; stroke-width: 2; marker-end: url(#arrow-blue); }
+      .context-line { fill: none; stroke: #606D7B; stroke-width: 1.5; stroke-dasharray: 8 6; marker-end: url(#arrow-grey); }
+    </style>
+
+    <marker id="arrow-blue" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 5 L 0 10 z" fill="#005AFF" />
+    </marker>
+    <marker id="arrow-grey" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 5 L 0 10 z" fill="#606D7B" />
+    </marker>
+  </defs>
+
+  <rect class="canvas" x="0" y="0" width="2400" height="1400" />
+  <text class="page-title" x="48" y="48">Seerist API capability map</text>
+  <text class="page-subtitle" x="48" y="76">Documented possibilities, live-tested surfaces, and their potential role in the threat intelligence memo workflow</text>
+
+  <rect class="tested-chip" x="1656" y="36" width="16" height="16" />
+  <text class="caption" x="1680" y="49">Live tested</text>
+  <rect class="documented-chip" x="1784" y="36" width="16" height="16" />
+  <text class="caption" x="1808" y="49">Documented</text>
+  <rect class="caution-chip" x="1928" y="36" width="16" height="16" />
+  <text class="caption" x="1952" y="49">Needs validation</text>
+  <rect class="state-chip" x="2112" y="36" width="16" height="16" />
+  <text class="caption" x="2136" y="49">Changes provider state</text>
+
+  <rect class="board" x="32" y="96" width="2336" height="1272" />
+
+  <!-- LEFT: EVIDENCE DISCOVERY -->
+  <rect class="panel" x="64" y="128" width="728" height="976" />
+  <rect class="panel-header" x="64" y="128" width="728" height="72" />
+  <text class="panel-title" x="88" y="158">1. Evidence discovery and expansion</text>
+  <text class="panel-subtitle" x="88" y="181">Find candidate material, reduce duplication, then inspect source lineage</text>
+
+  <rect class="tested-card" x="88" y="224" width="680" height="272" />
+  <rect class="tested-chip" x="88" y="224" width="8" height="272" />
+  <text class="card-title" x="112" y="252">World of Data - primary evidence surface</text>
+  <text class="endpoint" x="112" y="280">GET /v1/wod</text>
+  <text class="body" x="112" y="306">Filter by source, topic, time, geography, search, severity, cluster, and hotspot.</text>
+  <line class="divider" x1="112" y1="324" x2="744" y2="324" />
+  <text class="caption" x="112" y="348">Documented views</text>
+  <text class="small" x="112" y="370">News + social | verified events | analyst reports | point-of-interest search</text>
+  <text class="small" x="112" y="390">Updated-since polling | filter counts | saved-search execution | cluster lookup</text>
+  <text class="caption" x="112" y="420">Live evidence</text>
+  <text class="small" x="112" y="442">News/social: title, summary, link, provenance; no body observed</text>
+  <text class="small" x="112" y="462">Verified: structured event and references; analyst reports: full multilingual body</text>
+  <rect class="tested-chip" x="648" y="464" width="96" height="8" />
+
+  <rect class="documented-card" x="88" y="520" width="680" height="160" />
+  <text class="card-title" x="112" y="548">Event clusters - deduplicate and expand</text>
+  <text class="endpoint" x="112" y="576">GET /v2/clusters/{event_category}</text>
+  <text class="endpoint" x="112" y="600">GET /v2/clusters/{cluster_id}/articles</text>
+  <text class="body" x="112" y="628">Triage a representative event, then retrieve the article set behind its stable cluster ID.</text>
+  <text class="small" x="112" y="654">Potential workflow role: source grouping, corroboration, duplicate detection</text>
+
+  <rect class="documented-card" x="88" y="704" width="680" height="144" />
+  <text class="card-title" x="112" y="732">Hotspots - anomalous activity signals</text>
+  <text class="endpoint" x="112" y="760">GET /v1/hotspots</text>
+  <text class="endpoint" x="400" y="760">GET /v1/hotspots/topic/top</text>
+  <text class="body" x="112" y="788">Returns hotspot properties and cluster IDs for follow-up through clusters or World of Data.</text>
+  <text class="small" x="112" y="820">Potential workflow role: discovery trigger and prioritization signal, not standalone evidence</text>
+
+  <rect class="quiet-card" x="88" y="872" width="680" height="208" />
+  <text class="card-title" x="112" y="900">Evidence contract implied by live responses</text>
+  <text class="body" x="112" y="928">1. Preserve the raw response before normalization.</text>
+  <text class="body" x="112" y="952">2. Treat feature properties as source-dependent and optional.</text>
+  <text class="body" x="112" y="976">3. Keep provider references separate from source URLs.</text>
+  <text class="body" x="112" y="1000">4. Use metadata next + total; page length does not prove completion.</text>
+  <text class="body" x="112" y="1024">5. Do not infer full content, authorship, publication date, or reliability.</text>
+  <text class="small" x="112" y="1056">This contract is evidence-led; it must evolve as other endpoint families are tested.</text>
+
+  <!-- MIDDLE: CONTEXT AND FORESIGHT -->
+  <rect class="panel" x="816" y="128" width="728" height="976" />
+  <rect class="panel-header" x="816" y="128" width="728" height="72" />
+  <text class="panel-title" x="840" y="158">2. Context, warning, and outlook</text>
+  <text class="panel-subtitle" x="840" y="181">Add stability, baseline risk, early warning, and forward-looking signals</text>
+
+  <rect class="documented-card" x="840" y="224" width="680" height="264" />
+  <text class="card-title" x="864" y="252">Pulse - stability scores and forecasts</text>
+  <text class="endpoint" x="864" y="280">GET /v2/pulse/region</text>
+  <text class="endpoint" x="1184" y="280">GET /v2/pulse/country</text>
+  <text class="endpoint" x="864" y="306">GET /v2/pulse/city</text>
+  <text class="endpoint" x="1184" y="306">GET /v2/pulse/county</text>
+  <text class="body" x="864" y="338">Bounds queries support model selection, date windows, sorting, paging, and forecasts.</text>
+  <line class="divider" x1="864" y1="356" x2="1496" y2="356" />
+  <text class="endpoint" x="864" y="382">GET /v2/pulse/country/{code}</text>
+  <text class="endpoint" x="864" y="406">GET /v2/pulse/city/{code}</text>
+  <text class="endpoint" x="1184" y="406">GET /v2/pulse/county/{fips}</text>
+  <text class="small" x="864" y="438">Potential role: contextual signal and outlook input; never a substitute for sourced claims</text>
+  <text class="small" x="864" y="462">Needs testing: model v1/v2 differences, forecast presence, score semantics, geometry size</text>
+
+  <rect class="documented-card" x="840" y="512" width="680" height="152" />
+  <text class="card-title" x="864" y="540">Early warning and planned disruption</text>
+  <text class="endpoint" x="864" y="568">GET /v1/wod/breaking-events</text>
+  <text class="endpoint" x="864" y="592">GET /v1/wod/calendar-events</text>
+  <text class="body" x="864" y="620">Breaking events expose evolving status; calendar events expose future dates and impacts.</text>
+  <text class="small" x="864" y="644">Potential role: warning lane, collection trigger, scenario and outlook input</text>
+
+  <rect class="documented-card" x="840" y="688" width="680" height="160" />
+  <text class="card-title" x="864" y="716">Country baseline and risk ratings</text>
+  <text class="endpoint" x="864" y="744">GET /v1/wod/country-background/{countryCode}</text>
+  <text class="endpoint" x="864" y="768">GET /v1/wod/risk-rating</text>
+  <text class="endpoint" x="1184" y="768">GET /v1/wod/risk-rating/{geoCode}</text>
+  <text class="body" x="864" y="798">Retrieve standing country context and geographic risk-rating structures.</text>
+  <text class="small" x="864" y="824">Potential role: baseline context; freshness and provenance require live validation</text>
+
+  <rect class="caution-card" x="840" y="872" width="680" height="208" />
+  <rect class="caution-chip" x="840" y="872" width="8" height="208" />
+  <text class="card-title" x="864" y="900">Scribe - provider-generated narrative</text>
+  <text class="endpoint" x="864" y="928">GET /v2/auto-summary/{locationCode}/{locationType}</text>
+  <text class="body" x="864" y="956">Combines document counts, Pulse, hotspots, and top events into a location summary.</text>
+  <text class="body" x="864" y="984">Potential role: orientation or comparison, not evidence and not workflow authority.</text>
+  <text class="small" x="864" y="1016">Test for: traceability, source references, factual fidelity, language, date behavior</text>
+  <text class="small" x="864" y="1040">Constraint: date must be within 60 days according to the blueprint</text>
+  <rect class="caution-chip" x="1400" y="1052" width="96" height="8" />
+
+  <!-- RIGHT: CONTROL AND WORKFLOW FIT -->
+  <rect class="panel" x="1568" y="128" width="768" height="976" />
+  <rect class="panel-header" x="1568" y="128" width="768" height="72" />
+  <text class="panel-title" x="1592" y="158">3. Query control and workflow fit</text>
+  <text class="panel-subtitle" x="1592" y="181">Discover provider vocabularies, reuse queries, and map data to human decisions</text>
+
+  <rect class="documented-card" x="1592" y="224" width="720" height="240" />
+  <text class="card-title" x="1616" y="252">Helper endpoints - authoritative query vocabularies</text>
+  <text class="endpoint" x="1616" y="280">GET /v1/aois/country | city | county</text>
+  <text class="endpoint" x="1616" y="306">GET /v1/config/topics</text>
+  <text class="endpoint" x="1616" y="332">GET /v1/config/verified/security/sectors | asset-types</text>
+  <text class="endpoint" x="1616" y="358">GET /v1/config/verified/security/attack-types | perpetrators</text>
+  <text class="endpoint" x="1616" y="384">GET /v1/config/verified/maritime/subcategories | vessel-types</text>
+  <text class="endpoint" x="1616" y="410">GET /v1/config/risk-categories | calendar-events</text>
+  <text class="small" x="1616" y="440">Potential role: validate human query input and avoid hard-coded provider taxonomies</text>
+
+  <rect class="state-card" x="1592" y="488" width="720" height="176" />
+  <text class="card-title" x="1616" y="516">Saved searches - reproducible but stateful</text>
+  <text class="endpoint" x="1616" y="544">GET /v1/savedsearch | GET /v1/savedsearch/{id}</text>
+  <text class="endpoint" x="1616" y="568">GET /v1/wod/savedsearch/{id}/execute</text>
+  <text class="endpoint" x="1616" y="592">POST /v1/searches-notifications | PUT / DELETE /v1/savedsearch/{id}</text>
+  <text class="body" x="1616" y="620">Creation explicitly requires bearer token plus API key; mutation tests remain deferred.</text>
+  <rect class="state-chip" x="2192" y="636" width="96" height="8" />
+
+  <text class="section-title" x="1592" y="704">Potential fit with the memo workflow</text>
+
+  <rect class="workflow-card" x="1592" y="728" width="224" height="96" />
+  <text class="card-title" x="1616" y="756">Scope + plan</text>
+  <text class="small" x="1616" y="780">AOIs | topics | configs</text>
+  <text class="small" x="1616" y="800">saved query definitions</text>
+
+  <rect class="workflow-card" x="1840" y="728" width="224" height="96" />
+  <text class="card-title" x="1864" y="756">Collect + triage</text>
+  <text class="small" x="1864" y="780">WoD | hotspots | clusters</text>
+  <text class="small" x="1864" y="800">breaking + future events</text>
+
+  <rect class="workflow-card" x="2088" y="728" width="224" height="96" />
+  <text class="card-title" x="2112" y="756">Evidence gate</text>
+  <text class="small" x="2112" y="780">provenance | relevance</text>
+  <text class="small" x="2112" y="800">coverage | duplicates</text>
+
+  <path class="flow-line" d="M 1816 776 L 1838 776" />
+  <path class="flow-line" d="M 2064 776 L 2086 776" />
+
+  <rect class="workflow-card" x="1592" y="848" width="224" height="96" />
+  <text class="card-title" x="1616" y="876">Source analysis</text>
+  <text class="small" x="1616" y="900">analysis bodies</text>
+  <text class="small" x="1616" y="920">cluster article sets</text>
+
+  <rect class="workflow-card" x="1840" y="848" width="224" height="96" />
+  <text class="card-title" x="1864" y="876">Synthesis</text>
+  <text class="small" x="1864" y="900">verified + open sources</text>
+  <text class="small" x="1864" y="920">claims across source types</text>
+
+  <rect class="workflow-card" x="2088" y="848" width="224" height="96" />
+  <text class="card-title" x="2112" y="876">Context + outlook</text>
+  <text class="small" x="2112" y="900">Pulse | risk | calendar</text>
+  <text class="small" x="2112" y="920">Scribe comparison only</text>
+
+  <path class="flow-line" d="M 1816 896 L 1838 896" />
+  <path class="flow-line" d="M 2064 896 L 2086 896" />
+
+  <rect class="quiet-card" x="1592" y="968" width="720" height="112" />
+  <text class="card-title" x="1616" y="996">Human approval remains outside the provider</text>
+  <text class="body" x="1616" y="1022">No API response, score, summary, or saved search may approve evidence or publish a memo.</text>
+  <text class="small" x="1616" y="1048">Provider data informs decisions; application state and audit events record them.</text>
+
+  <!-- BOTTOM: TEST STATUS -->
+  <rect class="panel" x="64" y="1128" width="2272" height="208" />
+  <rect class="panel-header" x="64" y="1128" width="2272" height="56" />
+  <text class="panel-title" x="88" y="1163">Live-test sequence: learn the contract before designing the workflow</text>
+
+  <rect class="tested-card" x="88" y="1208" width="520" height="104" />
+  <text class="card-title" x="112" y="1236">Tested now</text>
+  <text class="small" x="112" y="1260">WoD: recent, search, verified, analysis</text>
+  <text class="small" x="112" y="1282">Observed: pagination, cache, source-shaped fields, body depth</text>
+  <rect class="tested-chip" x="488" y="1288" width="96" height="8" />
+
+  <rect class="documented-card" x="632" y="1208" width="520" height="104" />
+  <text class="card-title" x="656" y="1236">Test next - highest information value</text>
+  <text class="small" x="656" y="1260">Topics config | next page | filter counts | clusters + articles</text>
+  <text class="small" x="656" y="1282">Then Pulse | breaking | future | Scribe | country context</text>
+
+  <rect class="caution-card" x="1176" y="1208" width="552" height="104" />
+  <text class="card-title" x="1200" y="1236">Blueprint defects to validate</text>
+  <text class="small" x="1200" y="1260">Malformed URI templates | inconsistent enums | swapped metadata terms</text>
+  <text class="small" x="1200" y="1282">GeoJSON claim has exceptions | auth requirements are incomplete</text>
+
+  <rect class="state-card" x="1752" y="1208" width="560" height="104" />
+  <text class="card-title" x="1776" y="1236">Deferred until explicitly authorized</text>
+  <text class="small" x="1776" y="1260">Create, update, or delete saved searches</text>
+  <text class="small" x="1776" y="1282">Bearer flow, cleanup behavior, and provider-side state lifecycle</text>
+
+  <path class="context-line" d="M 768 600 L 800 600 L 800 776 L 1590 776" />
+  <path class="context-line" d="M 1520 408 L 1552 408 L 1552 896 L 1590 896" />
+</svg>

@@ -1,8 +1,11 @@
 # Threat Intelligence Memo Workflow
 
 Status: Intake, analysis, output, and event-log architecture approved; implementation pending.
-Last updated: 2026-08-27
+Last updated: 2026-08-28
 Visual: `../01-Architecture/memo-workflow-board.svg`
+Seerist capability visual: `../01-Architecture/seerist-api-capability-board.svg`
+
+The capability visual maps documented and live-tested API possibilities. It is a test-planning aid, not a settled workflow contract.
 
 ## Purpose
 
