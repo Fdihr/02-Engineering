@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+
+app/dist/
+app/node_modules/
+app/runs/
