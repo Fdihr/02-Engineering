@@ -17,6 +17,13 @@ flowchart LR
     Operation --> Reader[API or artifact reader]
     Reader[API or artifact reader] --> Intake[Provider intake]
     Intake --> Workflow
+    Intake --> RetrievalGate[Validate exact source retrieval]
+    RetrievalGate --> Firecrawl[One fixed Firecrawl scrape]
+    Firecrawl --> Receipt[Untrusted retrieval artifact]
+    Receipt --> Canonicalize[Lossless source document + stable anchors]
+    Canonicalize --> Relevance[AI question-relevance proposal]
+    Relevance --> Reintake[Validate pending source candidate]
+    Reintake --> Review
     Workflow --> Validate[Validate]
     Workflow --> Classify[Classify role]
     Workflow --> Route[Route]
@@ -54,7 +61,7 @@ Create a folder only when its first implementation file is needed.
 2. Use `Result<T, E>` and literal error types for expected validation, classification, and routing failures.
 3. Keep raw provider values at the intake boundary. Pass only validated observed facts into provider-neutral decisions.
 4. Model alternatives with discriminated unions rather than optional-field bags when behavior differs by role.
-5. Do not use narrative text, model output, or provider scores to advance approval state.
+5. Model output may populate a typed proposal, but only deterministic validation may persist it and only in proposed or pending state. Narrative text, model output, and provider scores cannot advance approval state.
 6. Keep source values and provider taxonomies open unless repeated live responses prove a closed set.
 7. Add a shared abstraction only after the same need appears in at least three places.
 
@@ -85,6 +92,12 @@ approved research question + bound provider operation
   -> extract provider-neutral facts
   -> classify as evidence candidate | collection lead | context
   -> route to human review | source retrieval | context only | controlled handling
+  -> for one approved collection lead, retrieve one exact source URL and stop
+  -> losslessly canonicalize captured content into stable content-addressed segments
+  -> assess one canonical source against the approved question with a bounded AI call
+  -> validate assessment schema, exact anchors, model provenance, and source/question lineage
+  -> re-intake relevant or partially relevant material as a pending proposal
+  -> route the new candidate to pending human review
   -> create ledger event data
   -> command persists output
 ```
@@ -92,6 +105,14 @@ approved research question + bound provider operation
 Provider credentials and HTTP remain inaccessible until the research-intent gate succeeds. No intake route may produce evidence status `approved`; evidence approval requires a later explicit human action and auditable transition.
 
 Bounded discovery is sequential, capped by explicit query, page, call, and result limits, and preserves each raw page. It is not a general batch runner and does not automatically advance any candidate into intake.
+
+One-source retrieval validates the persisted intake result before reading `FIRECRAWL_API_KEY`. It sends one fixed, Markdown-only `/v2/scrape` request, preserves the bounded raw response, records publisher and access-provider provenance separately, and stops with `approvalStatus: "not_requested"`. Retrieved text is untrusted data.
+
+The accepted next connection first creates the provider-neutral source document defined in `../02-Contracts/source-document-and-anchors.md`, then runs a bounded AI assessment against the exact approved research question. Deterministic code must validate the typed assessment, exact anchors, model provenance, and artifact lineage before it can persist a pending candidate. The AI cannot approve evidence or start `Find`; the existing human evidence gate remains required for both.
+
+Canonicalization changes addressing, not evidence content or quality. Every admitted source still passes through independent `Find`, blind `Sweep`, `Judge`, and `Write` before cross-source synthesis. Scaling uses independent source state streams, reusable adapters, checksum deduplication, and bounded scheduling rather than skipped stages.
+
+The current `reintake:source` command still accepts a human-authored relevance string. That input shape is transitional and must not be used for live re-intake after the 2026-08-31 architecture decision. It remains only as tested scaffolding for lineage, non-overwrite, and pending-only routing until replaced by the bounded AI assessment artifact.
 
 ## Current evidence-admission flow
 

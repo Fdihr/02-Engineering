@@ -53,11 +53,57 @@ type ProviderItemBase = {
   researchQuestion: ApprovedResearchQuestion;
 };
 
-export type EvidenceCandidate = ProviderItemBase & {
+export type SeeristEvidenceCandidate = ProviderItemBase & {
   role: "evidence_candidate";
   providerItemId: string;
   contentCompleteness: "captured_content";
 };
+
+export type RetrievedSourceEvidenceCandidate = {
+  provider: "source_retrieval";
+  endpoint: "https://api.firecrawl.dev/v2/scrape";
+  providerItemId: string;
+  sourceType: "publisher_source";
+  providerTimestamp?: string;
+  retrievedAt: string;
+  rawArtifactRef: string;
+  sourceLinks: string[];
+  referenceCount: 1;
+  hasSourceMetadata: true;
+  researchQuestion: ApprovedResearchQuestion;
+  role: "evidence_candidate";
+  contentCompleteness: "captured_content";
+  source: {
+    requestedUrl: string;
+    finalUrl: string;
+    publisherHost: string;
+    title?: string;
+  };
+  retrievalLineage: {
+    retrievalId: string;
+    sourceLeadProviderItemId: string;
+    sourceIntakeArtifactRef: string;
+    sourceIntakeArtifactSha256: string;
+    retrievalArtifactRef: string;
+    retrievalArtifactSha256: string;
+    requestArtifactRef: string;
+    requestArtifactSha256: string;
+    rawArtifactRef: string;
+    rawArtifactSha256: string;
+  };
+  analystAssessment: {
+    actorType: "human";
+    analystId: string;
+    assessedAt: string;
+    researchQuestionId: string;
+    relevanceToQuestion: string;
+  };
+  limitations: string[];
+};
+
+export type EvidenceCandidate =
+  | SeeristEvidenceCandidate
+  | RetrievedSourceEvidenceCandidate;
 
 export type CollectionLead = ProviderItemBase & {
   role: "collection_lead";
@@ -159,3 +205,128 @@ export type EvidenceReviewOutput =
       decision: EvidenceAdmissionDecision;
       event: EvidenceReviewEvent;
     };
+
+export type SourceRetrievalReason =
+  | "content_retrieved"
+  | "access_provider_error"
+  | "target_page_error"
+  | "final_url_missing"
+  | "cross_origin_redirect"
+  | "content_missing"
+  | "content_insufficient";
+
+export type SourceRetrievalResult = {
+  id: string;
+  runId: string;
+  providerItemId: string;
+  attemptedAt: string;
+  receivedAt: string;
+  resolutionDepth: 1;
+  outcome: "resolved" | "unresolved";
+  reason: SourceRetrievalReason;
+  approvalStatus: "not_requested";
+  researchQuestion: ApprovedResearchQuestion;
+  accessProvider: {
+    name: "firecrawl";
+    endpoint: string;
+    httpStatus: number;
+    mediaType: string;
+    errorCode?: string;
+  };
+  source: {
+    requestedUrl: string;
+    reportedSourceUrl?: string;
+    finalUrl?: string;
+    publisherHost: string;
+    statusCode?: number;
+    redirectStatus: "not_reported" | "none_observed" | "same_origin" | "cross_origin";
+    title?: string;
+    description?: string;
+    language?: string;
+    contentType?: string;
+  };
+  request: {
+    format: "markdown";
+    onlyMainContent: true;
+    maxAge: 0;
+    storeInCache: false;
+    skipTlsVerification: false;
+    timeoutMs: number;
+  };
+  lineage: {
+    intakeArtifactRef: string;
+    intakeArtifactSha256: string;
+    requestArtifactRef: string;
+    requestArtifactSha256: string;
+    rawArtifactRef: string;
+    rawArtifactSha256: string;
+  };
+  content?: {
+    format: "markdown";
+    trust: "untrusted";
+    characterCount: number;
+    body: string;
+  };
+  limitations: string[];
+};
+
+export type SourceKind = "provider-captured" | "retrieved-publisher";
+
+export type SourceContentFormat = "markdown" | "plain-text";
+
+export type SourceArtifactLineage = {
+  artifactRef: string;
+  artifactSha256: string;
+};
+
+export type CapturedSourceContent = {
+  runId: string;
+  sourceItemId: string;
+  sourceKind: SourceKind;
+  contentFormat: SourceContentFormat;
+  body: string;
+  sourceArtifactRef: string;
+  sourceArtifactSha256: string;
+  lineageArtifactRefs: SourceArtifactLineage[];
+};
+
+export type SourceSegment = {
+  id: string;
+  ordinal: number;
+  kind: "heading" | "paragraph" | "list-item" | "quote" | "table-row" | "other";
+  text: string;
+  textSha256: string;
+  startUtf8Byte: number;
+  endUtf8Byte: number;
+};
+
+export type SourceDocument = {
+  schemaVersion: "source-document-v1";
+  id: string;
+  runId: string;
+  sourceItemId: string;
+  sourceKind: SourceKind;
+  sourceArtifactRef: string;
+  sourceArtifactSha256: string;
+  normalization: {
+    version: "source-normalization-v1";
+    inputFormat: SourceContentFormat;
+    normalizedTextSha256: string;
+    characterCount: number;
+    utf8ByteCount: number;
+  };
+  normalizedText: string;
+  segments: SourceSegment[];
+  lineageArtifactRefs: SourceArtifactLineage[];
+};
+
+export type SourceAnchor = {
+  sourceDocumentId: string;
+  sourceDocumentArtifactRef: string;
+  sourceDocumentArtifactSha256: string;
+  segmentId: string;
+  segmentSha256: string;
+  quote: string;
+  quoteStartUtf8Byte: number;
+  quoteEndUtf8Byte: number;
+};

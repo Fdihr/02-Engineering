@@ -6,7 +6,7 @@ Implementation: `../app/src/modules/approval/evidence-approval.ts`, `../app/src/
 
 ## Scope
 
-This contract covers one explicit human decision on one persisted intake result. It does not define source retrieval, batch review, revision requests, source assurance, or publication approval.
+This contract covers one explicit human decision on one persisted intake result. It does not require the human to author source-to-question relevance. For retrieved sources, that rationale is a separately validated AI proposal under the retrieved-source relevance contract. This contract does not define source retrieval, batch review, revision requests, source assurance, or publication approval.
 
 ## Command
 
@@ -22,12 +22,14 @@ The command input is the explicit human action. Narrative wording, provider scor
 
 The persisted intake artifact is reconstructed from unknown JSON and must satisfy all conditions:
 
-1. The item role is `evidence_candidate` with `captured_content`.
+1. The item is a validated Seerist-native or retrieved-source `evidence_candidate` with `captured_content`.
 2. The route role is `evidence_candidate` and destination is `human_review`.
 3. Approval status is `pending_human_review`.
 4. Item and route provider IDs are present and identical.
 5. The intake ledger entry is a completed `intake.item.routed` event with a source run ID.
 6. Reviewer ID, decision ID, decision reason, and a valid decision timestamp are present.
+7. For a retrieved-source candidate, the recomputed raw artifact SHA-256 matches its preserved retrieval lineage.
+8. After the accepted relevance-contract migration, a retrieved-source candidate includes a validated canonical source-document reference, exact supporting anchors, AI question-relevance assessment, and model-invocation provenance tied to the same source and approved question.
 
 Collection leads and context items cannot pass this gate.
 
@@ -52,9 +54,9 @@ Approval creates `approved-evidence-snapshot.json` containing:
 
 - Snapshot and source-decision IDs.
 - Source intake run and canonical intake artifact reference.
-- Provider item ID and reconstructed provider-neutral evidence candidate.
+- Candidate ID and reconstructed evidence candidate, including canonical source-document reference, exact anchors, retrieved-source AI assessment, model provenance, and lineage when applicable.
 - Reviewer identity and admission time.
-- Raw provider artifact reference and SHA-256 over its exact bytes.
+- Referenced raw artifact and SHA-256 over its exact bytes.
 
 The command creates a new decision directory and refuses to reuse an existing decision ID. This provides the current non-overwrite boundary. Hash chaining, sealed manifests, and storage-level write protection remain later hardening.
 

@@ -7,6 +7,9 @@ Use this file as the index of active contracts.
 1. [Provider item role and provenance](provider-item-role-and-provenance.md)
 2. [Evidence admission](evidence-admission.md)
 3. [Research question and provider operation](research-question-and-provider-operation.md)
+4. [Source content retrieval](source-content-retrieval.md)
+5. [Retrieved source relevance and re-intake](retrieved-source-reintake.md)
+6. [Canonical source document and anchors](source-document-and-anchors.md)
 
 ## Planned contracts
 

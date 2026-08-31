@@ -1,6 +1,6 @@
 # Implemented Workflow Baseline
 
-Status: Research-question approval, bounded Seerist collection, one-item evidence intake, and explicit evidence admission completed and validated 2026-08-28.
+Status: Research-question approval, bounded Seerist collection, one-item evidence intake, secure one-source retrieval, lossless source canonicalization, human-input retrieved-source re-intake scaffolding, and evidence admission implemented and validated. The human-input relevance step was superseded by the accepted AI question-relevance design on 2026-08-31.
 
 The canonical target architecture in `memo-workflow.md` is not a fixed implementation contract. This completed slice remains the implementation baseline until a subsequent slice is accepted.
 
@@ -69,6 +69,52 @@ The command hashes the referenced raw provider artifact, refuses to overwrite an
 
 No real Seerist item was approved or rejected during implementation validation. The successful command integration test uses synthetic artifacts in an isolated temporary directory.
 
+## Implemented slice: one-source retrieval
+
+One approved Seerist collection lead -> validate exact listed HTTPS URL -> one fixed Firecrawl v2 scrape -> bounded raw response -> canonical resolved or unresolved receipt.
+
+Run from `app/`:
+
+```powershell
+npm run retrieve:source -- <intake-result.json> <exact-source-url>
+```
+
+The command validates intake route and approved research-question lineage before reading `FIRECRAWL_API_KEY`. It requests Markdown only, forces fresh retrieval, disables Firecrawl cache storage, requires TLS verification, performs no actions or LLM extraction, rejects cross-origin target redirects, and limits the response to 5 MiB.
+
+Firecrawl is recorded as the access provider while the publisher remains the source. Retrieved text is stored as untrusted content under the ignored run directory. `resolved` means content was captured; every result remains `approvalStatus: "not_requested"` and cannot enter evidence admission directly.
+
+The active boundary is `../02-Contracts/source-content-retrieval.md`. Deterministic and strict-TypeScript validation passes. On 2026-08-31, the selected NV lead completed one live exact-URL retrieval: Firecrawl returned HTTP 200, the final URL matched the requested publisher URL, and the canonical outcome was `resolved` with reason `content_retrieved`. Approval remained `not_requested`.
+
+## Implemented slice: canonical source document and anchors
+
+One resolved retrieval result -> verify canonical retrieval structure -> losslessly normalize line endings -> deterministic content-addressed segments -> exact UTF-8 source anchors.
+
+Run from `app/`:
+
+```powershell
+npm run canonicalize:source -- <source-retrieval-result.json>
+```
+
+The shared pure module is provider-neutral. Firecrawl-specific structure ends in the retrieval adapter; later relevance and assurance modules depend only on the canonical `SourceDocument` and `SourceAnchor` types. The command confines input to the run root, computes the retrieval-result checksum, writes one non-overwritable document, and emits controller-attributed events without source text.
+
+The active boundary is `../02-Contracts/source-document-and-anchors.md`. Focused tests cover deterministic reproduction, CRLF normalization, multilingual UTF-8 offsets, long-block splitting, altered-document and anchor rejection, provider-neutral document parity, path confinement, and non-overwrite behavior. The real NV retrieval produced a validated 76-segment document with an exact source-artifact checksum match. No AI assessment or evidence transition occurred.
+
+## Transitional slice: retrieved-source re-intake
+
+One resolved retrieval result + its verified source-lead lineage + a supplied relevance statement -> one new evidence candidate routed to pending human review.
+
+Run from `app/`:
+
+```powershell
+npm run reintake:source -- <source-retrieval-result.json> <analyst-id> <relevance-to-question> [candidate-id]
+```
+
+The command confines all referenced artifacts to the run root, verifies source-intake, request, raw-response, and retrieval-result checksums, and writes a non-overwritable canonical intake plus a body-free receipt. It cannot approve itself; `npm run review:evidence` remains a separate explicit decision.
+
+The command's human-authored relevance input is now transitional and must not be used for live re-intake. The accepted replacement first creates a lossless provider-neutral source document with exact content-addressed anchors, then runs one bounded AI assessment tied to the exact approved question. Deterministic code validates schema, anchors, model provenance, and artifact lineage. Only a validated positive proposal may enter pending human evidence admission.
+
+The revised boundary is `../02-Contracts/retrieved-source-reintake.md`. Existing focused tests cover the reusable lineage, pending-only routing, command persistence, and evidence-gate mechanics; the AI assessment cases remain the next implementation slice. The live NV retrieval has been canonicalized but not re-intaked or approved.
+
 ## KISS boundary
 
 Keep this slice single-item, local, deterministic, and function-first.
@@ -76,8 +122,8 @@ Keep this slice single-item, local, deterministic, and function-first.
 Do not add:
 
 1. Chat or another UI.
-2. AI classification or query generation.
-3. Firecrawl or source-page retrieval.
+2. General AI classification or query generation beyond the accepted one-source question-relevance assessment.
+3. Crawling, search, agentic extraction, browser actions, or multi-URL retrieval.
 4. Find, Sweep, Judge, or Write agents.
 5. Batch orchestration.
 6. A database or plugin framework.
@@ -121,6 +167,11 @@ Do not add:
 12. The earlier `intake-smoke-analysis-003` artifact is non-admissible because it predates mandatory research-question lineage.
 13. One approved four-query, sixteen-page Seerist discovery surfaced 50 unique source URLs across 22 clusters for the CIA Director Moscow question.
 14. Supported-API candidates provided close title-level counterparts for all eight human-supplied AskAnna citations, without depending on AskAnna's unsupported retrieval API.
+15. One-source retrieval preserves Firecrawl and publisher identity separately, records explicit redirect and target-status evidence, and cannot approve or intake its own output.
+16. The current retrieved-source re-intake proves artifact lineage and pending-only routing, but its human-authored relevance input is transitional and not approved for live use.
+17. The accepted next boundary makes AI responsible for a typed, source-grounded relevance proposal tied to the approved question; deterministic code validates it and humans retain evidence-admission authority.
+18. Scalability must preserve the complete source and mandatory `Find -> Sweep -> Judge -> Write`; reuse, per-source isolation, checksum deduplication, and bounded scheduling provide throughput without lowering the final intelligence standard.
+19. Canonical source documents give retrieved and provider-captured content one downstream shape; a new source mechanism needs only a narrow adapter when the common contract remains satisfied.
 
 ## Legacy PoC input rule
 

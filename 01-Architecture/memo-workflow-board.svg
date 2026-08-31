@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1400" viewBox="0 0 2400 1400" role="img" aria-labelledby="title description">
   <title id="title">Threat intelligence memo workflow</title>
-  <desc id="description">Canonical version 2 evidence-first threat intelligence workflow showing bounded Seerist collection, provider role classification, human evidence admission, four-goal source assurance, external claim synthesis, separate Vestas context and memo-standard authorities, quality verification, and human publication approval.</desc>
+  <desc id="description">Canonical version 2.2 evidence-first threat intelligence workflow showing bounded Seerist collection, lossless provider-neutral source documents, AI question-relevance proposals, deterministic pending-candidate validation, human evidence admission, four-goal source assurance, external claim synthesis, separate Vestas context and memo-standard authorities, quality verification, and human publication approval.</desc>
 
   <defs>
     <style>
@@ -47,7 +47,7 @@
 
   <rect class="canvas" x="0" y="0" width="2400" height="1400" />
   <text class="page-title" x="48" y="48">Threat intelligence memo workflow</text>
-  <text class="page-subtitle" x="48" y="76">Version 2 | Evidence-first collection, stage-owned source assurance, separated context, and standard-governed output</text>
+  <text class="page-subtitle" x="48" y="76">Version 2.2 | Lossless source anchors, AI triage, human evidence admission, and full CTI assurance</text>
 
   <rect class="det-card" x="1696" y="32" width="16" height="16" />
   <text class="caption" x="1720" y="45">Deterministic</text>
@@ -64,7 +64,7 @@
   <rect class="panel" x="64" y="128" width="552" height="936" />
   <rect class="panel-header" x="64" y="128" width="552" height="72" />
   <text class="panel-title" x="88" y="158">1. Intent, collection, and admission</text>
-  <text class="panel-subtitle" x="88" y="181">Provider records are classified before they can become evidence</text>
+  <text class="panel-subtitle" x="88" y="181">AI proposes question relevance; deterministic code and humans retain state authority</text>
 
   <rect class="human-card" x="88" y="224" width="504" height="112" />
   <text class="card-title" x="112" y="252">Approve scope and research questions</text>
@@ -89,34 +89,37 @@
   <text class="caption" x="280" y="656">Pulse, risk, background, future -> orient</text>
   <text class="small" x="112" y="684">Endpoint + source type + content depth + lineage determine role.</text>
 
-  <rect class="context-card" x="88" y="728" width="504" height="112" />
-  <text class="card-title" x="112" y="756">Resolve collection leads</text>
-  <text class="body" x="112" y="782">Cluster ID | source URL | provider record</text>
-  <text class="caption" x="112" y="806">One hop only; unresolved leads remain explicit collection gaps.</text>
+  <rect class="det-card" x="88" y="728" width="504" height="88" />
+  <text class="card-title" x="112" y="756">Resolve + canonicalize source</text>
+  <text class="body" x="112" y="784">One source hop | lossless document | stable hash anchors</text>
 
-  <rect class="human-card" x="88" y="864" width="504" height="168" />
-  <text class="card-title" x="112" y="892">Evidence readiness + human gate</text>
-  <text class="body" x="112" y="918">Content sufficiency | identity | lineage | trace | limitations</text>
-  <text class="caption" x="112" y="944">Only ready or qualified evidence candidates may be selected.</text>
-  <text class="caption" x="112" y="968">Context and unresolved leads remain attached but are never admitted.</text>
-  <text class="small" x="112" y="1000">Output: immutable, individually approved evidence snapshot</text>
-  <rect class="tested-chip" x="480" y="1008" width="88" height="8" />
+  <rect class="agent-card" x="88" y="836" width="504" height="96" />
+  <text class="card-title" x="112" y="864">AI question-relevance proposal</text>
+  <text class="body" x="112" y="890">Relevant | partial | not relevant | uncertain</text>
+  <text class="caption" x="112" y="914">Code validates lineage and exact anchors; AI has no approval authority.</text>
+
+  <rect class="human-card" x="88" y="952" width="504" height="88" />
+  <text class="card-title" x="112" y="980">Human evidence admission</text>
+  <text class="body" x="112" y="1006">Review anchored proposal | approve | reject | revise</text>
+  <text class="caption" x="112" y="1028">Only approved candidates enter source assurance.</text>
+  <rect class="tested-chip" x="480" y="1032" width="88" height="8" />
 
   <path class="primary-line" d="M 340 336 L 340 358" />
   <path class="primary-line" d="M 340 496 L 340 518" />
-  <path class="authority-line" d="M 340 704 L 340 726" />
-  <path class="primary-line" d="M 340 840 L 340 862" />
-  <path class="feedback-line" d="M 88 784 L 48 784 L 48 612 L 86 612" />
+  <path class="primary-line" d="M 340 704 L 340 726" />
+  <path class="primary-line" d="M 340 816 L 340 834" />
+  <path class="primary-line" d="M 340 932 L 340 950" />
+  <path class="feedback-line" d="M 88 772 L 48 772 L 48 612 L 86 612" />
 
   <!-- PANEL 2: FOUR-GOAL SOURCE ASSURANCE -->
   <rect class="panel" x="640" y="128" width="704" height="936" />
   <rect class="panel-header" x="640" y="128" width="704" height="72" />
   <text class="panel-title" x="664" y="158">2. Stage-owned source assurance</text>
-  <text class="panel-subtitle" x="664" y="181">Four bounded deterministic goal loops own execution and handoff</text>
+  <text class="panel-subtitle" x="664" y="181">Four bounded, controller-owned goal loops preserve semantic and audit checks</text>
 
   <rect class="artifact-card" x="664" y="224" width="656" height="64" />
-  <text class="card-title" x="688" y="250">Approved evidence snapshot</text>
-  <text class="caption" x="688" y="272">Stable ID | captured content | provenance | permitted claim kinds | limitations</text>
+  <text class="card-title" x="688" y="250">Approved evidence snapshot + canonical source</text>
+  <text class="caption" x="688" y="272">Complete content | stable anchors | provenance | permitted claim kinds | limitations</text>
 
   <rect class="agent-card" x="664" y="320" width="312" height="136" />
   <text class="card-title" x="688" y="348">Find goal loop</text>

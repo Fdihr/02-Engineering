@@ -119,13 +119,13 @@
   <rect class="agent-chip" x="88" y="552" width="8" height="448" />
   <text class="card-title" x="112" y="582">Find goal loop</text>
   <text class="section-title" x="112" y="614">Input</text>
-  <text class="caption" x="112" y="638">Approved captured source + approved questions</text>
+  <text class="caption" x="112" y="638">Approved snapshot + complete canonical source + questions</text>
   <text class="section-title" x="112" y="670">Frozen goal</text>
   <text class="body" x="112" y="694">Extract all supportable in-scope observations.</text>
   <line class="divider" x1="112" y1="714" x2="584" y2="714" />
   <text class="section-title" x="112" y="742">Blocking conditions</text>
   <text class="caption" x="112" y="768">Valid schema and approved question IDs</text>
-  <text class="caption" x="112" y="792">Exact support excerpt + resolvable locator</text>
+  <text class="caption" x="112" y="792">Exact support quote + validated SourceAnchor</text>
   <text class="caption" x="112" y="816">Permitted observation kind; no external facts</text>
   <text class="caption" x="112" y="840">Every question has observation or gap disposition</text>
   <line class="divider" x1="112" y1="864" x2="584" y2="864" />
@@ -138,7 +138,7 @@
   <rect class="agent-chip" x="648" y="552" width="8" height="448" />
   <text class="card-title" x="672" y="582">Sweep goal loop</text>
   <text class="section-title" x="672" y="614">Input</text>
-  <text class="caption" x="672" y="638">Same source + questions in a fresh context</text>
+  <text class="caption" x="672" y="638">Same complete canonical source + questions; fresh context</text>
   <text class="section-title" x="672" y="670">Frozen goal</text>
   <text class="body" x="672" y="694">Independently repeat the coverage pass.</text>
   <line class="divider" x1="672" y1="714" x2="1144" y2="714" />

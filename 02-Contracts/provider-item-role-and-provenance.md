@@ -71,6 +71,8 @@ An evidence candidate requires a provider item ID. Classification uses endpoint,
 
 No intake output type contains an `approved` destination or status. Approval requires the separate explicit human transition defined by the evidence-admission contract.
 
+The current direct `evidence_candidate -> human_review` route is the implemented baseline. The accepted target inserts provider-neutral source canonicalization and AI question-relevance assessment before the same human gate. That migration changes the review package, not the role facts extracted by this contract.
+
 ## Expected failures
 
 Validation and selection return discriminated `Result<T, E>` values with literal errors. Current failures cover invalid selections, unsupported providers or endpoints, invalid retrieval time, missing or late research-question approval, missing raw lineage, invalid items, missing required provider IDs or source types, invalid feature collections, missing item IDs, missing selected items, and duplicate IDs.

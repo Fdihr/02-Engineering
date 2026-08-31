@@ -100,6 +100,89 @@ test("explicit rejection records the decision without creating a snapshot", () =
   assert.equal(result.value.event.eventType, "evidence.admission.rejected");
 });
 
+test("explicit approval preserves retrieved-source assessment and lineage", () => {
+  const retrievedIntake = {
+    item: {
+      provider: "source_retrieval",
+      endpoint: "https://api.firecrawl.dev/v2/scrape",
+      providerItemId: "retrieved-source-001",
+      sourceType: "publisher_source",
+      retrievedAt: "2026-08-28T09:00:05.000Z",
+      rawArtifactRef: "runs/retrieval-001/raw-firecrawl-response.json",
+      sourceLinks: ["https://news.example/report"],
+      referenceCount: 1,
+      hasSourceMetadata: true,
+      researchQuestion: intake.item.researchQuestion,
+      role: "evidence_candidate",
+      contentCompleteness: "captured_content",
+      source: {
+        requestedUrl: "https://news.example/report",
+        finalUrl: "https://news.example/report",
+        publisherHost: "news.example",
+        title: "Publisher report"
+      },
+      retrievalLineage: {
+        retrievalId: "retrieval-001",
+        sourceLeadProviderItemId: "lead-001",
+        sourceIntakeArtifactRef: "runs/intake-001/intake-result.json",
+        sourceIntakeArtifactSha256: "b".repeat(64),
+        retrievalArtifactRef: "runs/retrieval-001/source-retrieval-result.json",
+        retrievalArtifactSha256: "c".repeat(64),
+        requestArtifactRef: "runs/retrieval-001/retrieval-request.json",
+        requestArtifactSha256: "d".repeat(64),
+        rawArtifactRef: "runs/retrieval-001/raw-firecrawl-response.json",
+        rawArtifactSha256: "e".repeat(64)
+      },
+      analystAssessment: {
+        actorType: "human",
+        analystId: "analyst-002",
+        assessedAt: "2026-08-28T09:30:00.000Z",
+        researchQuestionId: intake.item.researchQuestion.id,
+        relevanceToQuestion: "The publisher report directly addresses the approved question."
+      },
+      limitations: ["Retrieved content remains untrusted until reviewed."]
+    },
+    decision: {
+      ...intake.decision,
+      providerItemId: "retrieved-source-001"
+    },
+    ledgerEntry: {
+      ...intake.ledgerEntry,
+      artifactRef: "runs/retrieval-001/raw-firecrawl-response.json"
+    }
+  };
+  const result = reviewEvidence({
+    ...request,
+    decision: "approved",
+    rawArtifactSha256: "e".repeat(64),
+    intake: retrievedIntake
+  });
+
+  assert.equal(result.ok, true);
+  if (!result.ok || result.value.outcome !== "approved") {
+    return;
+  }
+  assert.equal(result.value.snapshot.item.provider, "source_retrieval");
+  if (result.value.snapshot.item.provider === "source_retrieval") {
+    assert.equal(
+      result.value.snapshot.item.analystAssessment.researchQuestionId,
+      intake.item.researchQuestion.id
+    );
+    assert.equal(result.value.snapshot.item.retrievalLineage.retrievalId, "retrieval-001");
+  }
+
+  const changedRawArtifact = reviewEvidence({
+    ...request,
+    decision: "approved",
+    rawArtifactSha256: "f".repeat(64),
+    intake: retrievedIntake
+  });
+  assert.deepEqual(changedRawArtifact, {
+    ok: false,
+    error: "RAW_ARTIFACT_SHA256_MISMATCH"
+  });
+});
+
 test("collection leads cannot pass the evidence gate", () => {
   const result = reviewEvidence({
     ...request,

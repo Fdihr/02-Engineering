@@ -1,8 +1,8 @@
 # Threat Intelligence Memo Workflow
 
-Version: 2
+Version: 2.2
 Status: Canonical target architecture. Implementation remains slice-driven.
-Last updated: 2026-08-28
+Last updated: 2026-08-31
 Visual: `../01-Architecture/memo-workflow-board.svg`
 Source assurance detail: `../01-Architecture/source-assurance-goal-loops.svg`
 Seerist capability visual: `../01-Architecture/seerist-api-capability-board.svg`
@@ -19,7 +19,7 @@ Produce decision-grade threat intelligence from heterogeneous Seerist material w
 4. Vestas context that can establish organizational relevance but cannot rewrite external facts.
 5. A historical memo standard that governs quality and presentation but is never evidence.
 
-The workflow retains the four-goal `Find -> Sweep -> Judge -> Write` assurance sequence for every human-approved, claim-bearing source. It does not run that sequence against hotspots, generated summaries, unresolved links, scores, or other context-only records.
+The workflow retains the four-goal `Find -> Sweep -> Judge -> Write` assurance sequence for every human-approved, claim-bearing source. Before that human gate, AI performs bounded source-to-question relevance triage and may propose a candidate; it cannot admit evidence. The workflow does not run source assurance against hotspots, generated summaries, unresolved links, scores, or other context-only records.
 
 ## Design status
 
@@ -28,7 +28,7 @@ This is the canonical target architecture, not the current implementation contra
 The retired V1 workflow remains available in `memo-workflow-retired-v1.md` for historical comparison. Version 2 changes the collection and quality model in four material ways:
 
 1. Provider records are classified before they are called evidence.
-2. Collection leads are resolved before human evidence approval.
+2. Collection leads are resolved and assessed by AI against the approved research question before human evidence approval.
 3. External facts, Vestas relevance, and editorial standards have separate authority domains.
 4. Quality is enforced through typed assurance stages and blocking criteria rather than a single model judgment or composite score.
 
@@ -38,12 +38,27 @@ The retired V1 workflow remains available in `memo-workflow-retired-v1.md` for h
 2. Vestas context determines why supported external facts may matter to Vestas.
 3. The memo standard determines how approved intelligence is communicated.
 4. No authority may substitute for another.
-5. Model output may propose semantic artifacts but cannot advance workflow state.
+5. Model output may propose typed semantic artifacts; deterministic validation may persist them only in proposed or pending state, never approved state.
 6. Deterministic code owns permissions, budgets, state transitions, artifact identity, validation, and persistence.
-7. Human approval is required before claim-bearing analysis and before publication.
+7. Human approval is required before claim-bearing source assurance and before publication; bounded AI question-relevance triage is advisory and precedes admission.
 8. Raw provider responses are immutable inputs and remain traceable from every downstream claim.
 9. Source count never substitutes for source independence.
 10. Uncertainty, contradictions, failed work, and unanswered questions remain visible.
+
+## Quality-preserving scale
+
+Scaling must not change the intelligence standard or final memo contract:
+
+1. Source-specific differences end at a narrow adapter into one lossless canonical source-document contract.
+2. Every model assertion about source content uses an exact, content-addressed source anchor.
+3. Human evidence admission remains before claim-bearing source assurance and receives the source, provenance, AI proposal, and exact supporting anchors.
+4. Every admitted source retains independent `Find`, blind `Sweep`, `Judge`, and `Write` under the current quality policy.
+5. Cross-source challenge, source-dependency analysis, calibrated confidence, alternatives, contradictions, caveats, and gaps remain mandatory.
+6. Vestas relevance retains dual lineage to accepted external claims and governed organizational context.
+7. Memo verification and human publication approval remain blocking gates.
+8. Throughput improvements come from immutable per-source state, checksum deduplication, bounded scheduling, and reusable contracts, not reduced evidence depth.
+
+The canonical source layer changes representation and addressing only. The complete normalized source and original artifact remain available, and downstream outputs retain their existing semantic requirements.
 
 ## Authority domains
 
@@ -62,11 +77,16 @@ flowchart LR
     Request[Memo request] --> Scope[Approve scope and questions]
     Scope --> Collect[Bounded Seerist collection]
     Collect --> Classify[Classify provider role]
-    Classify -->|Evidence candidate| EvidenceReview[Evidence readiness review]
+  Classify -->|Captured candidate| Canonicalize[Canonical source document + anchors]
     Classify -->|Collection lead| Resolve[Resolve cluster, source, or URL]
     Classify -->|Context| ProviderContext[Provider context pack]
-    Resolve --> Classify
-    EvidenceReview --> HumanEvidence[Human evidence gate]
+  Resolve --> Canonicalize
+  Canonicalize --> QuestionRelevance[AI question-relevance assessment]
+  QuestionRelevance --> CandidateGate[Validate and persist proposed candidate]
+  CandidateGate -->|Relevant or partial| EvidenceReview[Evidence readiness review]
+  CandidateGate -->|Not relevant| Excluded[Audited exclusion]
+  CandidateGate -->|Uncertain| Exception[Human exception triage]
+  EvidenceReview --> HumanEvidence[Human evidence admission]
     HumanEvidence --> Assurance[Find -> Sweep -> Judge -> Write]
     Assurance --> Synthesis[Build -> Challenge -> Adjudicate]
     Synthesis --> Relevance[Vestas relevance mapping]
@@ -350,7 +370,7 @@ This policy is based on observed behavior and remains open to new source types.
 | Pulse score or forecast | Context | Never treat a derived score as independent event support |
 | Future event | Context | Preserve anticipated or scheduled semantics |
 
-Classification uses endpoint, source type, content depth, provenance, and explicit limitations. It never uses persuasive wording, topical relevance, model confidence, or provider scores to determine eligibility.
+Classification uses endpoint, source type, content depth, provenance, and explicit limitations. It never uses persuasive wording, topical relevance, model confidence, or provider scores to determine structural role. Question relevance is assessed separately against the approved research question.
 
 ## Lead resolution
 
@@ -377,18 +397,47 @@ Rules:
 
 # Part 4: Evidence Readiness and Human Admission
 
+## AI question-relevance assessment
+
+Every captured candidate and every resolved publisher source is assessed against the exact approved research question before entering the human evidence queue. This is source-to-question triage, not Vestas relevance mapping.
+
+```ts
+type QuestionRelevanceAssessment = {
+  id: string;
+  evidenceCandidateId: string;
+  researchQuestionId: string;
+  sourceArtifactRef: string;
+  assessedAt: string;
+  modelInvocationRef: string;
+  verdict: "relevant" | "partially-relevant" | "not-relevant" | "uncertain";
+  rationale: string;
+  support: Array<{
+    anchor: SourceAnchor;
+    relationToQuestion: string;
+  }>;
+  limitations: string[];
+};
+```
+
+The model receives only the approved question, the complete canonical source document, provenance, and retrieval limitations. It does not receive Vestas context or historical memos. Every positive rationale must resolve through a stable `SourceAnchor` defined by the active [canonical source document and anchors](../02-Contracts/source-document-and-anchors.md) contract and the exact research-question ID. Prompt-like source text remains untrusted input and cannot alter the goal or schema.
+
+Deterministic code validates schema, source and question lineage, model-invocation provenance, allowed verdicts, and exact anchor resolution. These checks establish structure and source presence, not semantic relevance. `relevant` and `partially-relevant` assessments may become pending evidence proposals. `not-relevant` assessments are retained as audited exclusions. `uncertain` assessments enter a bounded human exception queue rather than forcing manual relevance writing for every source.
+
+The assessment cannot approve evidence, start source assurance, expand collection scope, or establish Vestas relevance. Humans review the source and AI proposal at evidence admission; they do not need to author the initial relevance rationale.
+
 ## Readiness assessment
 
 ```ts
 type EvidenceReadiness = {
   evidenceCandidateId: string;
+  questionRelevanceAssessmentId: string;
   verdict: "ready" | "qualified" | "not-ready";
   checks: {
     contentSufficient: boolean;
     providerIdentityPresent: boolean;
     sourceLineagePresent: boolean;
     retrievalTracePresent: boolean;
-    questionRelationPresent: boolean;
+    questionRelationGrounded: boolean;
     limitationsExplicit: boolean;
   };
   permittedClaimKinds: EvidenceCandidate["permittedClaimKinds"];
@@ -396,7 +445,7 @@ type EvidenceReadiness = {
 };
 ```
 
-`qualified` means the content can support only narrow, explicitly limited statements. `not-ready` items return to lead resolution or remain as collection gaps.
+`qualified` means the content can support only narrow, explicitly limited statements. `not-ready` items return to lead resolution or remain as collection gaps. Readiness is structural and deterministic; it does not replace the model's semantic relevance proposal or the human admission decision.
 
 ## Evidence review package
 
@@ -444,7 +493,7 @@ type EvidenceAdmissionDecision = {
 };
 ```
 
-Approval creates an immutable evidence snapshot. Context and unresolved leads remain attached to the run but are excluded from the source-assurance queue.
+Approval creates an immutable evidence snapshot containing the canonical source-document reference, reviewed question-relevance assessment, and exact supporting anchors. Humans approve a source for claim-bearing analysis, not the truth of every future claim. They may approve, reject, or request revision, but routine operation does not require them to write the source-to-question rationale. Context, audited exclusions, uncertain exceptions, and unresolved leads remain attached to the run but are excluded from the source-assurance queue unless explicitly resolved.
 
 # Part 5: Four-Goal Source Assurance
 
@@ -652,7 +701,7 @@ The pseudocode shows ownership and ordering, not a settled shared API. When impl
 
 | Stage | Frozen goal | Blocking completion conditions | Committed output and consumer |
 | --- | --- | --- | --- |
-| `Find` | Extract all supportable, in-scope observations relevant to the approved questions | Valid schema; every observation has a permitted kind, exact support, resolvable locator, valid question IDs, and no unsupported text; every approved question has a coverage or gap disposition | `SourceExtraction` for `Judge` after `Sweep` completes |
+| `Find` | Extract all supportable, in-scope observations relevant to the approved questions | Valid schema; every observation has a permitted kind, exact support, validated `SourceAnchor`, valid question IDs, and no unsupported text; every approved question has a coverage or gap disposition | `SourceExtraction` for `Judge` after `Sweep` completes |
 | `Sweep` | Independently repeat extraction to reduce omission and anchoring risk | Same conditions as `Find`; fresh context; no access to any `Find` attempt, output, observation, or retry feedback | Independent `SourceExtraction` for `Judge` |
 | `Judge` | Reconcile both extractions against the original source | Every input observation is disposed exactly once; every accepted observation resolves to source support; disagreements and duplicates are explicit; every judgment cites accepted observations; all confidence factors, caveats, alternatives, and gaps are present | `AdjudicatedSourceBrief` for `Write` |
 | `Write` | Produce a faithful source note from the adjudicated brief | Every finding resolves to accepted observations or judgments; no unsupported proposition; confidence is not raised; all material caveats, contradictions, and gaps are preserved; every question has a coverage disposition | `SourceIntelligenceNote` for external synthesis |
@@ -664,17 +713,12 @@ The pseudocode shows ownership and ordering, not a settled shared API. When impl
 ```ts
 type ExtractionPass = "find" | "sweep";
 
-type SourceLocator = {
-  kind: "page" | "paragraph" | "section" | "timestamp" | "text-offset";
-  value: string;
-};
-
 type ExtractedObservation = {
   id: string;
   researchQuestionIds: string[];
   statement: string;
   kind: "reported-fact" | "source-allegation" | "provider-assessment" | "forecast";
-  sourceLocator: SourceLocator;
+  sourceAnchor: SourceAnchor;
   originalLanguage: string;
   originalSupportExcerpt: string;
   supportTranslationEnglish?: string;
@@ -697,7 +741,7 @@ type SourceExtraction = {
 };
 ```
 
-An extraction cannot contain an observation without a source locator and direct support. The source synopsis is descriptive and never substitutes for the atomic observations.
+An extraction cannot contain an observation without a stable source anchor and direct support. The source synopsis is descriptive and never substitutes for the atomic observations. Every pass receives the complete canonical source document; segmentation is an addressing mechanism, not a content-reduction step.
 
 ### Find and Sweep goal checks
 
@@ -705,7 +749,7 @@ The observer must be able to compute or independently verify:
 
 1. Every `researchQuestionId` belongs to the approved immutable question set.
 2. Every support excerpt exists exactly in the captured source or has a recorded extraction-normalization rule.
-3. Every locator resolves inside the captured source boundary.
+3. Every anchor resolves exactly inside the immutable canonical source document.
 4. Every observation kind is permitted by the evidence-readiness decision.
 5. No observation relies on provider context, Vestas context, historical memos, model memory, or another source.
 6. Every approved question appears in either an observation or `unansweredQuestionIds`.
@@ -745,7 +789,7 @@ type AdjudicatedSourceBrief = {
     derivedFromObservationIds: string[];
     researchQuestionIds: string[];
     kind: ExtractedObservation["kind"];
-    sourceLocator: SourceLocator;
+    sourceAnchor: SourceAnchor;
     supportExcerpt: string;
     qualification?: string;
   }>;
@@ -1168,36 +1212,85 @@ type MemoPublicationDecision = {
 
 Revision routing returns to the stage that owns the defect. Reopened stages create new immutable artifact versions.
 
-# Part 11: State Machine
+# Part 11: State Machines
 
-| State | Owner | Permitted next states |
+The workflow separates source-item state from memo-run state. Each source has its own state stream and immutable artifacts. A run aggregates committed source outcomes but does not rewrite them. This supports sequential processing first and bounded concurrency later without changing stage contracts.
+
+## Source-item state machine
+
+| State | Transition authority | Permitted next states |
 | --- | --- | --- |
-| `memo_requested` | Human | `scope_proposed`, `cancelled` |
-| `scope_proposed` | Semantic stage | `scope_approved`, `scope_revision`, `cancelled` |
-| `scope_approved` | Human | `questions_proposed` |
-| `questions_proposed` | Semantic stage | `questions_approved`, `questions_revision` |
-| `questions_approved` | Human | `collection_planned` |
-| `collection_planned` | Deterministic code | `collecting`, `planning_revision`, `failed` |
-| `collecting` | Deterministic code | `items_classified`, `budget_exhausted`, `failed` |
-| `items_classified` | Deterministic code | `resolving_leads`, `evidence_review_ready` |
-| `resolving_leads` | Deterministic code | `items_classified`, `evidence_review_ready`, `budget_exhausted` |
-| `evidence_review_ready` | Deterministic code | `evidence_approved`, `evidence_revision`, `cancelled` |
-| `evidence_approved` | Human | `source_assurance_ready` |
-| `source_assurance_ready` | Deterministic code | `source_assurance_running` |
-| `source_assurance_running` | Deterministic code | `external_synthesis_ready`, `source_assurance_partial`, `failed` |
-| `external_synthesis_ready` | Deterministic code | `external_synthesis_running` |
-| `external_synthesis_running` | Deterministic code | `vestas_relevance_ready`, `failed` |
-| `vestas_relevance_ready` | Deterministic code | `vestas_relevance_running`, `memo_drafting` |
-| `vestas_relevance_running` | Deterministic code | `memo_drafting`, `failed` |
-| `memo_drafting` | Deterministic code | `memo_verifying`, `failed` |
-| `memo_verifying` | Deterministic code | `publication_review`, `memo_revision`, `verification_escalated` |
-| `publication_review` | Human | `approved`, `revision_requested`, `rejected` |
-| `approved` | Human | Terminal |
-| `rejected` | Human | Terminal |
-| `cancelled` | Human or policy | Terminal |
-| `failed` | Deterministic code | Retry from last valid checkpoint or `cancelled` |
+| `source_captured` | Controller | `source_canonicalizing`, `source_failed` |
+| `source_canonicalizing` | Controller | `source_document_ready`, `source_failed` |
+| `source_document_ready` | Controller | `question_relevance_ready` |
+| `question_relevance_ready` | Controller | `question_relevance_running` |
+| `question_relevance_running` | Controller after typed model output | `relevance_proposed`, `relevance_excluded`, `relevance_exception`, `source_failed` |
+| `relevance_exception` | Human exception gate | `question_relevance_ready`, `relevance_proposed`, `relevance_excluded`, `source_cancelled` |
+| `relevance_proposed` | Controller | `evidence_review_ready` |
+| `evidence_review_ready` | Human evidence gate | `evidence_approved`, `evidence_rejected`, `evidence_revision`, `source_cancelled` |
+| `evidence_revision` | Controller following human return target | `source_document_ready`, `question_relevance_ready`, `relevance_excluded`, `source_cancelled` |
+| `evidence_approved` | Controller | `find_ready` |
+| `find_ready` | Controller | `find_running` |
+| `find_running` | Controller after validated model output | `sweep_ready`, `assurance_revision`, `source_failed` |
+| `sweep_ready` | Controller | `sweep_running` |
+| `sweep_running` | Controller after validated model output | `judge_ready`, `assurance_revision`, `source_failed` |
+| `judge_ready` | Controller | `judge_running` |
+| `judge_running` | Controller after validated model output | `write_ready`, `assurance_revision`, `source_failed` |
+| `write_ready` | Controller | `write_running` |
+| `write_running` | Controller after validated model output | `source_note_ready`, `assurance_revision`, `source_failed` |
+| `assurance_revision` | Controller under frozen retry policy | `find_ready`, `sweep_ready`, `judge_ready`, `write_ready`, `source_failed` |
+| `relevance_excluded` | Controller | Terminal audited exclusion |
+| `evidence_rejected` | Human evidence gate | Terminal rejected source |
+| `source_note_ready` | Controller | Terminal committed input to run synthesis |
+| `source_failed` | Controller | Terminal source gap or new explicitly authorized attempt |
+| `source_cancelled` | Human or policy | Terminal |
 
-No model response is itself a state transition. A transition occurs only after deterministic validation and event emission.
+`Find`, blind `Sweep`, `Judge`, and `Write` remain mandatory for every admitted source under the current quality policy. A future selective-assurance policy requires measured evidence that it preserves output quality and a separately approved contract change.
+
+## Memo-run state machine
+
+| State | Transition authority | Permitted next states |
+| --- | --- | --- |
+| `memo_requested` | Human | `scope_proposed`, `run_cancelled` |
+| `scope_proposed` | Controller after typed model output | `scope_review` |
+| `scope_review` | Human scope gate | `scope_approved`, `scope_revision`, `run_cancelled` |
+| `scope_revision` | Controller | `scope_proposed`, `run_cancelled` |
+| `scope_approved` | Controller | `questions_proposed` |
+| `questions_proposed` | Controller after typed model output | `questions_review` |
+| `questions_review` | Human question gate | `questions_approved`, `questions_revision`, `run_cancelled` |
+| `questions_revision` | Controller | `questions_proposed`, `run_cancelled` |
+| `questions_approved` | Controller | `collection_planned` |
+| `collection_planned` | Controller | `collecting`, `planning_revision`, `run_failed` |
+| `planning_revision` | Controller under approved scope | `collection_planned`, `run_cancelled` |
+| `collecting` | Controller | `items_classified`, `collection_partial`, `run_failed` |
+| `collection_partial` | Human or policy exception gate | `items_classified`, `planning_revision`, `run_cancelled` |
+| `items_classified` | Controller | `sources_processing`, `no_admissible_evidence`, `run_failed` |
+| `sources_processing` | Controller aggregating source states | `source_decisions_pending`, `no_admissible_evidence`, `run_failed` |
+| `source_decisions_pending` | Controller waiting on source gates | `source_assurance_running`, `no_admissible_evidence`, `run_cancelled` |
+| `source_assurance_running` | Controller aggregating source states | `external_synthesis_ready`, `source_assurance_partial`, `no_usable_sources`, `run_failed` |
+| `source_assurance_partial` | Human or policy exception gate | `external_synthesis_ready`, `collection_planned`, `run_cancelled` |
+| `external_synthesis_ready` | Controller | `external_synthesis_running` |
+| `external_synthesis_running` | Controller after typed model output | `vestas_relevance_ready`, `synthesis_revision`, `run_failed` |
+| `synthesis_revision` | Controller under frozen retry policy | `external_synthesis_ready`, `source_assurance_running`, `run_failed` |
+| `vestas_relevance_ready` | Controller | `vestas_relevance_running`, `memo_drafting` |
+| `vestas_relevance_running` | Controller after typed model output | `memo_drafting`, `vestas_relevance_revision`, `run_failed` |
+| `vestas_relevance_revision` | Controller under frozen retry policy | `vestas_relevance_ready`, `external_synthesis_ready`, `run_failed` |
+| `memo_drafting` | Controller after typed model output | `memo_verifying`, `run_failed` |
+| `memo_verifying` | Controller after deterministic and typed semantic checks | `publication_review`, `memo_revision`, `verification_escalated`, `run_failed` |
+| `memo_revision` | Controller routed by typed finding ownership | `memo_drafting`, `vestas_relevance_ready`, `external_synthesis_ready`, `run_failed` |
+| `verification_escalated` | Human exception gate | `publication_review`, `memo_revision`, `run_rejected` |
+| `publication_review` | Human publication gate | `run_published`, `publication_revision`, `run_rejected` |
+| `publication_revision` | Controller following human issue type | `memo_drafting`, `vestas_relevance_ready`, `external_synthesis_ready`, `collection_planned`, `run_rejected` |
+| `no_admissible_evidence` | Human or policy exception gate | `collection_planned`, `run_cancelled` |
+| `no_usable_sources` | Human or policy exception gate | `collection_planned`, `run_cancelled` |
+| `run_published` | Human publication gate | Terminal |
+| `run_rejected` | Human publication or exception gate | Terminal |
+| `run_cancelled` | Human or policy | Terminal |
+| `run_failed` | Controller | Resume from the last valid checkpoint through an explicitly recorded attempt, or `run_cancelled` |
+
+No model response is itself a state transition. “Controller after typed model output” means code validates structure, references, policy, budgets, and lineage before emitting the transition; it does not mean code has proven the model's semantic judgment true.
+
+Per-source event streams use source IDs as correlation keys. The memo-run stream records only aggregate checkpoints and references committed source events. This prevents source-level retries from rewriting run history and permits bounded concurrency without changing output semantics.
 
 # Part 12: Artifact and Audit Model
 
@@ -1216,6 +1309,10 @@ runs/<runId>/
     pagination-assessments.json
     classified-items.json
     lead-resolutions.json
+  sources/<sourceItemId>/
+    source-document.json
+    question-relevance-assessment.json
+    source-events.jsonl
   evidence/
     readiness.json
     review-package.json
@@ -1265,14 +1362,16 @@ Events never contain credentials, full provider content, full prompts, hidden ch
 The architecture is implemented through narrow, testable slices:
 
 1. One-item provider role classification and deterministic routing.
-2. One approved full-content item through `Find -> Sweep -> Judge -> Write`.
-3. Sequential execution over multiple approved evidence items.
-4. External `Build -> Challenge -> Adjudicate` synthesis with source-dependency tracking.
-5. Read-only Vestas context pack and dual-lineage relevance assessment.
-6. Curated memo standard pack from approved historical memos.
-7. Canonical memo writer, deterministic renderer, and independent verifier.
-8. Human publication decision and targeted revision routing.
-9. Audit hardening, recovery, and sealed manifests only after the functional flow works.
+2. One captured source through lossless canonicalization and exact anchor validation.
+3. One canonical source through bounded AI question relevance, deterministic proposal validation, and human evidence admission.
+4. One approved source through mandatory `Find -> Sweep -> Judge -> Write`.
+5. Sequential execution over multiple approved evidence items using independent source state streams.
+6. External `Build -> Challenge -> Adjudicate` synthesis with source-dependency tracking.
+7. Read-only Vestas context pack and dual-lineage relevance assessment.
+8. Curated memo standard pack from approved historical memos.
+9. Canonical memo writer, deterministic renderer, and independent verifier.
+10. Human publication decision and targeted revision routing.
+11. Bounded concurrency, audit hardening, recovery, and sealed manifests only after sequential behavior works.
 
 Each slice reuses plain functions and the dependency boundaries in `script-architecture.md`. Provider frameworks, plugin registries, dependency-injection containers, event buses, generic repositories, and parallel orchestration remain deferred until repeated working code demonstrates the need.
 
@@ -1280,9 +1379,9 @@ Each slice reuses plain functions and the dependency boundaries in `script-archi
 
 1. Provider retention and derived-fixture policy.
 2. Exact evidence-readiness thresholds for each observed source type.
-3. Source-content retrieval mechanism for summary-only links.
-4. Model and prompt configurations for each assurance goal.
-5. Numeric collection, model-call, retry, and token budgets.
+3. Version 1 source-segmentation limits for long paragraphs, tables, and malformed Markdown.
+4. Model and prompt configurations for relevance and each assurance goal.
+5. Numeric collection, model-call, retry, token, and bounded-concurrency budgets.
 6. Governance, classification, and freshness rules for the Vestas context pack.
 7. Selection, curation, approval, and regression process for historical memo standards.
 8. Required output formats and audience-specific standard-pack variants.
@@ -1294,9 +1393,12 @@ The design is ready to supersede the previous workflow only after working slices
 
 1. Role classification prevents leads and context from entering claim-bearing analysis.
 2. Lead resolution preserves provenance and does not manufacture corroboration.
-3. The four-goal source loop materially improves extraction coverage or error detection over a single pass.
-4. Cross-source challenge identifies reporting dependencies and unsupported synthesis.
-5. Vestas context adds decision relevance without altering external factual judgments.
-6. The memo standard improves communication without leaking historical claims.
-7. Verification reliably blocks unsupported, mis-cited, overconfident, or context-contaminated output.
-8. Human reviewers can trace every published statement to the appropriate authority domain.
+3. Canonicalization reproduces the complete normalized source and rejects every invalid anchor.
+4. The same downstream contracts accept Seerist-native and retrieved publisher documents without source-specific branches.
+5. The four-goal source loop materially improves extraction coverage or error detection over a single pass.
+6. Per-source isolation and later bounded scheduling do not change committed outputs for identical inputs and configurations.
+7. Cross-source challenge identifies reporting dependencies and unsupported synthesis.
+8. Vestas context adds decision relevance without altering external factual judgments.
+9. The memo standard improves communication without leaking historical claims.
+10. Verification reliably blocks unsupported, mis-cited, overconfident, or context-contaminated output.
+11. Human reviewers can trace every published statement to the appropriate authority domain.

@@ -1,7 +1,7 @@
 # CTI Engineering Handoff
 
-Date: 2026-08-28
-Status: Approved research intent, bounded Seerist collection, one-item intake, and explicit evidence admission complete
+Date: 2026-08-31
+Status: Retrieval and canonical source-document baselines validated; AI question-relevance is next; human-input re-intake is transitional and must not be used live
 Workspace root: `CTI/`
 Source domain: Agentic App Engineering
 Authority class: Current implementation direction and next-action handoff
@@ -31,12 +31,15 @@ The intended shape is:
 
 1. Define and approve research questions.
 2. Collect question-bound material from Seerist.
-3. Review and approve evidence.
-4. Analyze each source.
-5. Synthesize claims across sources.
-6. Write and verify a memo.
-7. Require human approval before publication.
-8. Maintain an event log throughout the run.
+3. Losslessly canonicalize each captured source into stable, content-addressed segments.
+4. Use bounded AI reasoning to assess each canonical source against the approved question.
+5. Deterministically validate exact anchors and persist only proposed or pending candidates.
+6. Review and approve evidence with a human decision.
+7. Analyze each approved source through independent Find, blind Sweep, Judge, and Write.
+8. Synthesize claims across sources.
+9. Write and verify a memo.
+10. Require human approval before publication.
+11. Maintain an event log throughout the run.
 
 This shape is provisional. Real provider behavior and working scripts should determine the final contracts.
 
@@ -50,13 +53,15 @@ Build small scripts and grow the architecture only when working behavior require
 2. Explicit research-question approval and bounded Seerist collection (complete).
 3. One-item evidence intake and provider-role classification (complete).
 4. Explicit human evidence admission (complete).
-5. Accept the next bounded slice before implementation.
-6. One-source analysis after a real human-approved snapshot exists.
-7. Sequential multi-source runner.
-8. Cross-source claim synthesis.
-9. Memo writer and verifier.
+5. One exact-URL source retrieval from an approved collection lead (implemented and checked live).
+6. One lossless canonical source document with exact anchor validation (implemented and checked on the retrieved NV source).
+7. One bounded AI source-to-question relevance assessment plus deterministic proposal validation.
+8. One-source `Find -> Sweep -> Judge -> Write` after a real human-approved snapshot exists.
+9. Sequential multi-source runner.
+10. Cross-source claim synthesis.
+11. Memo writer and verifier.
 
-Avoid UI work, orchestration frameworks, databases, plugin systems, Firecrawl integration, and Vestas-context integration until the earlier scripts work.
+Avoid UI work, orchestration frameworks, databases, plugin systems, broader Firecrawl discovery, and Vestas-context integration until the earlier scripts work.
 
 ## Completed slice: Seerist reality-check probe
 
@@ -116,6 +121,18 @@ npm run review:evidence -- <intake-result.json> <approve|reject> <reviewer-id> <
 
 The active boundary is `02-Engineering/02-Contracts/evidence-admission.md`. Validation used synthetic temporary artifacts; no real Seerist item was approved or rejected.
 
+## Implemented slice: one-source retrieval
+
+The source-retrieval command accepts one persisted collection-lead intake and the exact source URL already present on that lead. It validates approved research lineage and route eligibility before credential access, then makes one fixed Firecrawl v2 Markdown scrape with cache reuse and storage disabled, TLS verification required, no target headers or actions, and bounded time and response size.
+
+```powershell
+npm run retrieve:source -- <intake-result.json> <exact-source-url>
+```
+
+The raw provider envelope, canonical result, checksums, read-only receipt, and events remain under ignored `app/runs/`. The result distinguishes Firecrawl as access provider from the original publisher, treats fetched text as untrusted, rejects cross-origin redirects, and always records `approvalStatus: "not_requested"`.
+
+The active boundary is `02-Engineering/02-Contracts/source-content-retrieval.md`. Automated tests and strict TypeScript pass. On 2026-08-31, the selected NV source completed one bounded live retrieval: Firecrawl returned HTTP 200, the final URL matched the requested publisher URL, and the canonical result recorded `resolved` / `content_retrieved` with `approvalStatus: "not_requested"`.
+
 ## Event-log boundary
 
 An event log is required from the first probe, but keep V1 implementation small.
@@ -143,6 +160,9 @@ npm run approve:question -- <research-question-proposal.json> <reviewer-id>
 npm run collect:seerist -- <provider-operation.json> <approved-research-question.json>
 npm run discover:seerist -- <discovery-plan.json> <approved-research-question.json>
 npm run intake:seerist -- <raw-response.json> <provider-item-id> <retrieved-at-ISO-8601> <approved-research-question.json> [run-id]
+npm run retrieve:source -- <intake-result.json> <exact-source-url>
+npm run canonicalize:source -- <source-retrieval-result.json>
+npm run reintake:source -- <source-retrieval-result.json> <analyst-id> <relevance-to-question> [candidate-id]
 npm run review:evidence -- <intake-result.json> <approve|reject> <reviewer-id> <reason> [decision-id]
 npm test
 npm run typecheck
@@ -150,7 +170,11 @@ npm run build
 npm run start
 ```
 
-The modules implement explicit research-question approval, bounded question-linked collection and discovery, one-item intake, and explicit human evidence admission, not the full memo workflow. Discovery may run multiple explicit query pages under a hard budget but cannot advance candidates into intake. Intake cannot approve an item. Only the separate review command can create an approved snapshot, and only from an eligible pending evidence candidate with explicit reviewer metadata.
+The modules implement explicit research-question approval, bounded question-linked collection and discovery, one-item intake, one-hop source retrieval, lossless source canonicalization, transitional retrieved-source re-intake, and human evidence admission, not the full memo workflow. Discovery may run multiple explicit query pages under a hard budget but cannot advance candidates into intake. Retrieval handles one exact URL and cannot create an evidence candidate. Canonicalization creates stable provider-neutral source documents and anchors but makes no semantic judgment. The current re-intake command proves verified lineage and pending-only routing, but its human-authored relevance input is superseded and must not be used for live re-intake. Only the review command can create an approved snapshot, and only with explicit reviewer metadata.
+
+The accepted replacement first creates a lossless provider-neutral source document, then produces a bounded AI question-relevance artifact grounded in exact `SourceAnchor` references and the approved research question. Deterministic code validates its schema, anchors, model provenance, and lineage before persisting a pending proposal. The human evidence gate reviews that proposal rather than writing routine relevance rationales.
+
+This change must not lower output quality. Every admitted source still receives independent `Find`, blind `Sweep`, `Judge`, and `Write`; cross-source challenge, Vestas dual-lineage relevance, independent verification, and human publication approval remain required. Similar cases scale through source adapters, immutable per-source state, checksum deduplication, sequential reuse, and later bounded concurrency, not reduced analysis depth.
 
 ## Current design artifacts
 
@@ -171,6 +195,7 @@ The workflow and SVG currently describe:
 
 - Provider-neutral query intent with deterministic adapters.
 - Seerist-first collection and optional Firecrawl fallback.
+- AI question-relevance proposals before human evidence admission.
 - Human evidence approval.
 - Per-source Find, blind Sweep, Judge, and Write stages.
 - Builder, challenger, and adjudicator synthesis.
@@ -184,7 +209,7 @@ These are design hypotheses. Keep what testing supports; simplify or revise what
 
 1. Which additional source types can become evidence candidates without external source-page retrieval?
 2. How should missing authorship, ambiguous timestamps, and provider references affect eligibility?
-3. Should the next slice prove one collection-lead retrieval or begin `Find` on a genuinely human-approved analyst report?
+3. What compact source support and explanation should the evidence gate show so humans can efficiently verify AI relevance proposals?
 4. Do bounded pages remain stable across source types and repeated runs?
 5. What provider restrictions govern retention of raw responses and test fixtures?
 
@@ -192,7 +217,10 @@ These are design hypotheses. Keep what testing supports; simplify or revise what
 
 - Do not build the final application architecture in one pass.
 - Do not implement the chat UI.
-- Do not implement retrieval until its bounded slice is accepted.
+- Do not broaden retrieval beyond one exact source URL or add Firecrawl search, crawl, actions, profiles, or LLM formats.
+- Do not use the transitional human-input re-intake command for the live NV source.
+- Implement the provider-neutral source document and exact anchor validator before the bounded source-to-question assessment adapter.
+- Preserve the complete source and mandatory `Find -> Sweep -> Judge -> Write`; do not trade intelligence depth for throughput.
 - Do not implement the full Find/Sweep/Judge/Write chain yet.
 - Do not build the Vestas context database yet.
 - Do not treat TypeScript types in the workflow document as settled API contracts.
@@ -211,12 +239,15 @@ At this handoff:
 - Intake, reporting, approval workflow, and isolated command tests pass.
 - The earlier saved analyst-report item is retained only as non-admissible historical output because it has no approved pre-collection question lineage.
 - Explicit approval and rejection are implemented; no real item has been decided.
+- One-source Firecrawl retrieval is implemented with fixed-origin, exact-URL, no-cache-storage, TLS, timeout, size, redirect, checksum, and untrusted-content controls; the live NV check completed successfully on 2026-08-31 without requesting evidence approval.
+- Provider-neutral canonicalization is implemented with deterministic IDs, exact UTF-8 anchors, path confinement, non-overwrite behavior, and lossless complete-source retention; the NV retrieval produced a validated 76-segment document.
+- Retrieved-source re-intake scaffolding verifies retrieval and lead lineage, creates only a pending candidate, and preserves lineage through the evidence gate. Its human-authored relevance input is superseded and retained only as reusable scaffolding until the AI assessment migration is implemented.
 - TypeScript typecheck and build pass.
 - Raw provider artifacts remain only in the ignored local `app/runs/` folder.
 
 ## Suggested opening prompt
 
-> Read `00-Second Brain/agent.md`, the engineering source route, `HANDOFF.md`, and the completed baseline in `02-Engineering/03-Workflow/first-slice.md`. Propose the smallest next slice, choosing between one collection-lead retrieval and a bounded `Find` stage after a real analyst decision. Do not treat the synthetic approval test as approval of real provider evidence.
+> Read `00-Second Brain/agent.md`, `HANDOFF.md`, the completed baseline in `02-Engineering/03-Workflow/first-slice.md`, `02-Engineering/02-Contracts/source-document-and-anchors.md`, and the revised retrieved-source relevance contract. Implement one bounded AI question-relevance assessment over the canonical NV source document. Require exact `SourceAnchor` support, model and prompt-policy provenance, all four verdict routes, and deterministic schema and lineage validation. Do not let model output approve evidence or change downstream `Find -> Sweep -> Judge -> Write` quality requirements.
 
 ## Human input required
 
