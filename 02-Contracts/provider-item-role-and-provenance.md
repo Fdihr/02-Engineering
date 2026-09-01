@@ -1,12 +1,12 @@
 # Provider Item Role and Provenance Contract
 
 Status: Active baseline
-Validated: 2026-08-28
+Validated: 2026-08-31
 Implementation: `../app/src/core/types.ts`, `../app/src/modules/intake/intake.ts`
 
 ## Scope
 
-This contract covers one manually selected Seerist item. The executable command currently selects one feature by provider ID from a saved `/v1/wod` GeoJSON response and requires the approved research-question artifact that existed before collection. It does not define batch ingestion, source retrieval, or source assurance. The upstream relevance boundary is defined in [Research Question and Provider Operation](research-question-and-provider-operation.md); the subsequent human gate is defined in [Evidence Admission](evidence-admission.md).
+This contract covers classification of one selected Seerist item. The executable command selects one feature by provider ID from a verified `/v1/wod` collection bundle. Bundle and checksum requirements are defined in [Seerist Intake Manifest](seerist-intake-manifest.md). It does not define batch ingestion, source retrieval, or source assurance.
 
 ## Selected item input
 
@@ -18,6 +18,8 @@ The workflow receives:
 | `endpoint` | Must be an explicitly supported observed endpoint. |
 | `retrievedAt` | Must be a valid timestamp supplied by the side-effect boundary. |
 | `rawArtifactRef` | Must be a non-empty reference to the preserved provider response. |
+| `rawArtifactSha256` | Must be the SHA-256 of the preserved provider response. |
+| `collectionLineage` | Must bind the operation plus request, response, and raw artifact references and checksums. |
 | `researchQuestion` | Must contain approved, pre-retrieval question lineage including artifact reference and SHA-256. |
 | `item` | Must be a JSON object or GeoJSON feature with a `properties` object. |
 
@@ -31,7 +33,8 @@ Every accepted item records:
 - Provider item ID when present.
 - Source discriminator when present and not itself a URL.
 - Provider timestamp when present.
-- Local retrieval time and raw artifact reference.
+- Local retrieval time, raw artifact reference, and raw SHA-256.
+- Collection operation plus request- and response-manifest references and SHA-256 values.
 - Approved research-question content, approval metadata, artifact reference, and checksum.
 - Available source URLs, provider-reference count, and source-metadata presence.
 - Content completeness and provider role.
@@ -44,7 +47,7 @@ The command also renders `intake-summary.md` from the accepted provider-neutral 
 
 Completeness is assigned by structural field presence in this order:
 
-1. `captured_content`: `sanitizedBody`, `body`, or `content` contains text.
+1. `captured_content`: an explicit `sanitizedBody` or `body` string, English localized string, or unambiguous single localized string is present. Generic nested `content` may establish completeness only for an endpoint or source already classified as context.
 2. `summary_only`: `sanitizedSummary` or `summary` contains text.
 3. `metadata_only`: neither captured content nor summary text is present.
 
@@ -65,17 +68,15 @@ An evidence candidate requires a provider item ID. Classification uses endpoint,
 
 | Role | Destination | Approval status |
 | --- | --- | --- |
-| `evidence_candidate` | `human_review` | `pending_human_review` |
+| Native `evidence_candidate` | `source_canonicalization` | `not_applicable` |
 | `collection_lead` | `source_retrieval` | `not_applicable` |
 | `context` | `context_only` | `not_applicable` |
 
-No intake output type contains an `approved` destination or status. Approval requires the separate explicit human transition defined by the evidence-admission contract.
-
-The current direct `evidence_candidate -> human_review` route is the implemented baseline. The accepted target inserts provider-neutral source canonicalization and AI question-relevance assessment before the same human gate. That migration changes the review package, not the role facts extracted by this contract.
+No initial intake route can enter evidence admission. Native captured material must first become a canonical source document and receive a validated question-relevance assessment. Positive-assessment candidate conversion remains a separate explicit transition; only that future converted candidate may reach the human gate.
 
 ## Expected failures
 
-Validation and selection return discriminated `Result<T, E>` values with literal errors. Current failures cover invalid selections, unsupported providers or endpoints, invalid retrieval time, missing or late research-question approval, missing raw lineage, invalid items, missing required provider IDs or source types, invalid feature collections, missing item IDs, missing selected items, and duplicate IDs.
+Validation and selection return discriminated `Result<T, E>` values with literal errors. Current failures cover invalid selections, unsupported providers or endpoints, invalid retrieval time, question-run mismatch, missing or late research-question approval, missing or malformed checksum lineage, invalid items, missing required provider IDs or source types, invalid feature collections, missing item IDs, missing selected items, and duplicate IDs.
 
 ## Proven boundary
 

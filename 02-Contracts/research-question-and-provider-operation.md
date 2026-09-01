@@ -41,6 +41,8 @@ The collection command preserves the response body, request manifest, response m
 
 `runs/<runId>/provider-operations/<operationId>/`
 
+Downstream intake consumes this persisted bundle rather than accepting independently supplied run, endpoint, or retrieval-time values. The active reconstruction and output rules are defined in [Seerist Intake Manifest](seerist-intake-manifest.md).
+
 The developer probe remains separate and does not satisfy this production contract.
 
 ## Bounded discovery

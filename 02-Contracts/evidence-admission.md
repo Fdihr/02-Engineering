@@ -22,16 +22,16 @@ The command input is the explicit human action. Narrative wording, provider scor
 
 The persisted intake artifact is reconstructed from unknown JSON and must satisfy all conditions:
 
-1. The item is a validated Seerist-native or retrieved-source `evidence_candidate` with `captured_content`.
+1. The item is a validated relevance-assessed `evidence_candidate` with `captured_content`.
 2. The route role is `evidence_candidate` and destination is `human_review`.
 3. Approval status is `pending_human_review`.
 4. Item and route provider IDs are present and identical.
 5. The intake ledger entry is a completed `intake.item.routed` event with a source run ID.
 6. Reviewer ID, decision ID, decision reason, and a valid decision timestamp are present.
-7. For a retrieved-source candidate, the recomputed raw artifact SHA-256 matches its preserved retrieval lineage.
+7. The recomputed raw artifact SHA-256 matches the candidate's preserved lineage.
 8. After the accepted relevance-contract migration, a retrieved-source candidate includes a validated canonical source-document reference, exact supporting anchors, AI question-relevance assessment, and model-invocation provenance tied to the same source and approved question.
 
-Collection leads and context items cannot pass this gate.
+Collection leads, context items, and initial native Seerist captured-content intake cannot pass this gate. Native intake must complete canonicalization, question relevance, and positive-assessment candidate conversion first. That conversion is not yet implemented.
 
 ## Decisions
 
@@ -58,7 +58,7 @@ Approval creates `approved-evidence-snapshot.json` containing:
 - Reviewer identity and admission time.
 - Referenced raw artifact and SHA-256 over its exact bytes.
 
-The command creates a new decision directory and refuses to reuse an existing decision ID. This provides the current non-overwrite boundary. Hash chaining, sealed manifests, and storage-level write protection remain later hardening.
+The command confines the intake and referenced raw artifact to the configured run root, creates a new decision directory, and refuses to reuse an existing decision ID. This provides the current path and non-overwrite boundary. Hash chaining, sealed manifests, and storage-level write protection remain later hardening.
 
 ## Outputs
 

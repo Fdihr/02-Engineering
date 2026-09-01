@@ -1,6 +1,6 @@
-# Threat Intelligence Memo Workflow
+# Seerist + OSINT Evidence-Grounded Memo Workflow
 
-Version: 2.2
+Version: 2.3
 Status: Canonical target architecture. Implementation remains slice-driven.
 Last updated: 2026-08-31
 Visual: `../01-Architecture/memo-workflow-board.svg`
@@ -9,14 +9,22 @@ Seerist capability visual: `../01-Architecture/seerist-api-capability-board.svg`
 Observed provider facts: `seerist-probe-findings.md`
 Implementation constraints: `../01-Architecture/script-architecture.md`
 
+## Product scope
+
+This is a general evidence-grounded memo workflow over the approved Seerist API surface plus OSINT search, discovery, and source retrieval. Cyber threat intelligence is the first implemented and validated memo profile, not the product boundary. The same core should support geopolitical, country-risk, physical-security, supply-chain, operational-risk, and other Seerist-backed memos without changing evidence authority or final quality controls.
+
+The target collection surface includes every Seerist endpoint the organization is permitted to use. That target does not imply that every endpoint is already understood or implemented. Each endpoint enters the executable baseline only after live observation establishes its response shape and limitations, an explicit role maps it to evidence candidate, collection lead, or context, and a narrow adapter and tests preserve provenance. OSINT follows the same rule: the current implementation proves exact-URL retrieval, while broader OSINT search and discovery remain later bounded mechanisms.
+
+Cyber-specific terminology, CTI quality rules, and Vestas relevance are profile-level concerns. They may strengthen a particular memo but must not be embedded as prerequisites for unrelated memo types. Organizational relevance is applied only when requested and must retain dual lineage to supported external claims and governed organizational context.
+
 ## Purpose
 
-Produce decision-grade threat intelligence from heterogeneous Seerist material while preserving a strict distinction between:
+Produce decision-grade, source-grounded memos from heterogeneous Seerist and OSINT material while preserving a strict distinction between:
 
 1. External evidence that can support claims.
 2. Collection leads that require resolution or retrieval.
 3. Provider context that can inform orientation or outlook but cannot independently corroborate an event claim.
-4. Vestas context that can establish organizational relevance but cannot rewrite external facts.
+4. Optional governed organizational context, including Vestas context when requested, that can establish organizational relevance but cannot rewrite external facts.
 5. A historical memo standard that governs quality and presentation but is never evidence.
 
 The workflow retains the four-goal `Find -> Sweep -> Judge -> Write` assurance sequence for every human-approved, claim-bearing source. Before that human gate, AI performs bounded source-to-question relevance triage and may propose a candidate; it cannot admit evidence. The workflow does not run source assurance against hotspots, generated summaries, unresolved links, scores, or other context-only records.
@@ -29,13 +37,13 @@ The retired V1 workflow remains available in `memo-workflow-retired-v1.md` for h
 
 1. Provider records are classified before they are called evidence.
 2. Collection leads are resolved and assessed by AI against the approved research question before human evidence approval.
-3. External facts, Vestas relevance, and editorial standards have separate authority domains.
+3. External facts, optional organizational relevance, and editorial standards have separate authority domains.
 4. Quality is enforced through typed assurance stages and blocking criteria rather than a single model judgment or composite score.
 
 ## Architecture principles
 
 1. Evidence determines what happened.
-2. Vestas context determines why supported external facts may matter to Vestas.
+2. Governed organizational context determines why supported external facts may matter to the specified organization when that assessment is in scope.
 3. The memo standard determines how approved intelligence is communicated.
 4. No authority may substitute for another.
 5. Model output may propose typed semantic artifacts; deterministic validation may persist them only in proposed or pending state, never approved state.
@@ -54,7 +62,7 @@ Scaling must not change the intelligence standard or final memo contract:
 3. Human evidence admission remains before claim-bearing source assurance and receives the source, provenance, AI proposal, and exact supporting anchors.
 4. Every admitted source retains independent `Find`, blind `Sweep`, `Judge`, and `Write` under the current quality policy.
 5. Cross-source challenge, source-dependency analysis, calibrated confidence, alternatives, contradictions, caveats, and gaps remain mandatory.
-6. Vestas relevance retains dual lineage to accepted external claims and governed organizational context.
+6. Organizational relevance, when requested, retains dual lineage to accepted external claims and governed organizational context.
 7. Memo verification and human publication approval remain blocking gates.
 8. Throughput improvements come from immutable per-source state, checksum deduplication, bounded scheduling, and reusable contracts, not reduced evidence depth.
 
@@ -65,7 +73,7 @@ The canonical source layer changes representation and addressing only. The compl
 | Authority | Permitted claims | Prohibited use |
 | --- | --- | --- |
 | External evidence pack | What a source directly reports or what analysis can defensibly infer from approved sources | Vestas-specific impact without governed context |
-| Vestas context pack | Footprint, exposure, dependency, ownership, relevance, and consequence pathways | Establishing that an external event occurred |
+| Governed organizational context pack | Footprint, exposure, dependency, ownership, relevance, and consequence pathways for the selected organization | Establishing that an external event occurred |
 | Memo standard pack | Structure, voice, analytical depth, confidence language, citation rules, and audience expectations | Introducing historical facts or current intelligence claims |
 
 Historical memos are not passed directly to source analysis or factual synthesis. They are curated into a versioned memo standard pack. Any historical fact appearing in an old memo remains unusable unless it is independently admitted through the current evidence workflow.
@@ -89,9 +97,9 @@ flowchart LR
   EvidenceReview --> HumanEvidence[Human evidence admission]
     HumanEvidence --> Assurance[Find -> Sweep -> Judge -> Write]
     Assurance --> Synthesis[Build -> Challenge -> Adjudicate]
-    Synthesis --> Relevance[Vestas relevance mapping]
+    Synthesis --> Relevance[Organizational relevance mapping when requested]
     ProviderContext --> Relevance
-    VestasContext[Vestas context pack] --> Relevance
+    OrganizationContext[Governed organizational context pack] --> Relevance
     Relevance --> Draft[Memo writer]
     MemoStandard[Memo standard pack] --> Draft
     Draft --> Verify[Independent quality verification]
@@ -399,16 +407,34 @@ Rules:
 
 ## AI question-relevance assessment
 
-Every captured candidate and every resolved publisher source is assessed against the exact approved research question before entering the human evidence queue. This is source-to-question triage, not Vestas relevance mapping.
+Every captured candidate and every resolved publisher source is assessed against the exact approved research question before entering the human evidence queue. This is source-to-question triage, not organizational relevance mapping.
 
 ```ts
 type QuestionRelevanceAssessment = {
+  schemaVersion: "question-relevance-assessment-v1";
   id: string;
-  evidenceCandidateId: string;
+  status: "proposed";
+  runId: string;
+  sourceItemId: string;
   researchQuestionId: string;
-  sourceArtifactRef: string;
+  researchQuestionArtifactRef: string;
+  researchQuestionArtifactSha256: string;
+  sourceDocumentId: string;
+  sourceDocumentArtifactRef: string;
+  sourceDocumentArtifactSha256: string;
   assessedAt: string;
-  modelInvocationRef: string;
+  modelInvocation: {
+    id: string;
+    provider: string;
+    model: string;
+    promptPolicyVersion: "question-relevance-prompt-v1";
+    promptArtifactRef: string;
+    promptArtifactSha256: string;
+    responseArtifactRef: string;
+    responseArtifactSha256: string;
+    startedAt: string;
+    completedAt: string;
+  };
   verdict: "relevant" | "partially-relevant" | "not-relevant" | "uncertain";
   rationale: string;
   support: Array<{
@@ -419,11 +445,13 @@ type QuestionRelevanceAssessment = {
 };
 ```
 
-The model receives only the approved question, the complete canonical source document, provenance, and retrieval limitations. It does not receive Vestas context or historical memos. Every positive rationale must resolve through a stable `SourceAnchor` defined by the active [canonical source document and anchors](../02-Contracts/source-document-and-anchors.md) contract and the exact research-question ID. Prompt-like source text remains untrusted input and cannot alter the goal or schema.
+The model receives only the approved question, the complete canonical source document, provenance, and retrieval limitations. It does not receive organizational context or historical memos. Every positive rationale must resolve through a stable `SourceAnchor` defined by the active [canonical source document and anchors](../02-Contracts/source-document-and-anchors.md) contract and the exact research-question ID. Prompt-like source text remains untrusted input and cannot alter the goal or schema.
 
 Deterministic code validates schema, source and question lineage, model-invocation provenance, allowed verdicts, and exact anchor resolution. These checks establish structure and source presence, not semantic relevance. `relevant` and `partially-relevant` assessments may become pending evidence proposals. `not-relevant` assessments are retained as audited exclusions. `uncertain` assessments enter a bounded human exception queue rather than forcing manual relevance writing for every source.
 
-The assessment cannot approve evidence, start source assurance, expand collection scope, or establish Vestas relevance. Humans review the source and AI proposal at evidence admission; they do not need to author the initial relevance rationale.
+The assessment cannot approve evidence, start source assurance, expand collection scope, or establish organizational relevance. Humans review the source and AI proposal at evidence admission; they do not need to author the initial relevance rationale.
+
+The initial executable PoC uses an immutable request/response handoff through GitHub Copilot in VS Code because no approved Azure AI Foundry endpoint is available. It records the underlying model as `not-exposed-by-host` and is not a production model API. A future Foundry adapter must preserve this assessment contract and replace only the model-call transport.
 
 ## Readiness assessment
 
@@ -506,7 +534,7 @@ Every admitted evidence candidate runs through four explicit goals:
 3. `Judge`: compare both passes against the original source and adjudicate.
 4. `Write`: produce a constrained source intelligence note from the adjudicated brief.
 
-The four goals may use the same configured model, but each goal is a separate controller-owned stage with a typed contract and bounded attempts. Each attempt contains one scoped model invocation. `Find` and `Sweep` are blind to one another. No goal has provider tools, workflow permissions, or access to Vestas context or historical memos.
+The four goals may use the same configured model, but each goal is a separate controller-owned stage with a typed contract and bounded attempts. Each attempt contains one scoped model invocation. `Find` and `Sweep` are blind to one another. No goal has provider tools, workflow permissions, or access to organizational context or historical memos.
 
 ## Deterministic goal-loop controller
 
@@ -751,7 +779,7 @@ The observer must be able to compute or independently verify:
 2. Every support excerpt exists exactly in the captured source or has a recorded extraction-normalization rule.
 3. Every anchor resolves exactly inside the immutable canonical source document.
 4. Every observation kind is permitted by the evidence-readiness decision.
-5. No observation relies on provider context, Vestas context, historical memos, model memory, or another source.
+5. No observation relies on provider context, organizational context, historical memos, model memory, or another source.
 6. Every approved question appears in either an observation or `unansweredQuestionIds`.
 7. Observation IDs and support spans are unique or explicitly identified as duplicates.
 
@@ -929,18 +957,18 @@ type ExternalSynthesis = {
 
 Atomic claims separate actor, action, target, timing, attribution, and consequence when those elements rely on different support or confidence. Single-source claims are permitted only when dependence and limitations remain explicit.
 
-# Part 7: Vestas Relevance Without Evidence Contamination
+# Part 7: Optional Organizational Relevance Without Evidence Contamination
 
 ## Sequencing rule
 
-Vestas context enters only after external claims are adjudicated. This prevents organizational expectations from biasing source extraction or changing what external evidence says.
+Governed organizational context enters only when the approved memo scope requests organizational relevance and only after external claims are adjudicated. This prevents organizational expectations from biasing source extraction or changing what external evidence says. A memo without an organizational-relevance requirement skips this stage without weakening external evidence assurance.
 
 Provider context may accompany this stage as attributed orientation. It cannot be counted as a second independent source for an external claim.
 
-## Vestas context pack
+## Organizational context pack
 
 ```ts
-type VestasContextRecord = {
+type OrganizationalContextRecord = {
   id: string;
   contextKind:
     | "location"
@@ -961,8 +989,10 @@ type VestasContextRecord = {
   approvedAt: string;
 };
 
-type VestasContextPack = {
+type OrganizationalContextPack = {
   id: string;
+  organizationId: string;
+  profileId: string;
   version: number;
   createdAt: string;
   recordIds: string[];
@@ -975,7 +1005,7 @@ Only records valid for the memo time boundary and authorized for the output clas
 ## Relevance assessment
 
 ```ts
-type VestasRelevanceAssessment = {
+type OrganizationalRelevanceAssessment = {
   id: string;
   runId: string;
   externalClaimIds: string[];
@@ -993,7 +1023,7 @@ type VestasRelevanceAssessment = {
 };
 ```
 
-Every Vestas-specific implication must resolve to at least one accepted external claim and one governed context record. When either side is absent, the output is an explicit information gap rather than a relevance judgment.
+Every organization-specific implication must resolve to at least one accepted external claim and one governed context record. When either side is absent, the output is an explicit information gap rather than a relevance judgment. The Vestas memo profile is the first planned implementation of this generic contract.
 
 # Part 8: Memo Standard From Historical Memos
 
@@ -1051,7 +1081,7 @@ The memo writer receives only:
 
 1. Approved scope and research questions.
 2. Adjudicated external synthesis.
-3. Vestas relevance assessments.
+3. Organizational relevance assessments when required by the approved scope.
 4. Provider context items selected for attributed orientation.
 5. The approved memo standard pack.
 6. Explicit unresolved contradictions, limitations, and gaps.
@@ -1064,7 +1094,7 @@ It does not receive raw historical memos or unresolved collection leads.
 type MemoStatement = {
   id: string;
   text: string;
-  statementKind: "external-fact" | "analytic-judgment" | "vestas-implication" | "context";
+  statementKind: "external-fact" | "analytic-judgment" | "organizational-implication" | "context";
   externalClaimIds: string[];
   relevanceAssessmentIds: string[];
   providerContextItemIds: string[];
@@ -1091,7 +1121,7 @@ type MemoDocument = {
     confidence: QualitativeAssessment;
   }>;
   analysis: MemoSection[];
-  vestasRelevance: MemoSection[];
+  organizationalRelevance: MemoSection[];
   uncertainties: MemoStatement[];
   competingExplanations: MemoStatement[];
   intelligenceGaps: string[];
@@ -1106,8 +1136,8 @@ type MemoDocument = {
 Statement rules:
 
 1. `external-fact` and `analytic-judgment` require accepted external claim IDs.
-2. `vestas-implication` requires both external claim IDs and relevance-assessment IDs.
-3. `context` requires provider-context or Vestas-context lineage and explicit attribution.
+2. `organizational-implication` requires both external claim IDs and relevance-assessment IDs.
+3. `context` requires provider-context or governed organizational-context lineage and explicit attribution.
 4. A statement cannot cite a collection lead.
 5. Markdown and other presentation formats are deterministic renderings of the canonical JSON.
 
@@ -1120,7 +1150,7 @@ Before semantic verification, code checks:
 1. Contract and schema validity.
 2. Required memo-standard sections.
 3. Statement-to-claim resolution.
-4. Vestas implication dual lineage.
+4. Organizational implication dual lineage when that stage is in scope.
 5. Claim-to-observation-to-source resolution.
 6. Citation and source appendix completeness.
 7. Version and artifact consistency.
@@ -1309,7 +1339,7 @@ runs/<runId>/
     pagination-assessments.json
     classified-items.json
     lead-resolutions.json
-  sources/<sourceItemId>/
+  sources/<sourceItemId>/<sourceDocumentId>/
     source-document.json
     question-relevance-assessment.json
     source-events.jsonl
@@ -1329,7 +1359,7 @@ runs/<runId>/
     adjudicated-external.json
   context/
     provider-context.json
-    vestas-context-pack.ref.json
+    organizational-context-pack.ref.json
     relevance-assessments.json
   standard/
     memo-standard-pack.ref.json
@@ -1346,13 +1376,13 @@ runs/<runId>/
 
 Every event records stable input and output artifact references, actor type, stage, event type, status, correlation, causation, and typed errors. Model calls additionally record model configuration, prompt version, attempt, duration, and token usage when available.
 
-Events never contain credentials, full provider content, full prompts, hidden chain-of-thought, or sensitive Vestas context. Those remain controlled artifacts referenced by ID and checksum.
+Events never contain credentials, full provider content, full prompts, hidden chain-of-thought, or sensitive organizational context. Those remain controlled artifacts referenced by ID and checksum.
 
 ## Security boundaries
 
 1. Provider and source content is untrusted data, never executable instruction.
 2. Source-assurance stages have no provider, filesystem, or workflow-state tools.
-3. Vestas context access is read-only, scoped, classification-aware, and logged.
+3. Organizational context access is read-only, scoped, classification-aware, and logged.
 4. The memo standard pack is versioned and read-only during a run.
 5. Credentials remain runtime configuration and never enter model inputs or retained artifacts.
 6. Publication cannot lower the classification required by any included context record.
@@ -1367,7 +1397,7 @@ The architecture is implemented through narrow, testable slices:
 4. One approved source through mandatory `Find -> Sweep -> Judge -> Write`.
 5. Sequential execution over multiple approved evidence items using independent source state streams.
 6. External `Build -> Challenge -> Adjudicate` synthesis with source-dependency tracking.
-7. Read-only Vestas context pack and dual-lineage relevance assessment.
+7. Optional read-only organizational context pack and dual-lineage relevance assessment; implement the Vestas profile first.
 8. Curated memo standard pack from approved historical memos.
 9. Canonical memo writer, deterministic renderer, and independent verifier.
 10. Human publication decision and targeted revision routing.
@@ -1382,7 +1412,7 @@ Each slice reuses plain functions and the dependency boundaries in `script-archi
 3. Version 1 source-segmentation limits for long paragraphs, tables, and malformed Markdown.
 4. Model and prompt configurations for relevance and each assurance goal.
 5. Numeric collection, model-call, retry, token, and bounded-concurrency budgets.
-6. Governance, classification, and freshness rules for the Vestas context pack.
+6. Governance, classification, and freshness rules for organizational context packs and the first Vestas profile.
 7. Selection, curation, approval, and regression process for historical memo standards.
 8. Required output formats and audience-specific standard-pack variants.
 9. Artifact retention, access control, signing, and recovery requirements.
@@ -1398,7 +1428,7 @@ The design is ready to supersede the previous workflow only after working slices
 5. The four-goal source loop materially improves extraction coverage or error detection over a single pass.
 6. Per-source isolation and later bounded scheduling do not change committed outputs for identical inputs and configurations.
 7. Cross-source challenge identifies reporting dependencies and unsupported synthesis.
-8. Vestas context adds decision relevance without altering external factual judgments.
+8. Optional organizational context adds decision relevance without altering external factual judgments.
 9. The memo standard improves communication without leaking historical claims.
 10. Verification reliably blocks unsupported, mis-cited, overconfident, or context-contaminated output.
 11. Human reviewers can trace every published statement to the appropriate authority domain.

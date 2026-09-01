@@ -6,6 +6,10 @@ Status: Active implementation constraints for the current script-first slices.
 
 Keep each script small enough to understand locally while preserving boundaries that can support later providers, batching, persistence, and user interfaces when those needs are demonstrated.
 
+The product is a general evidence-grounded memo tool over the approved Seerist API surface plus OSINT search, discovery, and retrieval. Cyber threat intelligence is the first working profile, not a core-module boundary. Domain modules should therefore express research intent, evidence, context, relevance, claims, and memo output without assuming that every question is cyber-specific or requires Vestas relevance.
+
+All organization-approved Seerist endpoints are target acquisition surfaces, but only observed and tested endpoints belong to the executable baseline. Each new endpoint or OSINT mechanism terminates at a narrow adapter and the existing provider-neutral role and source contracts whenever those contracts remain sufficient.
+
 Scalability comes from explicit data and replaceable functions, not from framework abstractions added in advance.
 
 ## Dependency direction
@@ -91,7 +95,7 @@ approved research question + bound provider operation
   -> validate observed envelope
   -> extract provider-neutral facts
   -> classify as evidence candidate | collection lead | context
-  -> route to human review | source retrieval | context only | controlled handling
+  -> route native captured content to canonicalization, leads to retrieval, and context to context-only handling
   -> for one approved collection lead, retrieve one exact source URL and stop
   -> losslessly canonicalize captured content into stable content-addressed segments
   -> assess one canonical source against the approved question with a bounded AI call
@@ -112,7 +116,9 @@ The accepted next connection first creates the provider-neutral source document 
 
 Canonicalization changes addressing, not evidence content or quality. Every admitted source still passes through independent `Find`, blind `Sweep`, `Judge`, and `Write` before cross-source synthesis. Scaling uses independent source state streams, reusable adapters, checksum deduplication, and bounded scheduling rather than skipped stages.
 
-The current `reintake:source` command still accepts a human-authored relevance string. That input shape is transitional and must not be used for live re-intake after the 2026-08-31 architecture decision. It remains only as tested scaffolding for lineage, non-overwrite, and pending-only routing until replaced by the bounded AI assessment artifact.
+Initial native Seerist evidence candidates cannot enter evidence admission. They route through the provider-neutral canonical document and relevance assessment first. The current `reintake:source` command still accepts a human-authored relevance string. That input shape is transitional and must not be used for live re-intake after the 2026-08-31 architecture decision. The bounded assessment artifact is now implemented through `prepare:question-relevance` and `record:question-relevance`; conversion of a validated positive assessment into the existing pending candidate shape remains the next connection.
+
+Until an approved Azure AI Foundry deployment exists, GitHub Copilot in VS Code is a manual PoC transport between those two commands. The adapter records that its underlying model is not exposed. It has no filesystem or transition authority through the application, and the deterministic validators and artifact contract remain the future Foundry boundary.
 
 ## Current evidence-admission flow
 

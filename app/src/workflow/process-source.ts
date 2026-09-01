@@ -6,7 +6,7 @@ import { decideRoute } from "../modules/routing/routing.js";
 
 export type ProcessError = {
   code: "INTAKE_VALIDATION_FAILED";
-  cause: IntakeError;
+  cause: IntakeError | "RESEARCH_QUESTION_RUN_MISMATCH";
 };
 
 export type ProcessOutput = {
@@ -25,6 +25,12 @@ export const processSource = (
     return err({
       code: "INTAKE_VALIDATION_FAILED",
       cause: sourceResult.error
+    });
+  }
+  if (sourceResult.value.researchQuestion.runId !== runId) {
+    return err({
+      code: "INTAKE_VALIDATION_FAILED",
+      cause: "RESEARCH_QUESTION_RUN_MISMATCH"
     });
   }
 

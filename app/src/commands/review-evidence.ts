@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { relative, resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import type { EvidenceReviewFailureEvent } from "../core/types.js";
 import { renderEvidenceDecisionSummary } from "../modules/reporting/evidence-decision-summary.js";
 import { reviewEvidence } from "../workflow/review-evidence.js";
@@ -43,6 +43,15 @@ const parseOptions = (args: string[]): CommandOptions => {
 const artifactRef = (path: string): string =>
   relative(process.cwd(), path).replaceAll("\\", "/");
 
+const resolveRunArtifact = (runRoot: string, value: string, label: string): string => {
+  const path = resolve(value);
+  const relativeToRoot = relative(runRoot, path);
+  if (relativeToRoot.startsWith("..") || isAbsolute(relativeToRoot)) {
+    throw new Error(`${label} must remain inside the configured run directory.`);
+  }
+  return path;
+};
+
 const commandError = (error: unknown): string =>
   error instanceof Error ? error.message : "Unknown evidence review failure";
 
@@ -71,11 +80,13 @@ const main = async (): Promise<void> => {
     const options = parseOptions(process.argv.slice(2));
     decisionId = options.decisionId ?? decisionId;
     reviewerId = options.reviewerId;
-    const intakePath = resolve(options.intakePath);
+    const intakePath = resolveRunArtifact(runRoot, options.intakePath, "Intake artifact");
     intakeArtifactRef = artifactRef(intakePath);
     const intake: unknown = JSON.parse(await readFile(intakePath, "utf8"));
     const rawArtifactRef = rawArtifactReference(intake);
-    const rawArtifact = await readFile(resolve(rawArtifactRef));
+    const rawArtifact = await readFile(
+      resolveRunArtifact(runRoot, rawArtifactRef, "Raw artifact")
+    );
     const rawArtifactSha256 = createHash("sha256").update(rawArtifact).digest("hex");
     const result = reviewEvidence({
       decisionId,

@@ -1,6 +1,7 @@
 import type {
   EvidenceCandidate,
-  RetrievedSourceEvidenceCandidate
+  RetrievedSourceEvidenceCandidate,
+  SeeristCollectionLineage
 } from "../../core/types.js";
 import { err, ok, type Result } from "../../core/result.js";
 import {
@@ -19,10 +20,12 @@ export type EvidenceReviewError =
   | "INVALID_RAW_ARTIFACT_SHA256"
   | "INVALID_INTAKE_ARTIFACT"
   | "INELIGIBLE_PROVIDER_ROLE"
+  | "NATIVE_CANDIDATE_REQUIRES_QUESTION_RELEVANCE"
   | "INELIGIBLE_ROUTE"
   | "NOT_PENDING_HUMAN_REVIEW"
   | "PROVIDER_ITEM_ID_MISMATCH"
   | "RAW_ARTIFACT_SHA256_MISMATCH"
+  | "RESEARCH_QUESTION_RUN_MISMATCH"
   | ResearchQuestionError;
 
 export type EvidenceReviewRequest = {
@@ -55,6 +58,45 @@ const stringArray = (value: unknown): string[] | undefined =>
 const sha256 = (value: unknown): string | undefined => {
   const normalized = nonEmptyString(value)?.toLowerCase();
   return normalized && /^[a-f0-9]{64}$/.test(normalized) ? normalized : undefined;
+};
+
+const readSeeristCollectionLineage = (
+  value: unknown,
+  rawArtifactRef: string,
+  rawArtifactSha256: string
+): SeeristCollectionLineage | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const operationId = nonEmptyString(value.operationId);
+  const requestManifestRef = nonEmptyString(value.requestManifestRef);
+  const requestManifestSha256 = sha256(value.requestManifestSha256);
+  const responseManifestRef = nonEmptyString(value.responseManifestRef);
+  const responseManifestSha256 = sha256(value.responseManifestSha256);
+  const lineageRawArtifactRef = nonEmptyString(value.rawArtifactRef);
+  const lineageRawArtifactSha256 = sha256(value.rawArtifactSha256);
+  if (
+    !operationId ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(operationId) ||
+    operationId === ".." ||
+    !requestManifestRef ||
+    !requestManifestSha256 ||
+    !responseManifestRef ||
+    !responseManifestSha256 ||
+    lineageRawArtifactRef !== rawArtifactRef ||
+    lineageRawArtifactSha256 !== rawArtifactSha256
+  ) {
+    return undefined;
+  }
+  return {
+    operationId,
+    requestManifestRef,
+    requestManifestSha256,
+    responseManifestRef,
+    responseManifestSha256,
+    rawArtifactRef: lineageRawArtifactRef,
+    rawArtifactSha256: lineageRawArtifactSha256
+  };
 };
 
 const readRetrievedSourceCandidate = (
@@ -206,6 +248,7 @@ const readEvidenceCandidate = (
   const endpoint = nonEmptyString(value.endpoint);
   const retrievedAt = nonEmptyString(value.retrievedAt);
   const rawArtifactRef = nonEmptyString(value.rawArtifactRef);
+  const rawArtifactSha256 = sha256(value.rawArtifactSha256);
   const sourceLinks = stringArray(value.sourceLinks);
   const researchQuestionResult = validateApprovedResearchQuestion(
     value.researchQuestion,
@@ -220,6 +263,7 @@ const readEvidenceCandidate = (
     !endpoint ||
     !retrievedAt ||
     !rawArtifactRef ||
+    !rawArtifactSha256 ||
     !sourceLinks ||
     typeof value.referenceCount !== "number" ||
     !Number.isInteger(value.referenceCount) ||
@@ -227,6 +271,14 @@ const readEvidenceCandidate = (
     typeof value.hasSourceMetadata !== "boolean" ||
     value.contentCompleteness !== "captured_content"
   ) {
+    return err("INVALID_INTAKE_ARTIFACT");
+  }
+  const collectionLineage = readSeeristCollectionLineage(
+    value.collectionLineage,
+    rawArtifactRef,
+    rawArtifactSha256
+  );
+  if (!collectionLineage) {
     return err("INVALID_INTAKE_ARTIFACT");
   }
 
@@ -238,6 +290,8 @@ const readEvidenceCandidate = (
     providerTimestamp: nonEmptyString(value.providerTimestamp),
     retrievedAt,
     rawArtifactRef,
+    rawArtifactSha256,
+    collectionLineage,
     sourceLinks,
     referenceCount: value.referenceCount,
     hasSourceMetadata: value.hasSourceMetadata,
@@ -296,10 +350,11 @@ export const validateEvidenceReview = (
   if (!itemResult.ok) {
     return itemResult;
   }
-  if (
-    itemResult.value.provider === "source_retrieval" &&
-    itemResult.value.retrievalLineage.rawArtifactSha256 !== rawArtifactSha256
-  ) {
+  const recordedRawArtifactSha256 =
+    itemResult.value.provider === "source_retrieval"
+      ? itemResult.value.retrievalLineage.rawArtifactSha256
+      : itemResult.value.rawArtifactSha256;
+  if (recordedRawArtifactSha256 !== rawArtifactSha256) {
     return err("RAW_ARTIFACT_SHA256_MISMATCH");
   }
   if (routeValue.role !== "evidence_candidate" || routeValue.destination !== "human_review") {
@@ -321,6 +376,12 @@ export const validateEvidenceReview = (
     ledgerValue.status !== "completed"
   ) {
     return err("INVALID_INTAKE_ARTIFACT");
+  }
+  if (sourceRunId !== itemResult.value.researchQuestion.runId) {
+    return err("RESEARCH_QUESTION_RUN_MISMATCH");
+  }
+  if (itemResult.value.provider === "seerist") {
+    return err("NATIVE_CANDIDATE_REQUIRES_QUESTION_RELEVANCE");
   }
 
   return ok({

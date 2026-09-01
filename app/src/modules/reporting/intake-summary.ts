@@ -32,6 +32,17 @@ export const renderIntakeSummary = ({
     item.sourceLinks.length === 0
       ? "- None recorded"
       : item.sourceLinks.map((link) => `- ${escapeMarkdown(link)}`).join("\n");
+  const seeristLineage =
+    item.provider === "seerist"
+      ? [
+          row("Raw SHA-256", item.rawArtifactSha256),
+          row("Collection operation", item.collectionLineage.operationId),
+          row("Request manifest", item.collectionLineage.requestManifestRef),
+          row("Request manifest SHA-256", item.collectionLineage.requestManifestSha256),
+          row("Response manifest", item.collectionLineage.responseManifestRef),
+          row("Response manifest SHA-256", item.collectionLineage.responseManifestSha256)
+        ]
+      : [];
 
   return [
     "# Intake Review",
@@ -74,6 +85,7 @@ export const renderIntakeSummary = ({
     row("Provider timestamp", displayValue(item.providerTimestamp)),
     row("Retrieved at", item.retrievedAt),
     row("Raw artifact", item.rawArtifactRef),
+    ...seeristLineage,
     row("Reference count", String(item.referenceCount)),
     row("Source metadata", item.hasSourceMetadata ? "Present" : "Not present"),
     "",

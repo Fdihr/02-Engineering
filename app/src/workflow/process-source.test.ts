@@ -7,7 +7,7 @@ const occurredAt = "2026-08-28T10:00:00.000Z";
 
 const researchQuestion = {
   id: "rq-001",
-  runId: "research-run-001",
+  runId,
   scopeVersion: 1,
   question: "What political developments could affect operational continuity in Pakistan?",
   rationale: "Bound collection to operational continuity indicators.",
@@ -19,7 +19,7 @@ const researchQuestion = {
   status: "approved" as const,
   approvedBy: "analyst-001",
   approvedAt: "2026-08-27T10:00:00.000Z",
-  artifactRef: "runs/research-run-001/approved-research-question.json",
+  artifactRef: `runs/${runId}/approved-research-question.json`,
   artifactSha256: "a".repeat(64)
 };
 
@@ -32,11 +32,21 @@ const selectedItem = (
   endpoint,
   retrievedAt: "2026-08-28T09:55:00.000Z",
   rawArtifactRef: "runs/probe-001/raw-response.json",
+  rawArtifactSha256: "b".repeat(64),
+  collectionLineage: {
+    operationId: "operation-001",
+    requestManifestRef: "runs/probe-001/collection-request.json",
+    requestManifestSha256: "c".repeat(64),
+    responseManifestRef: "runs/probe-001/raw-provider-artifact.json",
+    responseManifestSha256: "d".repeat(64),
+    rawArtifactRef: "runs/probe-001/raw-response.json",
+    rawArtifactSha256: "b".repeat(64)
+  },
   researchQuestion: question,
   item
 });
 
-test("routes a captured analyst report to human review", () => {
+test("routes a captured analyst report to source canonicalization", () => {
   const result = processSource(
     runId,
     occurredAt,
@@ -60,8 +70,8 @@ test("routes a captured analyst report to human review", () => {
   assert.equal(result.value.item.researchQuestion.id, "rq-001");
   assert.equal(result.value.item.researchQuestion.status, "approved");
   assert.equal(result.value.item.contentCompleteness, "captured_content");
-  assert.equal(result.value.decision.destination, "human_review");
-  assert.equal(result.value.decision.approvalStatus, "pending_human_review");
+  assert.equal(result.value.decision.destination, "source_canonicalization");
+  assert.equal(result.value.decision.approvalStatus, "not_applicable");
   assert.equal(result.value.ledgerEntry.occurredAt, occurredAt);
 });
 
@@ -154,7 +164,7 @@ test("returns a typed validation error for an evidence candidate without an id",
   });
 });
 
-test("delivery-like wording cannot advance an item to approval", () => {
+test("delivery-like wording cannot bypass canonicalization and relevance", () => {
   const result = processSource(
     runId,
     occurredAt,
@@ -171,8 +181,8 @@ test("delivery-like wording cannot advance an item to approval", () => {
     return;
   }
 
-  assert.equal(result.value.decision.destination, "human_review");
-  assert.equal(result.value.decision.approvalStatus, "pending_human_review");
+  assert.equal(result.value.decision.destination, "source_canonicalization");
+  assert.equal(result.value.decision.approvalStatus, "not_applicable");
 });
 
 test("rejects intake without approved research-question lineage", () => {
@@ -181,6 +191,16 @@ test("rejects intake without approved research-question lineage", () => {
     endpoint: "/v1/wod",
     retrievedAt: "2026-08-28T09:55:00.000Z",
     rawArtifactRef: "runs/probe-001/raw-response.json",
+    rawArtifactSha256: "b".repeat(64),
+    collectionLineage: {
+      operationId: "operation-001",
+      requestManifestRef: "runs/probe-001/collection-request.json",
+      requestManifestSha256: "c".repeat(64),
+      responseManifestRef: "runs/probe-001/raw-provider-artifact.json",
+      responseManifestSha256: "d".repeat(64),
+      rawArtifactRef: "runs/probe-001/raw-response.json",
+      rawArtifactSha256: "b".repeat(64)
+    },
     item: {
       id: "analysis-unbound",
       source: "analysis",
@@ -222,4 +242,44 @@ test("rejects a question approved after provider retrieval", () => {
       cause: "QUESTION_APPROVED_AFTER_RETRIEVAL"
     }
   });
+});
+
+test("rejects intake assigned to a different run than the approved question", () => {
+  const result = processSource(
+    "different-run",
+    occurredAt,
+    selectedItem({
+      id: "analysis-wrong-run",
+      source: "analysis",
+      sanitizedBody: { en: "Synthetic captured report content." }
+    })
+  );
+
+  assert.deepEqual(result, {
+    ok: false,
+    error: {
+      code: "INTAKE_VALIDATION_FAILED",
+      cause: "RESEARCH_QUESTION_RUN_MISMATCH"
+    }
+  });
+});
+
+test("does not treat arbitrary nested content as a captured analyst report", () => {
+  const result = processSource(
+    runId,
+    occurredAt,
+    selectedItem({
+      id: "analysis-metadata-content",
+      source: "analysis",
+      content: { metadata: { label: "Not a report body" } },
+      summary: "Synthetic summary"
+    })
+  );
+
+  assert.equal(result.ok, true);
+  if (!result.ok) {
+    return;
+  }
+  assert.equal(result.value.item.role, "collection_lead");
+  assert.equal(result.value.item.contentCompleteness, "summary_only");
 });

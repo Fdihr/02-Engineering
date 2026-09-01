@@ -1,5 +1,13 @@
 # Project Guidelines
 
+## Product Scope
+
+- Build a general evidence-grounded memo tool over the approved Seerist API surface plus OSINT search, discovery, and source retrieval. Cyber threat intelligence is the first validated use case, not the product boundary.
+- Keep the core workflow domain-neutral: approved research intent, collection, source-role classification, canonicalization, question relevance, human evidence admission, source assurance, synthesis, memo writing, verification, and publication approval.
+- Treat cyber, geopolitical risk, country risk, physical security, supply-chain risk, and similar subjects as memo profiles that may add terminology, quality rules, or governed context without changing evidence authority.
+- The target scope includes all Seerist endpoints that the organization is permitted to use, but an endpoint enters the implemented baseline only after its live behavior is observed, mapped to an explicit role, and covered by a narrow adapter and tests.
+- Distinguish target coverage from current coverage. The present executable slice proves bounded `/v1/wod` collection and discovery plus exact-URL OSINT retrieval; broad Seerist endpoint coverage and general OSINT search remain incremental work.
+
 ## Sources of Truth
 
 - Treat this as a workflow-first TypeScript prototype. Start with the implemented baseline in [03-Workflow/first-slice.md](03-Workflow/first-slice.md); the canonical target architecture in [03-Workflow/memo-workflow.md](03-Workflow/memo-workflow.md) is not the current implementation contract.

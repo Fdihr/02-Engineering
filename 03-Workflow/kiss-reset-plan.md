@@ -2,6 +2,12 @@
 
 Purpose: Rebuild the app from scratch with the smallest useful workflow.
 
+## Product boundary
+
+The product target is a general evidence-grounded memo tool using the approved Seerist API surface plus OSINT search, discovery, and source retrieval. Cyber threat intelligence is the first validated profile. The KISS scope below limits implementation order, not the eventual endpoint or memo-domain coverage.
+
+Do not claim generic endpoint support before live behavior is observed. Grow coverage one narrow tested adapter at a time while keeping downstream evidence and memo contracts provider-neutral and domain-neutral.
+
 ## Hard rules
 
 1. Build only one end-to-end slice first.

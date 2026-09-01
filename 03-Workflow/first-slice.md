@@ -1,6 +1,12 @@
 # Implemented Workflow Baseline
 
-Status: Research-question approval, bounded Seerist collection, one-item evidence intake, secure one-source retrieval, lossless source canonicalization, human-input retrieved-source re-intake scaffolding, and evidence admission implemented and validated. The human-input relevance step was superseded by the accepted AI question-relevance design on 2026-08-31.
+Status: Research-question approval, bounded Seerist collection, checksum-bound one-item intake, secure one-source retrieval, native and retrieved-source canonicalization, bounded Copilot PoC question relevance, human-input retrieved-source re-intake scaffolding, and evidence admission implemented and validated. Candidate conversion from the AI assessment remains pending.
+
+## Product boundary
+
+This implementation is the first narrow slice of a general Seerist-plus-OSINT memo tool. Cyber threat intelligence and the CIA Director test question validate the workflow; they do not constrain future memo subjects. The target includes every Seerist endpoint approved for organizational use plus bounded OSINT search, discovery, and retrieval.
+
+The current baseline does not claim that breadth yet. It proves bounded `/v1/wod` collection and discovery and one-hop exact-URL OSINT retrieval. New endpoints and search mechanisms must be added incrementally from observed responses through explicit role mapping, provenance-preserving adapters, and focused tests. The downstream question, evidence, source-assurance, synthesis, and memo contracts remain domain-neutral unless a selected memo profile adds stricter requirements.
 
 The canonical target architecture in `memo-workflow.md` is not a fixed implementation contract. This completed slice remains the implementation baseline until a subsequent slice is accepted.
 
@@ -41,17 +47,17 @@ The bounded discovery command supports explicit query variants and limited pagin
 
 ## Completed slice: one-item evidence intake
 
-One manually selected Seerist item -> validate observed fields -> classify provider role -> deterministic route -> ledger entry.
+One verified Seerist collection bundle plus selected item -> validate question, operation, manifests, raw checksum, and observed fields -> classify provider role -> deterministic route -> ledger entry.
 
 The implementation proves the boundary between collection leads, context, and potential evidence before source analysis begins.
 
 Run the executable path from `app/`:
 
 ```powershell
-npm run intake:seerist -- <raw-response.json> <provider-item-id> <retrieved-at-ISO-8601> <approved-research-question.json> [run-id]
+npm run intake:seerist -- <raw-provider-artifact.json> <provider-item-id> <approved-research-question.json>
 ```
 
-The command selects exactly one `/v1/wod` feature by provider ID, processes it, writes canonical `runs/<runId>/intake-result.json`, writes derived read-only `runs/<runId>/intake-summary.md`, appends `runs/intake-events.jsonl`, and prints a narrative-free status summary.
+The command reconstructs the canonical `/v1/wod` request/response bundle, derives run, endpoint, and receipt time from it, verifies raw and manifest lineage, and selects exactly one feature by provider ID. It writes non-overwritable output under `runs/<runId>/provider-intakes/<operationId>/<providerItemId>/`, appends `runs/intake-events.jsonl`, and prints a narrative-free status summary.
 
 Open `intake-summary.md` in VS Code and use `Ctrl+Shift+V` for the rendered review. The Markdown report has no workflow controls and cannot advance state.
 
@@ -65,7 +71,7 @@ Run from `app/`:
 npm run review:evidence -- <intake-result.json> <approve|reject> <reviewer-id> <reason> [decision-id]
 ```
 
-The command hashes the referenced raw provider artifact, refuses to overwrite an existing decision directory, and writes canonical decision JSON plus a read-only Markdown receipt. An approved decision also writes `approved-evidence-snapshot.json`; rejection cannot create that artifact.
+The command confines the intake and raw artifact to its configured run root, hashes the referenced raw artifact, refuses to overwrite an existing decision directory, and writes canonical decision JSON plus a read-only Markdown receipt. An approved decision also writes `approved-evidence-snapshot.json`; rejection cannot create that artifact. Initial native Seerist intake is ineligible until positive-assessment candidate conversion exists.
 
 No real Seerist item was approved or rejected during implementation validation. The successful command integration test uses synthetic artifacts in an isolated temporary directory.
 
@@ -87,17 +93,34 @@ The active boundary is `../02-Contracts/source-content-retrieval.md`. Determinis
 
 ## Implemented slice: canonical source document and anchors
 
-One resolved retrieval result -> verify canonical retrieval structure -> losslessly normalize line endings -> deterministic content-addressed segments -> exact UTF-8 source anchors.
+One resolved retrieval result or verified native Seerist intake -> invoke its narrow source adapter -> losslessly normalize line endings -> deterministic content-addressed segments -> exact UTF-8 source anchors.
 
 Run from `app/`:
 
 ```powershell
-npm run canonicalize:source -- <source-retrieval-result.json>
+npm run canonicalize:source -- <source-retrieval-result.json|seerist-intake-result.json>
 ```
 
-The shared pure module is provider-neutral. Firecrawl-specific structure ends in the retrieval adapter; later relevance and assurance modules depend only on the canonical `SourceDocument` and `SourceAnchor` types. The command confines input to the run root, computes the retrieval-result checksum, writes one non-overwritable document, and emits controller-attributed events without source text.
+The shared pure module is provider-neutral. Firecrawl-specific and Seerist-specific structures end in narrow adapters; later relevance and assurance modules depend only on canonical `SourceDocument` and `SourceAnchor` types. The command confines input and native raw references to the run root, verifies checksums, writes one non-overwritable document, and emits controller-attributed events without source text.
 
-The active boundary is `../02-Contracts/source-document-and-anchors.md`. Focused tests cover deterministic reproduction, CRLF normalization, multilingual UTF-8 offsets, long-block splitting, altered-document and anchor rejection, provider-neutral document parity, path confinement, and non-overwrite behavior. The real NV retrieval produced a validated 76-segment document with an exact source-artifact checksum match. No AI assessment or evidence transition occurred.
+The active boundary is `../02-Contracts/source-document-and-anchors.md`. Focused tests cover deterministic reproduction, CRLF normalization, multilingual UTF-8 offsets, long-block splitting, altered-document and anchor rejection, both source adapters, path confinement, and non-overwrite behavior. The real NV retrieval produced a validated 76-segment document with an exact source-artifact checksum match.
+
+## Implemented slice: Copilot PoC question relevance
+
+One verified canonical source plus its exact approved question -> immutable model-ready request -> one interactive GitHub Copilot JSON proposal -> deterministic schema, lineage, provenance, and exact-anchor validation -> controller-derived routing decision.
+
+Run from `app/`:
+
+```powershell
+npm run prepare:question-relevance -- <source-document.json>
+npm run record:question-relevance -- <question-relevance-request.json> <copilot-response.json>
+```
+
+The model-ready request contains the complete canonical source, fixed untrusted-content instructions, the approved question, provenance, limitations, verdict definitions, and exact output requirements. Response validation rejects altered quotes, mismatched questions or requests, unknown prompt policy, duplicate anchors, positive verdicts without support, and extra model-authored fields. Only deterministic code derives `evidence_candidate_proposal`, `audited_exclusion`, or `human_exception_triage`; no route can produce approval.
+
+This is an explicit development bridge, not a production Copilot API. The invocation records `github-copilot-vscode` and `not-exposed-by-host` because VS Code does not expose the underlying model identity to this workflow. An approved Azure AI Foundry deployment is the intended live adapter; it will replace transport without changing the provider-neutral request or assessment validators.
+
+The real NV source completed this path as `partially-relevant` with three exact anchors and destination `evidence_candidate_proposal / pending_human_review`. It reports the visit, possible purposes, Ratcliffe-to-Bortnikov participation, and Baltic hybrid-threat implications, but does not establish that the visit occurred specifically on 27 August or provide explicit cyber implications. This is a relevance proposal only; no candidate or evidence approval was created.
 
 ## Transitional slice: retrieved-source re-intake
 
@@ -113,7 +136,7 @@ The command confines all referenced artifacts to the run root, verifies source-i
 
 The command's human-authored relevance input is now transitional and must not be used for live re-intake. The accepted replacement first creates a lossless provider-neutral source document with exact content-addressed anchors, then runs one bounded AI assessment tied to the exact approved question. Deterministic code validates schema, anchors, model provenance, and artifact lineage. Only a validated positive proposal may enter pending human evidence admission.
 
-The revised boundary is `../02-Contracts/retrieved-source-reintake.md`. Existing focused tests cover the reusable lineage, pending-only routing, command persistence, and evidence-gate mechanics; the AI assessment cases remain the next implementation slice. The live NV retrieval has been canonicalized but not re-intaked or approved.
+The revised boundary is `../02-Contracts/retrieved-source-reintake.md`. Existing focused tests cover the reusable lineage, pending-only routing, command persistence, and evidence-gate mechanics. The AI assessment boundary is now implemented; conversion of a validated positive assessment into the existing pending candidate and preservation through evidence admission remain next. The live NV retrieval has not been re-intaked or approved.
 
 ## KISS boundary
 
@@ -155,7 +178,7 @@ Do not add:
 
 1. The stable selected-item envelope is provider, endpoint, local retrieval time, raw artifact reference, and an unknown item object.
 2. Endpoint, open source discriminator, and structural content depth are sufficient for this first bounded role decision.
-3. Analyst records with captured content can enter human review; summary-only news remains a collection lead.
+3. Analyst records with captured content enter canonicalization and question relevance; summary-only news remains a collection lead.
 4. Country-background material remains context even when returned through the aggregate `/v1/wod` endpoint.
 5. Observed provider IDs may be numeric and are normalized to strings.
 6. The active cross-module baseline is `../02-Contracts/provider-item-role-and-provenance.md`.

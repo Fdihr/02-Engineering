@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1400" viewBox="0 0 2400 1400" role="img" aria-labelledby="title description">
   <title id="title">Seerist API capability map</title>
-  <desc id="description">Companion board to the threat intelligence memo workflow, showing documented Seerist evidence, context, foresight, taxonomy, and saved-search capabilities together with live-test status and workflow opportunities.</desc>
+  <desc id="description">Companion board to the general evidence-grounded memo workflow, showing documented Seerist evidence, context, foresight, taxonomy, and saved-search capabilities together with live-test status and workflow opportunities.</desc>
 
   <defs>
     <style>
@@ -45,7 +45,7 @@
 
   <rect class="canvas" x="0" y="0" width="2400" height="1400" />
   <text class="page-title" x="48" y="48">Seerist API capability map</text>
-  <text class="page-subtitle" x="48" y="76">Documented possibilities, live-tested surfaces, and their potential role in the threat intelligence memo workflow</text>
+  <text class="page-subtitle" x="48" y="76">Documented possibilities, live-tested surfaces, and their role in the Seerist + OSINT memo workflow</text>
 
   <rect class="tested-chip" x="1656" y="36" width="16" height="16" />
   <text class="caption" x="1680" y="49">Live tested</text>

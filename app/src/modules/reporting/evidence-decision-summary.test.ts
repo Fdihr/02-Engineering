@@ -3,7 +3,7 @@ import test from "node:test";
 import type { EvidenceReviewOutput } from "../../core/types.js";
 import { renderEvidenceDecisionSummary } from "./evidence-decision-summary.js";
 
-const approved: EvidenceReviewOutput = {
+const approved: Extract<EvidenceReviewOutput, { outcome: "approved" }> = {
   outcome: "approved",
   decision: {
     id: "review-001",
@@ -32,6 +32,16 @@ const approved: EvidenceReviewOutput = {
       sourceType: "analysis",
       retrievedAt: "2026-08-28T08:55:45.000Z",
       rawArtifactRef: "runs/probe-001/raw-response.json",
+      rawArtifactSha256: "a".repeat(64),
+      collectionLineage: {
+        operationId: "operation-001",
+        requestManifestRef: "runs/probe-001/collection-request.json",
+        requestManifestSha256: "b".repeat(64),
+        responseManifestRef: "runs/probe-001/raw-provider-artifact.json",
+        responseManifestSha256: "c".repeat(64),
+        rawArtifactRef: "runs/probe-001/raw-response.json",
+        rawArtifactSha256: "a".repeat(64)
+      },
       sourceLinks: [],
       referenceCount: 0,
       hasSourceMetadata: false,

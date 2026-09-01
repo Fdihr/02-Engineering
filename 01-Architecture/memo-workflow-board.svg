@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1400" viewBox="0 0 2400 1400" role="img" aria-labelledby="title description">
-  <title id="title">Threat intelligence memo workflow</title>
-  <desc id="description">Canonical version 2.2 evidence-first threat intelligence workflow showing bounded Seerist collection, lossless provider-neutral source documents, AI question-relevance proposals, deterministic pending-candidate validation, human evidence admission, four-goal source assurance, external claim synthesis, separate Vestas context and memo-standard authorities, quality verification, and human publication approval.</desc>
+  <title id="title">Seerist and OSINT evidence-grounded memo workflow</title>
+  <desc id="description">Canonical version 2.3 evidence-grounded memo workflow showing bounded Seerist and OSINT collection, lossless provider-neutral source documents, AI question-relevance proposals, deterministic pending-candidate validation, human evidence admission, four-goal source assurance, external claim synthesis, optional organizational context, quality verification, and human publication approval. Cyber threat intelligence is the first validated memo profile, not the product boundary.</desc>
 
   <defs>
     <style>
@@ -46,8 +46,8 @@
   </defs>
 
   <rect class="canvas" x="0" y="0" width="2400" height="1400" />
-  <text class="page-title" x="48" y="48">Threat intelligence memo workflow</text>
-  <text class="page-subtitle" x="48" y="76">Version 2.2 | Lossless source anchors, AI triage, human evidence admission, and full CTI assurance</text>
+  <text class="page-title" x="48" y="48">Seerist + OSINT evidence-grounded memo workflow</text>
+  <text class="page-subtitle" x="48" y="76">Version 2.3 | General memo core, profile-specific policy, and full source assurance</text>
 
   <rect class="det-card" x="1696" y="32" width="16" height="16" />
   <text class="caption" x="1720" y="45">Deterministic</text>
@@ -199,7 +199,7 @@
   <text class="caption" x="1416" y="542">Attributed orientation only</text>
 
   <rect class="context-card" x="1696" y="464" width="280" height="112" />
-  <text class="card-title" x="1720" y="492">Vestas context pack</text>
+  <text class="card-title" x="1720" y="492">Organizational context pack</text>
   <text class="body" x="1720" y="518">Footprint | assets | dependencies</text>
   <text class="caption" x="1720" y="542">Governed, valid, classified</text>
 
@@ -209,7 +209,7 @@
   <text class="caption" x="2024" y="542">Old memos set standard, never facts</text>
 
   <rect class="agent-card" x="1392" y="608" width="584" height="120" />
-  <text class="card-title" x="1416" y="636">Vestas relevance mapping</text>
+  <text class="card-title" x="1416" y="636">Organizational relevance</text>
   <text class="body" x="1416" y="662">External claim + governed context -> exposure and consequence pathways</text>
   <text class="caption" x="1416" y="688">Every implication needs dual lineage; unknown remains an explicit gap.</text>
 

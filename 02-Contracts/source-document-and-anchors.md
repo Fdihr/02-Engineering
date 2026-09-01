@@ -1,8 +1,8 @@
 # Canonical Source Document and Anchors
 
-Status: Active baseline for retrieved publisher content
+Status: Active baseline for retrieved publisher and Seerist-native content
 Validated: 2026-08-31
-Implementation: `../app/src/modules/source/source-document.ts`, `../app/src/modules/source/retrieved-source-adapter.ts`, `../app/src/commands/canonicalize-source.ts`
+Implementation: `../app/src/modules/source/source-document.ts`, `../app/src/modules/source/retrieved-source-adapter.ts`, `../app/src/modules/source/seerist-source-adapter.ts`, `../app/src/commands/canonicalize-source.ts`
 
 ## Purpose
 
@@ -30,23 +30,23 @@ type CapturedSourceContent = {
 };
 ```
 
-The implemented retrieval adapter reads only a canonical resolved `SourceRetrievalResult`, never the raw Firecrawl schema. A Seerist captured-content adapter remains a later narrow addition. Adapters do not assess relevance, quality, credibility, or truth.
+The retrieval adapter reads only a canonical resolved `SourceRetrievalResult`, never the raw Firecrawl schema. The Seerist adapter reconstructs one persisted native intake from its checksum-bound `/v1/wod` response, route, and ledger, then extracts only an explicit `sanitizedBody` or `body`. Adapters do not assess relevance, quality, credibility, or truth.
 
 ## Command
 
 Run from `app/`:
 
 ```powershell
-npm run canonicalize:source -- <source-retrieval-result.json>
+npm run canonicalize:source -- <source-retrieval-result.json|seerist-intake-result.json>
 ```
 
-The command confines input to the configured run directory, computes the retrieval-result checksum, invokes the retrieval adapter and shared pure canonicalizer, and writes one non-overwritable document to:
+The command confines input and referenced native raw content to the configured run directory, computes source checksums, invokes the matching narrow adapter and shared pure canonicalizer, and writes one non-overwritable document to:
 
 ```text
-runs/<runId>/sources/<retrievalId>/source-document.json
+runs/<runId>/sources/<sourceItemId>/<sourceDocumentId>/source-document.json
 ```
 
-Controller-attributed completion and failure events append to `runs/source-document-events.jsonl`. Console and event output omit source content.
+The deterministic document-ID directory preserves multiple immutable canonical identities when an adapter, provenance input, or normalization version changes. Repeating identical input resolves to the same directory and is rejected rather than overwritten. Controller-attributed completion and failure events append to `runs/source-document-events.jsonl`. Console and event output omit source content.
 
 ## Canonical document
 

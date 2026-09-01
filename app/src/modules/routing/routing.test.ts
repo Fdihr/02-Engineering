@@ -8,6 +8,16 @@ const base = {
   endpoint: "/v1/wod",
   retrievedAt: "2026-08-28T09:55:00.000Z",
   rawArtifactRef: "runs/probe-001/raw-response.json",
+  rawArtifactSha256: "b".repeat(64),
+  collectionLineage: {
+    operationId: "operation-001",
+    requestManifestRef: "runs/probe-001/collection-request.json",
+    requestManifestSha256: "c".repeat(64),
+    responseManifestRef: "runs/probe-001/raw-provider-artifact.json",
+    responseManifestSha256: "d".repeat(64),
+    rawArtifactRef: "runs/probe-001/raw-response.json",
+    rawArtifactSha256: "b".repeat(64)
+  },
   sourceLinks: [],
   referenceCount: 0,
   hasSourceMetadata: false,
@@ -30,7 +40,7 @@ const base = {
   }
 };
 
-test("routes evidence candidates to human review", () => {
+test("routes native evidence candidates to source canonicalization", () => {
   const candidate: EvidenceCandidate = {
     ...base,
     providerItemId: "analysis-001",
@@ -40,8 +50,8 @@ test("routes evidence candidates to human review", () => {
   };
   const decision = decideRoute(candidate);
 
-  assert.equal(decision.destination, "human_review");
-  assert.equal(decision.approvalStatus, "pending_human_review");
+  assert.equal(decision.destination, "source_canonicalization");
+  assert.equal(decision.approvalStatus, "not_applicable");
 });
 
 test("routes collection leads to source retrieval", () => {

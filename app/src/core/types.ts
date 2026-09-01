@@ -30,11 +30,23 @@ export type ApprovedResearchQuestion = ApprovedResearchQuestionArtifact & {
   artifactSha256: string;
 };
 
+export type SeeristCollectionLineage = {
+  operationId: string;
+  requestManifestRef: string;
+  requestManifestSha256: string;
+  responseManifestRef: string;
+  responseManifestSha256: string;
+  rawArtifactRef: string;
+  rawArtifactSha256: string;
+};
+
 export type SelectedSeeristItem = {
   provider: "seerist";
   endpoint: string;
   retrievedAt: string;
   rawArtifactRef: string;
+  rawArtifactSha256: string;
+  collectionLineage: SeeristCollectionLineage;
   researchQuestion: ApprovedResearchQuestion;
   item: unknown;
 };
@@ -47,6 +59,8 @@ type ProviderItemBase = {
   providerTimestamp?: string;
   retrievedAt: string;
   rawArtifactRef: string;
+  rawArtifactSha256: string;
+  collectionLineage: SeeristCollectionLineage;
   sourceLinks: string[];
   referenceCount: number;
   hasSourceMetadata: boolean;
@@ -121,7 +135,11 @@ export type ProviderItem = EvidenceCandidate | CollectionLead | ContextItem;
 export type RouteDecision = {
   providerItemId?: string;
   role: ProviderRole;
-  destination: "human_review" | "source_retrieval" | "context_only";
+  destination:
+    | "source_canonicalization"
+    | "human_review"
+    | "source_retrieval"
+    | "context_only";
   approvalStatus: "pending_human_review" | "not_applicable";
   ruleId: string;
   reason: string;
@@ -329,4 +347,80 @@ export type SourceAnchor = {
   quote: string;
   quoteStartUtf8Byte: number;
   quoteEndUtf8Byte: number;
+};
+
+export type QuestionRelevanceVerdict =
+  | "relevant"
+  | "partially-relevant"
+  | "not-relevant"
+  | "uncertain";
+
+export type QuestionRelevanceRequest = {
+  schemaVersion: "question-relevance-request-v1";
+  id: string;
+  status: "prepared";
+  promptPolicyVersion: "question-relevance-prompt-v1";
+  preparedAt: string;
+  runId: string;
+  sourceItemId: string;
+  researchQuestion: ApprovedResearchQuestion;
+  sourceDocument: SourceDocument;
+  sourceDocumentArtifactRef: string;
+  sourceDocumentArtifactSha256: string;
+  sourceLimitations: string[];
+  policy: {
+    objective: string;
+    sourceContentTrust: "untrusted";
+    constraints: string[];
+    verdictDefinitions: Record<QuestionRelevanceVerdict, string>;
+    outputRequirements: string[];
+  };
+};
+
+export type ModelInvocationProvenance = {
+  id: string;
+  provider: string;
+  model: string;
+  promptPolicyVersion: "question-relevance-prompt-v1";
+  promptArtifactRef: string;
+  promptArtifactSha256: string;
+  responseArtifactRef: string;
+  responseArtifactSha256: string;
+  startedAt: string;
+  completedAt: string;
+};
+
+export type QuestionRelevanceAssessment = {
+  schemaVersion: "question-relevance-assessment-v1";
+  id: string;
+  status: "proposed";
+  runId: string;
+  sourceItemId: string;
+  researchQuestionId: string;
+  researchQuestionArtifactRef: string;
+  researchQuestionArtifactSha256: string;
+  sourceDocumentId: string;
+  sourceDocumentArtifactRef: string;
+  sourceDocumentArtifactSha256: string;
+  assessedAt: string;
+  modelInvocation: ModelInvocationProvenance;
+  verdict: QuestionRelevanceVerdict;
+  rationale: string;
+  support: Array<{
+    anchor: SourceAnchor;
+    relationToQuestion: string;
+  }>;
+  limitations: string[];
+};
+
+export type QuestionRelevanceDecision = {
+  assessmentId: string;
+  verdict: QuestionRelevanceVerdict;
+  destination:
+    | "evidence_candidate_proposal"
+    | "audited_exclusion"
+    | "human_exception_triage";
+  approvalStatus: "pending_human_review" | "not_applicable";
+  ruleId: string;
+  reason: string;
 };

@@ -2,10 +2,17 @@ import { createHash } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { adaptRetrievedSourceContent } from "../modules/source/retrieved-source-adapter.js";
+import { adaptSeeristSourceContent } from "../modules/source/seerist-source-adapter.js";
 import { createSourceDocument } from "../modules/source/source-document.js";
 
 const usage =
-  "Usage: npm run canonicalize:source -- <source-retrieval-result.json>";
+  "Usage: npm run canonicalize:source -- <source-retrieval-result.json|seerist-intake-result.json>";
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const nonEmptyString = (value: unknown): string | undefined =>
+  typeof value === "string" && value.trim() ? value.trim() : undefined;
 
 const artifactRef = (path: string): string =>
   relative(process.cwd(), path).replaceAll("\\", "/");
@@ -35,21 +42,45 @@ const main = async (): Promise<void> => {
   let outputArtifactRef: string | undefined;
 
   try {
-    const [retrievalPathValue, ...extra] = process.argv.slice(2);
-    if (!retrievalPathValue || extra.length > 0) {
+    const [sourceArtifactPathValue, ...extra] = process.argv.slice(2);
+    if (!sourceArtifactPathValue || extra.length > 0) {
       throw new Error(usage);
     }
 
-    const retrievalPath = resolveRunArtifact(runRoot, retrievalPathValue);
-    const retrievalBytes = await readFile(retrievalPath);
-    const retrieval: unknown = JSON.parse(retrievalBytes.toString("utf8"));
-    const captured = adaptRetrievedSourceContent(
-      retrieval,
-      artifactRef(retrievalPath),
-      sha256(retrievalBytes)
-    );
+    const sourceArtifactPath = resolveRunArtifact(runRoot, sourceArtifactPathValue);
+    const sourceArtifactBytes = await readFile(sourceArtifactPath);
+    const sourceArtifact: unknown = JSON.parse(sourceArtifactBytes.toString("utf8"));
+    const sourceArtifactRef = artifactRef(sourceArtifactPath);
+    const sourceArtifactSha256 = sha256(sourceArtifactBytes);
+    const nativeItem =
+      isRecord(sourceArtifact) && isRecord(sourceArtifact.item)
+        ? sourceArtifact.item
+        : undefined;
+    const captured = nativeItem?.provider === "seerist"
+      ? await (async () => {
+          const rawArtifactRef = nonEmptyString(nativeItem.rawArtifactRef);
+          if (!rawArtifactRef) {
+            throw new Error("Native intake is missing its raw artifact reference.");
+          }
+          const rawArtifactPath = resolveRunArtifact(runRoot, rawArtifactRef);
+          const rawArtifactBytes = await readFile(rawArtifactPath);
+          const rawArtifact: unknown = JSON.parse(rawArtifactBytes.toString("utf8"));
+          return adaptSeeristSourceContent(
+            sourceArtifact,
+            rawArtifact,
+            sourceArtifactRef,
+            sourceArtifactSha256,
+            artifactRef(rawArtifactPath),
+            sha256(rawArtifactBytes)
+          );
+        })()
+      : adaptRetrievedSourceContent(
+          sourceArtifact,
+          sourceArtifactRef,
+          sourceArtifactSha256
+        );
     if (!captured.ok) {
-      throw new Error(`Source adapter rejected retrieval: ${captured.error}`);
+      throw new Error(`Source adapter rejected artifact: ${captured.error}`);
     }
     runId = captured.value.runId;
     sourceItemId = captured.value.sourceItemId;
@@ -60,8 +91,8 @@ const main = async (): Promise<void> => {
     }
     documentId = result.value.id;
 
-    const outputParent = resolve(runRoot, runId, "sources");
-    const outputDirectory = resolve(outputParent, sourceItemId);
+    const outputParent = resolve(runRoot, runId, "sources", sourceItemId);
+    const outputDirectory = resolve(outputParent, documentId);
     await mkdir(outputParent, { recursive: true });
     await mkdir(outputDirectory);
     const outputPath = resolve(outputDirectory, "source-document.json");

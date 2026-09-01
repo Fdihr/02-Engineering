@@ -12,12 +12,22 @@ const intake: ProcessOutput = {
     providerTimestamp: "2026-08-28T08:38:47.762Z",
     retrievedAt: "2026-08-28T08:55:45.082Z",
     rawArtifactRef: "runs/probe-001/raw-response.json",
+    rawArtifactSha256: "a".repeat(64),
+    collectionLineage: {
+      operationId: "operation-001",
+      requestManifestRef: "runs/probe-001/collection-request.json",
+      requestManifestSha256: "b".repeat(64),
+      responseManifestRef: "runs/probe-001/raw-provider-artifact.json",
+      responseManifestSha256: "c".repeat(64),
+      rawArtifactRef: "runs/probe-001/raw-response.json",
+      rawArtifactSha256: "a".repeat(64)
+    },
     sourceLinks: [],
     referenceCount: 0,
     hasSourceMetadata: false,
     researchQuestion: {
       id: "rq-001",
-      runId: "research-run-001",
+      runId: "intake-run-001",
       scopeVersion: 1,
       question: "What political developments could affect operational continuity in Pakistan?",
       rationale: "Bound synthetic approval test.",
@@ -29,7 +39,7 @@ const intake: ProcessOutput = {
       status: "approved",
       approvedBy: "analyst-001",
       approvedAt: "2026-08-27T10:00:00.000Z",
-      artifactRef: "runs/research-run-001/approved-research-question.json",
+      artifactRef: "runs/intake-run-001/approved-research-question.json",
       artifactSha256: "a".repeat(64)
     },
     role: "evidence_candidate",
@@ -61,28 +71,20 @@ const request = {
   rawArtifactSha256: "a".repeat(64)
 };
 
-test("explicit approval creates an immutable evidence snapshot", () => {
+test("initial native Seerist intake cannot bypass question relevance", () => {
   const result = reviewEvidence({
     ...request,
     decision: "approved",
     intake
   });
 
-  assert.equal(result.ok, true);
-  if (!result.ok || result.value.outcome !== "approved") {
-    return;
-  }
-
-  assert.equal(result.value.decision.reviewerId, "analyst-001");
-  assert.equal(result.value.snapshot.providerItemId, "1030013");
-  assert.equal(result.value.snapshot.rawArtifactRef, intake.item.rawArtifactRef);
-  assert.equal(result.value.snapshot.rawArtifactSha256, "a".repeat(64));
-  assert.equal(result.value.snapshot.sourceDecisionId, "review-001");
-  assert.equal(result.value.event.actorType, "human");
-  assert.equal(result.value.event.eventType, "evidence.admission.approved");
+  assert.deepEqual(result, {
+    ok: false,
+    error: "NATIVE_CANDIDATE_REQUIRES_QUESTION_RELEVANCE"
+  });
 });
 
-test("explicit rejection records the decision without creating a snapshot", () => {
+test("initial native Seerist intake cannot enter evidence rejection", () => {
   const result = reviewEvidence({
     ...request,
     decision: "rejected",
@@ -90,14 +92,24 @@ test("explicit rejection records the decision without creating a snapshot", () =
     intake
   });
 
-  assert.equal(result.ok, true);
-  if (!result.ok) {
-    return;
-  }
+  assert.deepEqual(result, {
+    ok: false,
+    error: "NATIVE_CANDIDATE_REQUIRES_QUESTION_RELEVANCE"
+  });
+});
 
-  assert.equal(result.value.outcome, "rejected");
-  assert.equal("snapshot" in result.value, false);
-  assert.equal(result.value.event.eventType, "evidence.admission.rejected");
+test("changed native Seerist raw bytes cannot pass the evidence gate", () => {
+  const result = reviewEvidence({
+    ...request,
+    decision: "approved",
+    rawArtifactSha256: "f".repeat(64),
+    intake
+  });
+
+  assert.deepEqual(result, {
+    ok: false,
+    error: "RAW_ARTIFACT_SHA256_MISMATCH"
+  });
 });
 
 test("explicit approval preserves retrieved-source assessment and lineage", () => {
