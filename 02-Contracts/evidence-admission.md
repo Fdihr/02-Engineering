@@ -77,4 +77,4 @@ runs/<decisionId>/
 
 Synthetic workflow tests cover approval, rejection, revision requests, ineligible collection leads, mismatched provider IDs, and required human metadata. An isolated command integration test verifies raw-artifact hashing, output creation, Markdown rendering, event persistence, revision output without a snapshot, and refusal to overwrite an existing decision directory.
 
-No real Seerist item was approved or rejected during implementation validation.
+After synthetic validation, human reviewer `FDIHR` approved real retrieved-source candidate `nv-candidate-question-relevance-001` as decision `nv-evidence-review-001`, creating snapshot `snapshot-nv-evidence-review-001`.

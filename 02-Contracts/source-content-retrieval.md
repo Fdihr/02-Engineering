@@ -99,7 +99,7 @@ The canonical result records:
 6. Retrieved content as `trust: "untrusted"` only when resolved.
 7. `approvalStatus: "not_requested"` in every outcome.
 
-No retrieval result is an evidence candidate or approved evidence snapshot. Resolved content first enters the provider-neutral [canonical source document and anchors](source-document-and-anchors.md) boundary through `npm run canonicalize:source`. The separate [retrieved source relevance and re-intake](retrieved-source-reintake.md) boundary will then assess that complete source against the exact approved research question, validate the typed AI proposal and artifact lineage, and may create only a pending candidate for the existing human evidence-admission command.
+No retrieval result is an evidence candidate or approved evidence snapshot. Resolved content first enters the provider-neutral [canonical source document and anchors](source-document-and-anchors.md) boundary through `npm run canonicalize:source`. The separate [retrieved source relevance and re-intake](retrieved-source-reintake.md) boundary then assesses that complete source against the exact approved research question, validates the typed AI proposal and artifact lineage, and may create only a pending candidate for the existing human evidence-admission command.
 
 ## Security and provider limitations
 

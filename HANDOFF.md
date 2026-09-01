@@ -119,13 +119,13 @@ Validation occurs before credential lookup or `fetch`. The active boundary is `0
 
 ## Completed slice: explicit evidence admission
 
-The human-review command accepts one eligible relevance-assessed intake result, `approve` or `reject`, reviewer ID, reason, and an optional decision ID. It confines and validates the intake and raw artifact, hashes the raw response, writes a canonical decision and read-only Markdown receipt, and appends a human-attributed event. Initial native Seerist intake is explicitly ineligible; approval alone creates a non-overwritable approved evidence snapshot.
+The human-review command accepts one eligible relevance-assessed intake result, `approve`, `reject`, or `revise`, reviewer ID, reason, and an optional decision ID. It confines and validates the intake and raw artifact, hashes the raw response, writes a canonical decision and read-only Markdown receipt, and appends a human-attributed event. Initial native Seerist intake is explicitly ineligible; approval alone creates a non-overwritable approved evidence snapshot.
 
 ```powershell
 npm run review:evidence -- <intake-result.json> <approve|reject|revise> <reviewer-id> <reason> [decision-id]
 ```
 
-The active boundary is `02-Engineering/02-Contracts/evidence-admission.md`. Validation used synthetic temporary artifacts; no real Seerist item was approved or rejected.
+The active boundary is `02-Engineering/02-Contracts/evidence-admission.md`. Initial command validation used synthetic temporary artifacts; reviewer `FDIHR` later approved the real retrieved-source candidate as `nv-evidence-review-001`.
 
 ## Implemented slice: one-source retrieval
 

@@ -64,7 +64,7 @@ Open `intake-summary.md` in VS Code and use `Ctrl+Shift+V` for the rendered revi
 
 ## Completed slice: explicit evidence admission
 
-One persisted intake result -> validate gate eligibility -> explicit human approve or reject -> admission decision -> approved snapshot only when approved -> append event.
+One persisted intake result -> validate gate eligibility -> explicit human approve, reject, or revise -> admission decision -> approved snapshot only when approved -> append event.
 
 Run from `app/`:
 
@@ -72,9 +72,9 @@ Run from `app/`:
 npm run review:evidence -- <intake-result.json> <approve|reject|revise> <reviewer-id> <reason> [decision-id]
 ```
 
-The command confines the intake and raw artifact to its configured run root, hashes the referenced raw artifact, refuses to overwrite an existing decision directory, and writes canonical decision JSON plus a read-only Markdown receipt. An approved decision also writes `approved-evidence-snapshot.json`; rejection cannot create that artifact. Initial native Seerist intake remains ineligible; only a checksum-bound candidate created from validated positive question relevance may enter this gate.
+The command confines the intake and raw artifact to its configured run root, hashes the referenced raw artifact, refuses to overwrite an existing decision directory, and writes canonical decision JSON plus a read-only Markdown receipt. An approved decision also writes `approved-evidence-snapshot.json`; rejection and revision requests cannot create that artifact. Initial native Seerist intake remains ineligible; only a checksum-bound candidate created from validated positive question relevance may enter this gate.
 
-No real Seerist item was approved or rejected during implementation validation. The successful command integration test uses synthetic artifacts in an isolated temporary directory.
+Initial command integration used synthetic artifacts in an isolated temporary directory. After that validation, human reviewer `FDIHR` approved the real retrieved-source candidate `nv-candidate-question-relevance-001` as decision `nv-evidence-review-001`.
 
 ## Implemented slice: one-source retrieval
 
@@ -137,7 +137,7 @@ The command confines every referenced artifact to the run root; verifies source-
 
 The evidence gate validates the exact positive-assessment shape, reopens and hashes the persisted assessment and decision, preserves assessment and retrieval lineage in an approved snapshot, and rejects artifact drift or altered relevance routing. Candidate creation events are controller-attributed; evidence decisions remain human-attributed.
 
-The active boundary is `../02-Contracts/retrieved-source-reintake.md`. Focused tests cover positive-only conversion, source and model artifact lineage, pending-only routing, path confinement, non-overwrite behavior, evidence-gate tampering, and assessment preservation through approval. On 2026-09-01, the live NV assessment was converted into candidate `nv-candidate-question-relevance-001`; it remains pending human review and is not approved.
+The active boundary is `../02-Contracts/retrieved-source-reintake.md`. Focused tests cover positive-only conversion, source and model artifact lineage, pending-only routing, path confinement, non-overwrite behavior, evidence-gate tampering, and assessment preservation through approval. On 2026-09-01, the live NV assessment was converted into candidate `nv-candidate-question-relevance-001` and subsequently approved by `FDIHR` as decision `nv-evidence-review-001`.
 
 ## KISS boundary
 

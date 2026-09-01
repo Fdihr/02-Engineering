@@ -101,7 +101,7 @@
   <text class="body" x="112" y="976">3. Keep optional source fields and provider references explicit.</text>
   <text class="body" x="112" y="1000">4. Follow next + total, but detect cross-page snapshot drift.</text>
   <text class="body" x="112" y="1024">5. No narrative wording or provider score may approve evidence.</text>
-  <text class="small" x="112" y="1056">Current build target: classify and route one saved provider item.</text>
+  <text class="small" x="112" y="1056">Current baseline: Panel 1 complete; approved NV snapshot ready for source assurance.</text>
 
   <!-- MIDDLE: CONTEXT AND FORESIGHT -->
   <rect class="panel" x="816" y="128" width="728" height="976" />
