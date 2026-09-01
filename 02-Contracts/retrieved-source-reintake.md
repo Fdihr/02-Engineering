@@ -1,6 +1,6 @@
 # Retrieved Source Relevance and Re-intake
 
-Status: AI assessment and positive evidence-candidate conversion implemented and validated; real NV candidate pending human review
+Status: AI assessment and positive evidence-candidate conversion implemented and validated; real NV candidate approved through the separate evidence-admission gate
 Validated: 2026-09-01
 Implementation: `../app/src/modules/relevance/question-relevance.ts`, `../app/src/modules/intake/retrieved-source-intake.ts`, `../app/src/commands/prepare-question-relevance.ts`, `../app/src/commands/record-question-relevance.ts`, `../app/src/commands/reintake-source.ts`
 
@@ -112,4 +112,4 @@ A future access provider can produce the canonical source-retrieval contract and
 
 Tests cover request-policy tampering, question binding, exact source anchors, altered quotes, prompt-policy and model provenance, all four verdict routes, model-authored authority rejection, source-document drift, positive-only candidate conversion, full checksum lineage, path confinement, content-safe output, non-overwrite behavior, evidence-gate tampering, and assessment preservation in an approved snapshot.
 
-The real NV source completed one Copilot PoC assessment with verdict `partially-relevant`, three exact anchors, and destination `evidence_candidate_proposal`. On 2026-09-01, that assessment was converted into candidate `nv-candidate-question-relevance-001` with destination `human_review` and status `pending_human_review`. No human evidence decision or approval has been made.
+The real NV source completed one Copilot PoC assessment with verdict `partially-relevant`, three exact anchors, and destination `evidence_candidate_proposal`. On 2026-09-01, that assessment was converted into candidate `nv-candidate-question-relevance-001` with destination `human_review` and status `pending_human_review`. Human reviewer `FDIHR` then approved it through the separate evidence-admission gate as decision `nv-evidence-review-001`, creating snapshot `snapshot-nv-evidence-review-001`.

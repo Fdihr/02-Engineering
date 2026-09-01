@@ -38,6 +38,13 @@ export type ApprovedMemoScope = ApprovedMemoScopeArtifact & {
   artifactSha256: string;
 };
 
+export type MemoScopeApprovalReference = {
+  scopeId: string;
+  scopeVersion: number;
+  artifactRef: string;
+  artifactSha256: string;
+};
+
 type ResearchQuestionDefinition = {
   id: string;
   runId: string;
@@ -59,6 +66,7 @@ export type ApprovedResearchQuestionArtifact = ResearchQuestionDefinition & {
   status: "approved";
   approvedBy: string;
   approvedAt: string;
+  scopeApproval?: MemoScopeApprovalReference;
 };
 
 export type ApprovedResearchQuestion = ApprovedResearchQuestionArtifact & {
@@ -205,7 +213,7 @@ export type EvidenceAdmissionDecision = {
   providerItemId: string;
   reviewerId: string;
   decidedAt: string;
-  decision: "approved" | "rejected";
+  decision: "approved" | "rejected" | "revision_requested";
   reason: string;
   intakeArtifactRef: string;
 };
@@ -230,7 +238,10 @@ export type EvidenceReviewEvent = {
   actorType: "human";
   actorId: string;
   stage: "evidence_admission";
-  eventType: "evidence.admission.approved" | "evidence.admission.rejected";
+  eventType:
+    | "evidence.admission.approved"
+    | "evidence.admission.rejected"
+    | "evidence.admission.revision_requested";
   status: "completed";
   intakeArtifactRef: string;
   snapshotId?: string;
@@ -257,6 +268,11 @@ export type EvidenceReviewOutput =
     }
   | {
       outcome: "rejected";
+      decision: EvidenceAdmissionDecision;
+      event: EvidenceReviewEvent;
+    }
+  | {
+      outcome: "revision_requested";
       decision: EvidenceAdmissionDecision;
       event: EvidenceReviewEvent;
     };

@@ -16,6 +16,12 @@ const approvedQuestion = {
   status: "approved",
   approvedBy: "analyst-test",
   approvedAt: "2026-08-28T08:00:00.000Z",
+  scopeApproval: {
+    scopeId: "scope-collection-test",
+    scopeVersion: 1,
+    artifactRef: "runs/research-run-test/memo-scopes/scope-collection-test/v1/approved.json",
+    artifactSha256: "b".repeat(64)
+  },
   artifactRef: "runs/research-run-test/research-questions/rq-collection-test/approved.json",
   artifactSha256: "a".repeat(64)
 };
@@ -90,4 +96,16 @@ test("rejects provider endpoints outside the implemented collection boundary", (
   );
 
   assert.deepEqual(result, { ok: false, error: "INVALID_PROVIDER_OPERATION" });
+});
+
+test("rejects collection without explicit scope approval lineage", () => {
+  const { scopeApproval: _scopeApproval, ...legacyQuestion } = approvedQuestion;
+  assert.deepEqual(
+    prepareSeeristCollection(
+      operation,
+      legacyQuestion,
+      "2026-08-28T09:00:00.000Z"
+    ),
+    { ok: false, error: "MEMO_SCOPE_APPROVAL_REQUIRED" }
+  );
 });

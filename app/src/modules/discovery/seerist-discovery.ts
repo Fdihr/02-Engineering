@@ -36,7 +36,29 @@ export type CollectedSeeristPage = {
   queryId: string;
   pageOffset: number;
   artifactRef: string;
+  cacheStatus?: string;
   payload: unknown;
+};
+
+export type SeeristPageObservation = {
+  operationId: string;
+  pageOffset: number;
+  pageSize: number;
+  total?: number;
+  newestObservedAt?: string;
+  oldestObservedAt?: string;
+  itemIds: string[];
+  next?: string;
+  prev?: string;
+  cacheStatus?: string;
+};
+
+export type SeeristPaginationAssessment = {
+  operationId: string;
+  queryId: string;
+  status: "consistent" | "snapshot-drift" | "incomplete" | "not-applicable";
+  observations: SeeristPageObservation[];
+  reasons: string[];
 };
 
 export type SeeristDiscoveryCandidate = {
@@ -52,11 +74,13 @@ export type SeeristDiscoveryCandidate = {
   matchedTerms: string[];
   queryIds: string[];
   rawArtifactRefs: string[];
+  collectionLimitations: string[];
 };
 
 export type SeeristDiscoveryError =
   | ResearchQuestionError
   | "INVALID_DISCOVERY_PLAN"
+  | "MEMO_SCOPE_APPROVAL_REQUIRED"
   | "RESEARCH_QUESTION_MISMATCH"
   | "RESEARCH_RUN_MISMATCH";
 
@@ -178,6 +202,9 @@ export const prepareSeeristDiscovery = (
   if (!researchQuestion.ok) {
     return researchQuestion;
   }
+  if (!researchQuestion.value.scopeApproval) {
+    return err("MEMO_SCOPE_APPROVAL_REQUIRED");
+  }
 
   const plan = readPlan(planValue);
   if (!plan.ok) {
@@ -193,6 +220,166 @@ export const prepareSeeristDiscovery = (
   return ok({ plan: plan.value, researchQuestion: researchQuestion.value });
 };
 
+const metadataInteger = (value: unknown): number | undefined => {
+  const parsed =
+    typeof value === "string" && /^\d+$/.test(value)
+      ? Number(value)
+      : value;
+  return typeof parsed === "number" &&
+    Number.isSafeInteger(parsed) &&
+    parsed >= 0
+    ? parsed
+    : undefined;
+};
+
+export const assessSeeristDiscoveryPagination = (
+  plan: SeeristDiscoveryPlan,
+  pages: CollectedSeeristPage[]
+): SeeristPaginationAssessment[] =>
+  plan.queries.map((query) => {
+    const queryPages = pages
+      .filter((page) => page.queryId === query.id)
+      .sort((left, right) => left.pageOffset - right.pageOffset);
+    const observations: SeeristPageObservation[] = [];
+    const driftReasons: string[] = [];
+    const incompleteReasons: string[] = [];
+    const seenItemOffsets = new Map<string, number>();
+
+    for (const [index, page] of queryPages.entries()) {
+      const expectedOffset = index * plan.pageSize;
+      if (page.pageOffset !== expectedOffset) {
+        incompleteReasons.push(
+          `Expected offset ${expectedOffset} but collected offset ${page.pageOffset}.`
+        );
+      }
+      const payload = isRecord(page.payload) ? page.payload : undefined;
+      const features = payload && Array.isArray(payload.features) ? payload.features : [];
+      const metadata = payload && isRecord(payload.metadata) ? payload.metadata : undefined;
+      if (!payload || !Array.isArray(payload.features) || !metadata) {
+        incompleteReasons.push(`Offset ${page.pageOffset} is not a complete page.`);
+      }
+
+      const itemIds: string[] = [];
+      const timestamps: Array<{ value: string; epoch: number }> = [];
+      for (const feature of features) {
+        if (!isRecord(feature) || !isRecord(feature.properties)) {
+          continue;
+        }
+        const providerItemId =
+          typeof feature.properties.id === "number" &&
+          Number.isFinite(feature.properties.id)
+            ? String(feature.properties.id)
+            : nonEmptyString(feature.properties.id);
+        if (providerItemId) {
+          itemIds.push(providerItemId);
+          const priorOffset = seenItemOffsets.get(providerItemId);
+          if (priorOffset !== undefined && priorOffset !== page.pageOffset) {
+            driftReasons.push(
+              `Provider item ${providerItemId} appears at offsets ${priorOffset} and ${page.pageOffset}.`
+            );
+          } else {
+            seenItemOffsets.set(providerItemId, page.pageOffset);
+          }
+        }
+        const timestamp = nonEmptyString(feature.properties["@timestamp"]);
+        const epoch = timestamp ? Date.parse(timestamp) : Number.NaN;
+        if (timestamp && !Number.isNaN(epoch)) {
+          timestamps.push({ value: timestamp, epoch });
+        }
+      }
+      timestamps.sort((left, right) => right.epoch - left.epoch);
+      const next = metadata ? nonEmptyString(metadata.next) : undefined;
+      const prev = metadata ? nonEmptyString(metadata.prev) : undefined;
+      const total = metadata ? metadataInteger(metadata.total) : undefined;
+      const reportedPageSize = metadata
+        ? metadataInteger(metadata.pageSize)
+        : undefined;
+      if (reportedPageSize !== undefined && reportedPageSize !== plan.pageSize) {
+        incompleteReasons.push(
+          `Offset ${page.pageOffset} reports page size ${reportedPageSize}, expected ${plan.pageSize}.`
+        );
+      }
+      if (index === 0 && prev) {
+        incompleteReasons.push("The first page has a contradictory previous link.");
+      }
+      if (index > 0 && !prev) {
+        incompleteReasons.push(`Offset ${page.pageOffset} is missing its previous link.`);
+      }
+      if (index > 0) {
+        const prior = observations[index - 1];
+        if (prior && !prior.next) {
+          incompleteReasons.push(`Offset ${prior.pageOffset} is missing its next link.`);
+        }
+        if (prior?.total !== undefined && total !== undefined && prior.total !== total) {
+          driftReasons.push(
+            `Total changed from ${prior.total} to ${total} between offsets ${prior.pageOffset} and ${page.pageOffset}.`
+          );
+        }
+        if (
+          prior?.oldestObservedAt &&
+          timestamps[0] &&
+          Date.parse(timestamps[0].value) > Date.parse(prior.oldestObservedAt)
+        ) {
+          driftReasons.push(
+            `A newer timestamp appears at offset ${page.pageOffset} after offset ${prior.pageOffset}.`
+          );
+        }
+      }
+      if (next && features.length === 0) {
+        incompleteReasons.push(`Offset ${page.pageOffset} has a next link but no items.`);
+      }
+
+      observations.push({
+        operationId: `${plan.id}-${query.id}-offset-${page.pageOffset}`,
+        pageOffset: page.pageOffset,
+        pageSize: plan.pageSize,
+        ...(total !== undefined ? { total } : {}),
+        ...(timestamps[0] ? { newestObservedAt: timestamps[0].value } : {}),
+        ...(timestamps.at(-1) ? { oldestObservedAt: timestamps.at(-1)?.value } : {}),
+        itemIds,
+        ...(next ? { next } : {}),
+        ...(prev ? { prev } : {}),
+        ...(page.cacheStatus ? { cacheStatus: page.cacheStatus } : {})
+      });
+    }
+
+    const last = observations.at(-1);
+    if (!last) {
+      incompleteReasons.push("No page was collected for the query.");
+    } else if (last.next) {
+      const boundaryReached =
+        queryPages.length >= plan.maxPagesPerQuery || pages.length >= plan.maxApiCalls;
+      incompleteReasons.push(
+        boundaryReached
+          ? `Collection budget ended with a next page after offset ${last.pageOffset}.`
+          : `Collection stopped before the next page after offset ${last.pageOffset}.`
+      );
+    } else if (
+      last.total !== undefined &&
+      last.total > last.pageOffset + last.itemIds.length
+    ) {
+      incompleteReasons.push(
+        `Offset ${last.pageOffset} is missing a next link for the reported total.`
+      );
+    }
+
+    const reasons = [...driftReasons, ...incompleteReasons];
+    return {
+      operationId: `${plan.id}:${query.id}`,
+      queryId: query.id,
+      status:
+        driftReasons.length > 0
+          ? "snapshot-drift"
+          : incompleteReasons.length > 0
+            ? "incomplete"
+            : observations.length > 1
+              ? "consistent"
+              : "not-applicable",
+      observations,
+      reasons
+    };
+  });
+
 const normalizedText = (value: unknown): string =>
   typeof value === "string" ? value.toLocaleLowerCase("en") : "";
 
@@ -204,7 +391,8 @@ const finiteNumber = (value: unknown): number | undefined =>
 
 export const rankSeeristDiscoveryCandidates = (
   plan: SeeristDiscoveryPlan,
-  pages: CollectedSeeristPage[]
+  pages: CollectedSeeristPage[],
+  paginationAssessments: SeeristPaginationAssessment[] = []
 ): SeeristDiscoveryCandidate[] => {
   const candidates = new Map<string, SeeristDiscoveryCandidate>();
 
@@ -271,9 +459,26 @@ export const rankSeeristDiscoveryCandidates = (
         score,
         matchedTerms,
         queryIds: [page.queryId],
-        rawArtifactRefs: [page.artifactRef]
+        rawArtifactRefs: [page.artifactRef],
+        collectionLimitations: []
       });
     }
+  }
+
+  const assessmentByQuery = new Map(
+    paginationAssessments.map((assessment) => [assessment.queryId, assessment])
+  );
+  for (const candidate of candidates.values()) {
+    candidate.collectionLimitations = candidate.queryIds.flatMap((queryId) => {
+      const assessment = assessmentByQuery.get(queryId);
+      return assessment &&
+        (assessment.status === "snapshot-drift" || assessment.status === "incomplete")
+        ? assessment.reasons.map(
+            (reason) =>
+              `Query ${queryId} pagination ${assessment.status}: ${reason}`
+          )
+        : [];
+    });
   }
 
   return [...candidates.values()]

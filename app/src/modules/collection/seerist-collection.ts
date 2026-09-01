@@ -30,6 +30,7 @@ export type SeeristCollectionError =
   | ResearchQuestionError
   | "INVALID_COLLECTION_TIME"
   | "INVALID_PROVIDER_OPERATION"
+  | "MEMO_SCOPE_APPROVAL_REQUIRED"
   | "RESEARCH_QUESTION_MISMATCH"
   | "RESEARCH_RUN_MISMATCH";
 
@@ -122,6 +123,9 @@ export const prepareSeeristCollection = (
   );
   if (!researchQuestion.ok) {
     return researchQuestion;
+  }
+  if (!researchQuestion.value.scopeApproval) {
+    return err("MEMO_SCOPE_APPROVAL_REQUIRED");
   }
 
   const operation = readOperation(operationValue);

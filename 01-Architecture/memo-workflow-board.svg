@@ -77,6 +77,7 @@
   <text class="body" x="112" y="414">Discovery -> one gap-fill pass -> one lead-resolution hop</text>
   <text class="caption" x="112" y="440">Persist raw response before parsing; enforce call, time, item, and page budgets.</text>
   <text class="caption" x="112" y="464">Detect changing totals, duplicate IDs, timestamp inversions, and incomplete pages.</text>
+  <rect class="tested-chip" x="480" y="488" width="88" height="8" />
 
   <rect class="det-card" x="88" y="520" width="504" height="184" />
   <text class="card-title" x="112" y="548">Classify every provider item</text>
@@ -88,15 +89,18 @@
   <text class="body" x="112" y="656">Context</text>
   <text class="caption" x="280" y="656">Pulse, risk, background, future -> orient</text>
   <text class="small" x="112" y="684">Endpoint + source type + content depth + lineage determine role.</text>
+  <rect class="tested-chip" x="480" y="696" width="88" height="8" />
 
   <rect class="det-card" x="88" y="728" width="504" height="88" />
   <text class="card-title" x="112" y="756">Resolve + canonicalize source</text>
   <text class="body" x="112" y="784">One source hop | lossless document | stable hash anchors</text>
+  <rect class="tested-chip" x="480" y="808" width="88" height="8" />
 
   <rect class="agent-card" x="88" y="836" width="504" height="96" />
   <text class="card-title" x="112" y="864">AI question-relevance proposal</text>
   <text class="body" x="112" y="890">Relevant | partial | not relevant | uncertain</text>
   <text class="caption" x="112" y="914">Code validates lineage and exact anchors; AI has no approval authority.</text>
+  <rect class="tested-chip" x="480" y="924" width="88" height="8" />
 
   <rect class="human-card" x="88" y="952" width="504" height="88" />
   <text class="card-title" x="112" y="980">Human evidence admission</text>
@@ -278,7 +282,7 @@
 
   <rect class="det-card" x="1720" y="1168" width="592" height="144" />
   <text class="card-title" x="1744" y="1196">Current implementation slice</text>
-  <text class="body" x="1744" y="1222">One saved provider item -> classify -> route -> ledger</text>
-  <text class="caption" x="1744" y="1248">Next: one approved source through Find -> Sweep -> Judge -> Write.</text>
+  <text class="body" x="1744" y="1222">Scope -> question -> collect -> canonicalize -> relevance -> candidate</text>
+  <text class="caption" x="1744" y="1248">Panel 1 complete: approved NV snapshot is ready for source assurance.</text>
   <text class="caption" x="1744" y="1274">Scale only after each behavior works and is measured.</text>
 </svg>

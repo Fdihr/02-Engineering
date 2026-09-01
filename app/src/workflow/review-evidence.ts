@@ -52,6 +52,17 @@ export const reviewEvidence = (
       event
     });
   }
+  if (review.decision === "revision_requested") {
+    const event: EvidenceReviewEvent = {
+      ...baseEvent,
+      eventType: "evidence.admission.revision_requested"
+    };
+    return ok({
+      outcome: "revision_requested",
+      decision,
+      event
+    });
+  }
 
   const snapshot: ApprovedEvidenceSnapshot = {
     snapshotId: `snapshot-${review.decisionId}`,

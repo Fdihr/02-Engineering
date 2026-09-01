@@ -4,13 +4,14 @@ Use this file as the index of active contracts.
 
 ## Active contracts
 
-1. [Provider item role and provenance](provider-item-role-and-provenance.md)
-2. [Evidence admission](evidence-admission.md)
-3. [Research question and provider operation](research-question-and-provider-operation.md)
-4. [Source content retrieval](source-content-retrieval.md)
-5. [Retrieved source relevance and re-intake](retrieved-source-reintake.md)
-6. [Canonical source document and anchors](source-document-and-anchors.md)
-7. [Seerist intake manifest](seerist-intake-manifest.md)
+1. [Memo scope and research question approval](memo-scope-and-question-approval.md)
+2. [Provider item role and provenance](provider-item-role-and-provenance.md)
+3. [Evidence admission](evidence-admission.md)
+4. [Research question and provider operation](research-question-and-provider-operation.md)
+5. [Source content retrieval](source-content-retrieval.md)
+6. [Retrieved source relevance and re-intake](retrieved-source-reintake.md)
+7. [Canonical source document and anchors](source-document-and-anchors.md)
+8. [Seerist intake manifest](seerist-intake-manifest.md)
 
 ## Planned contracts
 

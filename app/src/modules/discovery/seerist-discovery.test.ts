@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  assessSeeristDiscoveryPagination,
   prepareSeeristDiscovery,
   rankSeeristDiscoveryCandidates,
   type CollectedSeeristPage,
@@ -21,6 +22,12 @@ const approvedQuestion = {
   status: "approved",
   approvedBy: "analyst-test",
   approvedAt: "2026-08-28T08:00:00.000Z",
+  scopeApproval: {
+    scopeId: "scope-test",
+    scopeVersion: 1,
+    artifactRef: "runs/run-test/memo-scopes/scope-test/v1/approved.json",
+    artifactSha256: "b".repeat(64)
+  },
   artifactRef: "runs/run-test/research-questions/rq-test/approved.json",
   artifactSha256: "a".repeat(64)
 };
@@ -58,6 +65,18 @@ test("validates a bounded discovery plan against approved research intent", () =
       "2026-08-28T09:00:00.000Z"
     ),
     { ok: false, error: "RESEARCH_QUESTION_MISMATCH" }
+  );
+});
+
+test("rejects discovery without explicit scope approval lineage", () => {
+  const { scopeApproval: _scopeApproval, ...legacyQuestion } = approvedQuestion;
+  assert.deepEqual(
+    prepareSeeristDiscovery(
+      plan,
+      legacyQuestion,
+      "2026-08-28T09:00:00.000Z"
+    ),
+    { ok: false, error: "MEMO_SCOPE_APPROVAL_REQUIRED" }
   );
 });
 
@@ -118,4 +137,61 @@ test("merges duplicate pages and deterministically filters unrelated results", (
     "Moscow",
     "NATO"
   ]);
+});
+
+test("flags changing totals, timestamp inversions, duplicate IDs, and exhausted pages", () => {
+  const boundedPlan: SeeristDiscoveryPlan = {
+    ...plan,
+    pageSize: 2,
+    maxPagesPerQuery: 2,
+    maxApiCalls: 4,
+    minimumScore: 3
+  };
+  const pages: CollectedSeeristPage[] = [
+    {
+      queryId: "person",
+      pageOffset: 0,
+      artifactRef: "person-offset-0.json",
+      payload: {
+        features: [
+          { properties: { id: "item-1", title: "John Ratcliffe", "@timestamp": "2026-08-28T10:00:00.000Z" } },
+          { properties: { id: "item-2", "@timestamp": "2026-08-28T09:00:00.000Z" } }
+        ],
+        metadata: { pageSize: "2", total: 4, prev: null, next: "page-2" }
+      }
+    },
+    {
+      queryId: "person",
+      pageOffset: 2,
+      artifactRef: "person-offset-2.json",
+      payload: {
+        features: [
+          { properties: { id: "item-3", "@timestamp": "2026-08-28T11:00:00.000Z" } },
+          { properties: { id: "item-2", "@timestamp": "2026-08-28T08:00:00.000Z" } }
+        ],
+        metadata: { pageSize: "2", total: 5, prev: "page-1", next: "page-3" }
+      }
+    }
+  ];
+
+  const assessments = assessSeeristDiscoveryPagination(boundedPlan, pages);
+
+  assert.equal(assessments[0]?.status, "snapshot-drift");
+  assert.deepEqual(assessments[0]?.reasons, [
+    "Provider item item-2 appears at offsets 0 and 2.",
+    "Total changed from 4 to 5 between offsets 0 and 2.",
+    "A newer timestamp appears at offset 2 after offset 0.",
+    "Collection budget ended with a next page after offset 2."
+  ]);
+  assert.equal(assessments[1]?.status, "incomplete");
+  assert.deepEqual(assessments[1]?.reasons, ["No page was collected for the query."]);
+  const candidates = rankSeeristDiscoveryCandidates(
+    boundedPlan,
+    pages,
+    assessments
+  );
+  assert.match(
+    candidates[0]?.collectionLimitations[0] ?? "",
+    /pagination snapshot-drift/
+  );
 });

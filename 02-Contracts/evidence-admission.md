@@ -1,19 +1,19 @@
 # Evidence Admission Contract
 
 Status: Active baseline
-Validated: 2026-08-28
+Validated: 2026-09-01
 Implementation: `../app/src/modules/approval/evidence-approval.ts`, `../app/src/workflow/review-evidence.ts`
 
 ## Scope
 
-This contract covers one explicit human decision on one persisted intake result. It does not require the human to author source-to-question relevance. For retrieved sources, that rationale is a separately validated AI proposal under the retrieved-source relevance contract. This contract does not define source retrieval, batch review, revision requests, source assurance, or publication approval.
+This contract covers one explicit human decision on one persisted intake result. It does not require the human to author source-to-question relevance. For retrieved sources, that rationale is a separately validated AI proposal under the retrieved-source relevance contract. This contract does not define source retrieval, batch review, source assurance, or publication approval.
 
 ## Command
 
 Run from `app/`:
 
 ```powershell
-npm run review:evidence -- <intake-result.json> <approve|reject> <reviewer-id> <reason> [decision-id]
+npm run review:evidence -- <intake-result.json> <approve|reject|revise> <reviewer-id> <reason> [decision-id]
 ```
 
 The command input is the explicit human action. Narrative wording, provider scores, model output, and chat text cannot invoke the deterministic transition by themselves.
@@ -31,11 +31,11 @@ The persisted intake artifact is reconstructed from unknown JSON and must satisf
 7. The recomputed raw artifact SHA-256 matches the candidate's preserved lineage.
 8. After the accepted relevance-contract migration, a retrieved-source candidate includes a validated canonical source-document reference, exact supporting anchors, AI question-relevance assessment, and model-invocation provenance tied to the same source and approved question.
 
-Collection leads, context items, and initial native Seerist captured-content intake cannot pass this gate. Native intake must complete canonicalization, question relevance, and positive-assessment candidate conversion first. That conversion is not yet implemented.
+Collection leads, context items, and initial native Seerist captured-content intake cannot pass this gate. Native intake must complete canonicalization, question relevance, and positive-assessment candidate conversion first.
 
 ## Decisions
 
-The accepted decisions are `approved` and `rejected`.
+The accepted decisions are `approved`, `rejected`, and `revision_requested`. The CLI action `revise` records `revision_requested`.
 
 Every successful decision records:
 
@@ -46,7 +46,7 @@ Every successful decision records:
 - Canonical intake artifact reference.
 - Human-attributed admission event.
 
-A rejection creates no approved evidence snapshot.
+A rejection or revision request creates no approved evidence snapshot. A revision request closes that review attempt; corrected relevance or source artifacts must return through deterministic validation and re-intake before another review.
 
 ## Approved snapshot
 
@@ -75,6 +75,6 @@ runs/<decisionId>/
 
 ## Proven boundary
 
-Synthetic workflow tests cover approval, rejection, ineligible collection leads, mismatched provider IDs, and required human metadata. An isolated command integration test verifies raw-artifact hashing, output creation, Markdown rendering, event persistence, and refusal to overwrite an existing decision directory.
+Synthetic workflow tests cover approval, rejection, revision requests, ineligible collection leads, mismatched provider IDs, and required human metadata. An isolated command integration test verifies raw-artifact hashing, output creation, Markdown rendering, event persistence, revision output without a snapshot, and refusal to overwrite an existing decision directory.
 
 No real Seerist item was approved or rejected during implementation validation.

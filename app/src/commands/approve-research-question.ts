@@ -1,16 +1,26 @@
+import { createHash } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { relative, resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import { renderResearchQuestionSummary } from "../modules/reporting/research-question-summary.js";
 import { approveResearchQuestion } from "../modules/research/research-question.js";
 
 const usage =
-  "Usage: npm run approve:question -- <research-question-proposal.json> <reviewer-id>";
+  "Usage: npm run approve:question -- <research-question-proposal.json> <approved-memo-scope.json> <reviewer-id>";
 
 const artifactRef = (path: string): string =>
   relative(process.cwd(), path).replaceAll("\\", "/");
 
 const commandError = (error: unknown): string =>
   error instanceof Error ? error.message : "Unknown research-question approval failure";
+
+const resolveRunArtifact = (runRoot: string, value: string, label: string): string => {
+  const path = resolve(value);
+  const relativeToRoot = relative(runRoot, path);
+  if (relativeToRoot.startsWith("..") || isAbsolute(relativeToRoot)) {
+    throw new Error(`${label} must remain inside the configured run directory.`);
+  }
+  return path;
+};
 
 const main = async (): Promise<void> => {
   const approvedAt = new Date().toISOString();
@@ -20,15 +30,35 @@ const main = async (): Promise<void> => {
   let proposalArtifactRef: string | undefined;
 
   try {
-    const [proposalPathValue, reviewerIdValue, ...extra] = process.argv.slice(2);
-    if (!proposalPathValue || !reviewerIdValue || extra.length > 0) {
+    const [proposalPathValue, scopePathValue, reviewerIdValue, ...extra] =
+      process.argv.slice(2);
+    if (!proposalPathValue || !scopePathValue || !reviewerIdValue || extra.length > 0) {
       throw new Error(usage);
     }
     reviewerId = reviewerIdValue;
     const proposalPath = resolve(proposalPathValue);
     proposalArtifactRef = artifactRef(proposalPath);
-    const proposal: unknown = JSON.parse(await readFile(proposalPath, "utf8"));
-    const result = approveResearchQuestion(proposal, reviewerId, approvedAt);
+    const scopePath = resolveRunArtifact(runRoot, scopePathValue, "Approved memo scope");
+    const [proposalBytes, scopeBytes] = await Promise.all([
+      readFile(proposalPath),
+      readFile(scopePath)
+    ]);
+    const proposal: unknown = JSON.parse(proposalBytes.toString("utf8"));
+    const parsedScope: unknown = JSON.parse(scopeBytes.toString("utf8"));
+    const scope =
+      typeof parsedScope === "object" && parsedScope !== null && !Array.isArray(parsedScope)
+        ? {
+            ...parsedScope,
+            artifactRef: artifactRef(scopePath),
+            artifactSha256: createHash("sha256").update(scopeBytes).digest("hex")
+          }
+        : parsedScope;
+    const result = approveResearchQuestion(
+      proposal,
+      scope,
+      reviewerId,
+      approvedAt
+    );
     if (!result.ok) {
       throw new Error(`Research-question approval failed: ${result.error}`);
     }
@@ -51,6 +81,8 @@ const main = async (): Promise<void> => {
       eventLogPath,
       `${JSON.stringify({
         questionId: result.value.id,
+        scopeId: result.value.scopeApproval?.scopeId,
+        scopeVersion: result.value.scopeApproval?.scopeVersion,
         runId: result.value.runId,
         occurredAt: approvedAt,
         actorType: "human",

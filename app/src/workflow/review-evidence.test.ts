@@ -250,6 +250,42 @@ test("explicit approval preserves retrieved-source assessment and lineage", () =
     assert.equal(result.value.snapshot.item.retrievalLineage.retrievalId, "retrieval-001");
   }
 
+  const revision = reviewEvidence({
+    ...request,
+    decision: "revision_requested",
+    reason: "The anchored rationale needs correction before admission.",
+    rawArtifactSha256: "e".repeat(64),
+    questionRelevanceArtifacts,
+    intake: retrievedIntake
+  });
+  assert.equal(revision.ok, true);
+  if (revision.ok) {
+    assert.deepEqual(revision.value, {
+      outcome: "revision_requested",
+      decision: {
+        id: request.decisionId,
+        sourceRunId: "intake-run-001",
+        providerItemId: "retrieved-source-001",
+        reviewerId: request.reviewerId,
+        decidedAt: request.decidedAt,
+        decision: "revision_requested",
+        reason: "The anchored rationale needs correction before admission.",
+        intakeArtifactRef: request.intakeArtifactRef
+      },
+      event: {
+        decisionId: request.decisionId,
+        sourceRunId: "intake-run-001",
+        occurredAt: request.decidedAt,
+        actorType: "human",
+        actorId: request.reviewerId,
+        stage: "evidence_admission",
+        eventType: "evidence.admission.revision_requested",
+        status: "completed",
+        intakeArtifactRef: request.intakeArtifactRef
+      }
+    });
+  }
+
   const changedRawArtifact = reviewEvidence({
     ...request,
     decision: "approved",

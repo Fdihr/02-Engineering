@@ -1,6 +1,6 @@
 # Implemented Workflow Baseline
 
-Status: Research-question approval, bounded Seerist collection, checksum-bound one-item intake, secure one-source retrieval, native and retrieved-source canonicalization, bounded Copilot PoC question relevance, positive-assessment candidate conversion, and evidence admission implemented and validated. The real NV candidate is pending human review.
+Status: Panel 1 is complete for the current one-source baseline: memo-scope and research-question approval, bounded Seerist collection, checksum-bound one-item intake, secure one-source retrieval, native and retrieved-source canonicalization, bounded Copilot PoC question relevance, positive-assessment candidate conversion, and evidence admission. Human reviewer `FDIHR` approved the real NV candidate as `nv-evidence-review-001`; its immutable snapshot is ready for Panel 2 source assurance.
 
 ## Product boundary
 
@@ -29,21 +29,22 @@ The probe established three provider roles:
 
 ## Completed slice: approved research intent and bounded collection
 
-A proposed research question must be explicitly approved by a named human before a production provider operation can run. Relevance therefore originates in approved intent rather than being assigned to returned material after collection.
+A memo scope and its bounded research question must each be explicitly approved by a named human before a production provider operation can run. Relevance therefore originates in approved intent rather than being assigned to returned material after collection.
 
 Run from `app/`:
 
 ```powershell
-npm run approve:question -- <research-question-proposal.json> <reviewer-id>
+npm run approve:scope -- <memo-scope-proposal.json> <reviewer-id>
+npm run approve:question -- <research-question-proposal.json> <approved-memo-scope.json> <reviewer-id>
 npm run collect:seerist -- <provider-operation.json> <approved-research-question.json>
 npm run discover:seerist -- <discovery-plan.json> <approved-research-question.json>
 ```
 
-The approval command writes canonical, non-overwritable JSON plus a read-only Markdown view under `runs/<runId>/research-questions/<questionId>/`. The collection command validates question approval and chronology, requires matching question and run IDs, allows only `GET /v1/wod`, and performs no credential lookup or network operation before that gate succeeds.
+The approval commands write canonical, non-overwritable JSON plus read-only Markdown views. Question approval verifies the exact approved-scope artifact and rejects run, version, geography, or time-window expansion. Collection and discovery require scope lineage, validate question approval and chronology, allow only `GET /v1/wod`, and perform no credential lookup or network operation before both human gates succeed.
 
 The active boundary is `../02-Contracts/research-question-and-provider-operation.md`. The developer probe remains discovery-only and cannot satisfy this contract.
 
-The bounded discovery command supports explicit query variants and limited pagination when one provider operation has insufficient recall. It preserves every raw page, deduplicates provider items, scores explicit title and summary term matches, and creates a read-only candidate report. It cannot intake or approve candidates.
+The bounded discovery command supports explicit query variants and limited pagination when one provider operation has insufficient recall. It preserves every raw page, detects changing totals, timestamp inversions, duplicate IDs, contradictory pagination links, malformed pages, and budget exhaustion, then carries those reasons into affected candidate limitations. It deduplicates provider items, scores explicit title and summary term matches, and creates a read-only candidate report. It cannot intake or approve candidates.
 
 ## Completed slice: one-item evidence intake
 
@@ -68,7 +69,7 @@ One persisted intake result -> validate gate eligibility -> explicit human appro
 Run from `app/`:
 
 ```powershell
-npm run review:evidence -- <intake-result.json> <approve|reject> <reviewer-id> <reason> [decision-id]
+npm run review:evidence -- <intake-result.json> <approve|reject|revise> <reviewer-id> <reason> [decision-id]
 ```
 
 The command confines the intake and raw artifact to its configured run root, hashes the referenced raw artifact, refuses to overwrite an existing decision directory, and writes canonical decision JSON plus a read-only Markdown receipt. An approved decision also writes `approved-evidence-snapshot.json`; rejection cannot create that artifact. Initial native Seerist intake remains ineligible; only a checksum-bound candidate created from validated positive question relevance may enter this gate.
@@ -195,7 +196,7 @@ Do not add:
 17. AI remains responsible only for a typed, source-grounded relevance proposal; deterministic code creates the pending route and humans retain evidence-admission authority.
 18. Scalability must preserve the complete source and mandatory `Find -> Sweep -> Judge -> Write`; reuse, per-source isolation, checksum deduplication, and bounded scheduling provide throughput without lowering the final intelligence standard.
 19. Canonical source documents give retrieved and provider-captured content one downstream shape; a new source mechanism needs only a narrow adapter when the common contract remains satisfied.
-20. The real NV assessment now exists as pending candidate `nv-candidate-question-relevance-001`; no human evidence decision has been made.
+20. Human reviewer `FDIHR` approved real NV candidate `nv-candidate-question-relevance-001` in decision `nv-evidence-review-001`; snapshot `snapshot-nv-evidence-review-001` is the first real input ready for source assurance.
 
 ## Legacy PoC input rule
 

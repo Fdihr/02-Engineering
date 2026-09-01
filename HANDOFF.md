@@ -1,7 +1,7 @@
 # CTI Engineering Handoff
 
 Date: 2026-09-01
-Status: AI-backed positive candidate conversion implemented and checked on the real NV assessment; candidate is pending explicit human evidence review
+Status: Panel 1 complete; real NV candidate approved as `nv-evidence-review-001` and ready for Panel 2 source assurance
 Workspace root: `CTI/`
 Source domain: Agentic App Engineering
 Authority class: Current implementation direction and next-action handoff
@@ -54,14 +54,14 @@ Do not implement the complete workflow next.
 Build small scripts and grow the architecture only when working behavior requires it:
 
 1. Seerist reality-check probe (complete).
-2. Explicit research-question approval and bounded Seerist collection (complete).
+2. Explicit memo-scope and research-question approval plus bounded Seerist collection (complete).
 3. One-item evidence intake and provider-role classification (complete).
 4. Explicit human evidence admission (complete).
 5. One exact-URL source retrieval from an approved collection lead (implemented and checked live).
 6. One lossless canonical source document with exact anchor validation (implemented and checked on the retrieved NV source).
 7. One bounded AI source-to-question relevance assessment plus deterministic proposal validation (implemented as an interactive Copilot PoC).
-8. Convert one validated positive assessment into a pending candidate and exercise human evidence admission (implemented; real NV candidate pending human decision).
-9. One-source `Find -> Sweep -> Judge -> Write` after a real human-approved snapshot exists.
+8. Convert one validated positive assessment into a pending candidate and exercise human evidence admission (complete; real NV snapshot approved).
+9. One-source `Find -> Sweep -> Judge -> Write` from the approved NV snapshot.
 10. Sequential multi-source runner.
 11. Cross-source claim synthesis.
 12. Memo writer and verifier.
@@ -107,10 +107,11 @@ The active intake boundary is `02-Engineering/02-Contracts/provider-item-role-an
 
 ## Completed slice: approved research intent and bounded collection
 
-Research questions now cross an explicit human approval boundary before production provider access. The canonical artifact is immutable, carries reviewer and approval time, and is externally hashed when a consumer binds it. One Seerist operation must match the approved question ID and run ID and may target only the proven `GET /v1/wod` endpoint.
+Memo scope and research questions now cross separate explicit human approval boundaries before production provider access. Each canonical artifact is immutable and human-attributed. Question approval verifies approved-scope lineage and bounded geography/time; collection and discovery reject unscoped questions before credential access. One Seerist operation must match the approved question ID and run ID and may target only the proven `GET /v1/wod` endpoint.
 
 ```powershell
-npm run approve:question -- <research-question-proposal.json> <reviewer-id>
+npm run approve:scope -- <memo-scope-proposal.json> <reviewer-id>
+npm run approve:question -- <research-question-proposal.json> <approved-memo-scope.json> <reviewer-id>
 npm run collect:seerist -- <provider-operation.json> <approved-research-question.json>
 ```
 
@@ -121,7 +122,7 @@ Validation occurs before credential lookup or `fetch`. The active boundary is `0
 The human-review command accepts one eligible relevance-assessed intake result, `approve` or `reject`, reviewer ID, reason, and an optional decision ID. It confines and validates the intake and raw artifact, hashes the raw response, writes a canonical decision and read-only Markdown receipt, and appends a human-attributed event. Initial native Seerist intake is explicitly ineligible; approval alone creates a non-overwritable approved evidence snapshot.
 
 ```powershell
-npm run review:evidence -- <intake-result.json> <approve|reject> <reviewer-id> <reason> [decision-id]
+npm run review:evidence -- <intake-result.json> <approve|reject|revise> <reviewer-id> <reason> [decision-id]
 ```
 
 The active boundary is `02-Engineering/02-Contracts/evidence-admission.md`. Validation used synthetic temporary artifacts; no real Seerist item was approved or rejected.
@@ -151,7 +152,7 @@ npm run record:question-relevance -- <question-relevance-request.json> <copilot-
 
 The adapter honestly records `model: "not-exposed-by-host"`. This is not a production Copilot API integration. A future Foundry adapter replaces the manual transport while preserving the request, assessment, exact-anchor, and authority contracts.
 
-The real NV assessment completed as `partially-relevant` with three exact anchors and controller-derived destination `evidence_candidate_proposal / pending_human_review`. On 2026-09-01 it was converted into candidate `nv-candidate-question-relevance-001`, routed to `human_review`, and left pending without an evidence decision.
+The real NV assessment completed as `partially-relevant` with three exact anchors and controller-derived destination `evidence_candidate_proposal / pending_human_review`. On 2026-09-01 it was converted into candidate `nv-candidate-question-relevance-001`; human reviewer `FDIHR` then approved it in decision `nv-evidence-review-001`, creating snapshot `snapshot-nv-evidence-review-001` for source assurance.
 
 ## Event-log boundary
 
@@ -176,7 +177,8 @@ Available commands:
 
 ```powershell
 npm run dev
-npm run approve:question -- <research-question-proposal.json> <reviewer-id>
+npm run approve:scope -- <memo-scope-proposal.json> <reviewer-id>
+npm run approve:question -- <research-question-proposal.json> <approved-memo-scope.json> <reviewer-id>
 npm run collect:seerist -- <provider-operation.json> <approved-research-question.json>
 npm run discover:seerist -- <discovery-plan.json> <approved-research-question.json>
 npm run intake:seerist -- <raw-provider-artifact.json> <provider-item-id> <approved-research-question.json>
@@ -185,16 +187,16 @@ npm run canonicalize:source -- <source-retrieval-result.json|seerist-intake-resu
 npm run prepare:question-relevance -- <source-document.json>
 npm run record:question-relevance -- <question-relevance-request.json> <copilot-response.json>
 npm run reintake:source -- <source-retrieval-result.json> <question-relevance-assessment.json> [candidate-id]
-npm run review:evidence -- <intake-result.json> <approve|reject> <reviewer-id> <reason> [decision-id]
+npm run review:evidence -- <intake-result.json> <approve|reject|revise> <reviewer-id> <reason> [decision-id]
 npm test
 npm run typecheck
 npm run build
 npm run start
 ```
 
-The modules implement explicit research-question approval, bounded question-linked collection and discovery, one-item intake, one-hop source retrieval, lossless source canonicalization, Copilot PoC question relevance, positive-assessment candidate conversion, and human evidence admission, not the full memo workflow. Discovery may run multiple explicit query pages under a hard budget but cannot advance candidates into intake. Retrieval handles one exact URL and cannot create an evidence candidate. Canonicalization creates stable provider-neutral source documents and anchors but makes no semantic judgment. The relevance boundary produces only a proposed assessment and controller-derived route. Re-intake reconstructs only validated positive assessments, verifies complete retrieval and model artifact lineage, and creates a pending candidate. Only the review command can create an approved snapshot, and only with explicit reviewer metadata.
+The modules implement explicit memo-scope and research-question approval, bounded question-linked collection and discovery, one-item intake, one-hop source retrieval, lossless source canonicalization, Copilot PoC question relevance, positive-assessment candidate conversion, and human evidence admission, not the full memo workflow. Discovery may run multiple explicit query pages under a hard budget but cannot advance candidates into intake. Retrieval handles one exact URL and cannot create an evidence candidate. Canonicalization creates stable provider-neutral source documents and anchors but makes no semantic judgment. The relevance boundary produces only a proposed assessment and controller-derived route. Re-intake reconstructs only validated positive assessments, verifies complete retrieval and model artifact lineage, and creates a pending candidate. Only the review command can create an approved snapshot, and only with explicit reviewer metadata.
 
-The accepted path now creates a lossless provider-neutral source document, a bounded AI question-relevance artifact grounded in exact `SourceAnchor` references, and a checksum-bound pending candidate only for positive validated assessments. The evidence gate preserves assessment, model, and retrieval lineage in an approved snapshot. The next transition requires an explicit human decision on the real NV candidate.
+The accepted path now creates a lossless provider-neutral source document, a bounded AI question-relevance artifact grounded in exact `SourceAnchor` references, and a checksum-bound pending candidate only for positive validated assessments. The evidence gate preserves assessment, model, and retrieval lineage in an approved snapshot. The verified real NV snapshot is ready for one-source `Find -> Sweep -> Judge -> Write`.
 
 This change must not lower output quality. Every admitted source still receives independent `Find`, blind `Sweep`, `Judge`, and `Write`; cross-source challenge, Vestas dual-lineage relevance, independent verification, and human publication approval remain required. Similar cases scale through source adapters, immutable per-source state, checksum deduplication, sequential reuse, and later bounded concurrency, not reduced analysis depth.
 
@@ -241,7 +243,7 @@ These are design hypotheses. Keep what testing supports; simplify or revise what
 - Do not build the final application architecture in one pass.
 - Do not implement the chat UI.
 - Do not broaden retrieval beyond one exact source URL or add Firecrawl search, crawl, actions, profiles, or LLM formats.
-- Do not approve or reject the real NV candidate without explicit reviewer identity and reasoning.
+- Do not alter or recreate real decision `nv-evidence-review-001`; it records reviewer `FDIHR` and reason `it fits`.
 - Do not add a live model provider until an approved Foundry endpoint and authentication policy are known.
 - Preserve the complete source and mandatory `Find -> Sweep -> Judge -> Write`; do not trade intelligence depth for throughput.
 - Do not implement the full Find/Sweep/Judge/Write chain yet.
@@ -257,25 +259,25 @@ At this handoff:
 - Findings and the capability board record the observed provider behavior.
 - Routing no longer auto-approves content based on narrative wording.
 - Production Seerist collection rejects absent, unapproved, late-approved, or mismatched research intent before credential or network access.
-- Bounded discovery uses supported `/v1/wod` query variants, limited pagination, deduplication, and deterministic local ranking; it surfaced 50 unique URLs for the CIA Director Moscow test.
+- Bounded discovery uses supported `/v1/wod` query variants, limited pagination, integrity assessment, deduplication, deterministic local ranking, and candidate limitation propagation; it surfaced 50 unique URLs for the CIA Director Moscow test.
 - AskAnna citation UUIDs are not reproducible through tested `/v1/wod` ID or cluster-ID filters and remain manually supplied leads only.
 - Intake reconstructs the exact collection bundle, records raw and manifest checksums, refuses overwrite, and confines all artifacts to the run root.
 - Native captured content routes through canonicalization and question relevance and cannot enter evidence admission directly.
 - Intake, reporting, approval workflow, and isolated command tests pass.
 - The earlier saved analyst-report item is retained only as non-admissible historical output because it has no approved pre-collection question lineage.
-- Explicit approval and rejection are implemented; no real item has been decided.
+- Explicit approval, rejection, and revision-request decisions are implemented; the real NV candidate was approved by `FDIHR`.
 - One-source Firecrawl retrieval is implemented with fixed-origin, exact-URL, no-cache-storage, TLS, timeout, size, redirect, checksum, and untrusted-content controls; the live NV check completed successfully on 2026-08-31 without requesting evidence approval.
 - Provider-neutral canonicalization is implemented for retrieved and native Seerist content with deterministic IDs, exact UTF-8 anchors, path confinement, non-overwrite behavior, and lossless complete-source retention; the NV retrieval produced a validated 76-segment document.
 - Bounded relevance request and response validation is implemented with fixed untrusted-source policy, exact question and source lineage, all four verdict routes, model-authority rejection, and content-safe events. The real NV proposal validated as `partially-relevant` with three exact anchors.
 - Retrieved-source re-intake accepts only a validated positive assessment, verifies retrieval, canonical-document, model-request, model-response, assessment, and decision checksums, creates only a pending candidate, and preserves assessment and retrieval lineage through the evidence gate.
-- The real NV assessment was converted into `nv-candidate-question-relevance-001`; it is pending human review and has not been approved or rejected.
+- The real NV candidate was approved as `nv-evidence-review-001`; `snapshot-nv-evidence-review-001` preserves its raw, retrieval, model, assessment, and question lineage.
 - TypeScript typecheck and build pass.
 - Raw provider artifacts remain only in the ignored local `app/runs/` folder.
 
 ## Suggested opening prompt
 
-> Read `00-Second Brain/agent.md`, `HANDOFF.md`, the completed baseline in `02-Engineering/03-Workflow/first-slice.md`, and `02-Engineering/02-Contracts/evidence-admission.md`. Obtain an explicit human approve or reject decision for pending candidate `nv-candidate-question-relevance-001`. Only after a real approved snapshot exists, implement the one-source `Find -> Sweep -> Judge -> Write` slice without changing its quality requirements.
+> Read `HANDOFF.md`, the completed baseline in `03-Workflow/first-slice.md`, the canonical workflow in `03-Workflow/memo-workflow.md`, and approved snapshot `app/runs/nv-evidence-review-001/approved-evidence-snapshot.json`. Implement the one-source `Find -> Sweep -> Judge -> Write` slice without changing its quality requirements.
 
-## Human input required
+## Human input still required
 
-Provide an explicit approve or reject decision, reviewer ID, and reason for `nv-candidate-question-relevance-001`; model output cannot supply this decision. Confirm provider rules for retaining raw responses and derived fixtures before committing any provider content. When Foundry access becomes available, provide only non-secret endpoint type, deployment name, authentication policy, API version, region, and retention constraints. Credentials remain local environment configuration and must never be pasted into chat or committed.
+Confirm provider rules for retaining raw responses and derived fixtures before committing any provider content. When Foundry access becomes available, provide only non-secret endpoint type, deployment name, authentication policy, API version, region, and retention constraints. Credentials remain local environment configuration and must never be pasted into chat or committed.

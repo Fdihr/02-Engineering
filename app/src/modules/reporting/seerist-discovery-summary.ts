@@ -1,5 +1,6 @@
 import type {
   SeeristDiscoveryCandidate,
+  SeeristPaginationAssessment,
   SeeristDiscoveryPlan
 } from "../discovery/seerist-discovery.js";
 
@@ -35,6 +36,10 @@ const renderCandidate = (
   row("Cluster", candidate.clusterId ?? "Not provided"),
   row("Cluster size", candidate.clusterSize?.toString() ?? "Not provided"),
   row("Source URL", candidate.sourceUrl ?? "Not provided"),
+  row(
+    "Collection limitations",
+    candidate.collectionLimitations.join(" ") || "None recorded"
+  ),
   "",
   candidate.summary ? escapeMarkdown(candidate.summary) : "_No summary provided._",
   ""
@@ -44,6 +49,7 @@ export const renderSeeristDiscoverySummary = (
   plan: SeeristDiscoveryPlan,
   question: string,
   apiCalls: number,
+  paginationAssessments: SeeristPaginationAssessment[],
   candidates: SeeristDiscoveryCandidate[]
 ): string =>
   [
@@ -59,6 +65,15 @@ export const renderSeeristDiscoverySummary = (
     row("API calls", String(apiCalls)),
     row("Candidate count", String(candidates.length)),
     row("Minimum score", String(plan.minimumScore)),
+    "",
+    "## Pagination Integrity",
+    "",
+    "| Query | Status | Reasons |",
+    "| --- | --- | --- |",
+    ...paginationAssessments.map(
+      (assessment) =>
+        `| ${escapeMarkdown(assessment.queryId)} | ${assessment.status} | ${escapeMarkdown(assessment.reasons.join(" ") || "None")} |`
+    ),
     "",
     ...candidates.flatMap(renderCandidate)
   ].join("\n");

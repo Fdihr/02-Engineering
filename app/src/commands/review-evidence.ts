@@ -7,14 +7,14 @@ import { reviewEvidence } from "../workflow/review-evidence.js";
 
 type CommandOptions = {
   intakePath: string;
-  decision: "approved" | "rejected";
+  decision: "approved" | "rejected" | "revision_requested";
   reviewerId: string;
   reason: string;
   decisionId?: string;
 };
 
 const usage =
-  "Usage: npm run review:evidence -- <intake-result.json> <approve|reject> <reviewer-id> <reason> [decision-id]";
+  "Usage: npm run review:evidence -- <intake-result.json> <approve|reject|revise> <reviewer-id> <reason> [decision-id]";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -24,7 +24,11 @@ const parseOptions = (args: string[]): CommandOptions => {
   if (!intakePath || !requestedDecision || !reviewerId || !reason || extra.length > 0) {
     throw new Error(usage);
   }
-  if (requestedDecision !== "approve" && requestedDecision !== "reject") {
+  if (
+    requestedDecision !== "approve" &&
+    requestedDecision !== "reject" &&
+    requestedDecision !== "revise"
+  ) {
     throw new Error(usage);
   }
   if (decisionId && (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(decisionId) || decisionId === "..")) {
@@ -33,7 +37,12 @@ const parseOptions = (args: string[]): CommandOptions => {
 
   return {
     intakePath,
-    decision: requestedDecision === "approve" ? "approved" : "rejected",
+    decision:
+      requestedDecision === "approve"
+        ? "approved"
+        : requestedDecision === "reject"
+          ? "rejected"
+          : "revision_requested",
     reviewerId,
     reason,
     decisionId

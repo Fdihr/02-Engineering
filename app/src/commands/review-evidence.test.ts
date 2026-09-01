@@ -254,6 +254,31 @@ test("writes approved artifacts once and refuses to overwrite them", async () =>
     );
     assert.notEqual(outside.status, 0);
     assert.match(outside.stderr, /must remain inside the configured run directory/);
+
+    const revision = spawnSync(
+      process.execPath,
+      [
+        ...args.slice(0, 4),
+        "revise",
+        "analyst-test",
+        "Correct the anchored rationale before admission.",
+        "revision-command-test"
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: { ...process.env, EVIDENCE_RUN_DIR: outputRoot }
+      }
+    );
+    assert.equal(revision.status, 0, revision.stderr);
+    const revisionDirectory = resolve(outputRoot, "revision-command-test");
+    const revisionDecision = JSON.parse(
+      await readFile(resolve(revisionDirectory, "evidence-decision.json"), "utf8")
+    ) as Record<string, unknown>;
+    assert.equal(revisionDecision.decision, "revision_requested");
+    await assert.rejects(
+      readFile(resolve(revisionDirectory, "approved-evidence-snapshot.json"))
+    );
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }

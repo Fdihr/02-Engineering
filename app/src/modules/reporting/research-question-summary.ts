@@ -28,6 +28,8 @@ export const renderResearchQuestionSummary = (
     row("Question ID", question.id),
     row("Research run", question.runId),
     row("Scope version", String(question.scopeVersion)),
+    row("Scope ID", question.scopeApproval?.scopeId ?? "Legacy unbound question"),
+    row("Scope artifact", question.scopeApproval?.artifactRef ?? "Not recorded"),
     row("Question", question.question),
     row("Rationale", question.rationale),
     row("Geographies", question.geographies.join(", ")),

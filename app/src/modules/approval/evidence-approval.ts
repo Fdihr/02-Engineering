@@ -35,7 +35,7 @@ export type EvidenceReviewRequest = {
   decisionId: string;
   reviewerId: string;
   decidedAt: string;
-  decision: "approved" | "rejected";
+  decision: "approved" | "rejected" | "revision_requested";
   reason: string;
   intakeArtifactRef: string;
   rawArtifactSha256: string;
@@ -498,7 +498,11 @@ export const validateEvidenceReview = (
   if (!decidedAt || Number.isNaN(Date.parse(decidedAt))) {
     return err("INVALID_DECIDED_AT");
   }
-  if (input.decision !== "approved" && input.decision !== "rejected") {
+  if (
+    input.decision !== "approved" &&
+    input.decision !== "rejected" &&
+    input.decision !== "revision_requested"
+  ) {
     return err("INVALID_HUMAN_DECISION");
   }
   const reason = nonEmptyString(input.reason);

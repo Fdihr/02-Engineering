@@ -3,6 +3,7 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { prepareSeeristCollection } from "../modules/collection/seerist-collection.js";
 import {
+  assessSeeristDiscoveryPagination,
   prepareSeeristDiscovery,
   rankSeeristDiscoveryCandidates,
   type CollectedSeeristPage
@@ -157,6 +158,7 @@ const main = async (): Promise<void> => {
           receivedAt,
           httpStatus: response.status,
           mediaType: response.headers.get("content-type") ?? "unknown",
+          cacheStatus: response.headers.get("x-cache") ?? "unknown",
           artifactRef: rawArtifactRef,
           sha256: sha256(rawResponse)
         };
@@ -166,14 +168,28 @@ const main = async (): Promise<void> => {
         }
 
         const payload: unknown = JSON.parse(rawResponse.toString("utf8"));
-        pages.push({ queryId: query.id, pageOffset, artifactRef: rawArtifactRef, payload });
+        pages.push({
+          queryId: query.id,
+          pageOffset,
+          artifactRef: rawArtifactRef,
+          cacheStatus: response.headers.get("x-cache") ?? undefined,
+          payload
+        });
         if (!hasNextPage(payload)) {
           break;
         }
       }
     }
 
-    const candidates = rankSeeristDiscoveryCandidates(prepared.value.plan, pages);
+    const paginationAssessments = assessSeeristDiscoveryPagination(
+      prepared.value.plan,
+      pages
+    );
+    const candidates = rankSeeristDiscoveryCandidates(
+      prepared.value.plan,
+      pages,
+      paginationAssessments
+    );
     const completedAt = new Date().toISOString();
     const resultsPath = resolve(discoveryDirectory, "discovery-results.json");
     const summaryPath = resolve(discoveryDirectory, "discovery-summary.md");
@@ -188,6 +204,7 @@ const main = async (): Promise<void> => {
           completedAt,
           apiCalls,
           pages: pageManifests,
+          paginationAssessments,
           candidates
         },
         null,
@@ -201,6 +218,7 @@ const main = async (): Promise<void> => {
         prepared.value.plan,
         prepared.value.researchQuestion.question,
         apiCalls,
+        paginationAssessments,
         candidates
       ),
       "utf8"
