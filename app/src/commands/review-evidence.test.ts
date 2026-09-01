@@ -11,6 +11,16 @@ test("writes approved artifacts once and refuses to overwrite them", async () =>
   try {
     const outputRoot = resolve(tempRoot, "outputs");
     const rawPath = resolve(outputRoot, "source-artifacts", "raw-response.json");
+    const assessmentPath = resolve(
+      outputRoot,
+      "source-artifacts",
+      "question-relevance-assessment.json"
+    );
+    const relevanceDecisionPath = resolve(
+      outputRoot,
+      "source-artifacts",
+      "question-relevance-decision.json"
+    );
     const intakePath = resolve(outputRoot, "source-intakes", "intake-result.json");
     const rawContent = JSON.stringify({ synthetic: "captured source" });
     const rawArtifactSha256 = createHash("sha256").update(rawContent).digest("hex");
@@ -67,12 +77,68 @@ test("writes approved artifacts once and refuses to overwrite them", async () =>
             rawArtifactRef: rawPath,
             rawArtifactSha256
           },
-          analystAssessment: {
-            actorType: "human",
-            analystId: "analyst-test",
-            assessedAt: "2026-08-28T09:00:00.000Z",
-            researchQuestionId: "rq-001",
-            relevanceToQuestion: "The source addresses the approved question."
+          questionRelevance: {
+            assessmentArtifactRef: assessmentPath,
+            assessmentArtifactSha256: "1".repeat(64),
+            decisionArtifactRef: relevanceDecisionPath,
+            decisionArtifactSha256: "2".repeat(64),
+            assessment: {
+              schemaVersion: "question-relevance-assessment-v1",
+              id: "question-relevance-assessment-command-test",
+              status: "proposed",
+              runId: "synthetic-intake-001",
+              sourceItemId: "retrieval-synthetic-001",
+              researchQuestionId: "rq-001",
+              researchQuestionArtifactRef:
+                "runs/synthetic-intake-001/approved-research-question.json",
+              researchQuestionArtifactSha256: "a".repeat(64),
+              sourceDocumentId: "source-document-command-test",
+              sourceDocumentArtifactRef:
+                "runs/synthetic-intake-001/source-document.json",
+              sourceDocumentArtifactSha256: "3".repeat(64),
+              assessedAt: "2026-08-28T09:00:00.000Z",
+              modelInvocation: {
+                id: "model-invocation-command-test",
+                provider: "github-copilot-vscode",
+                model: "not-exposed-by-host",
+                promptPolicyVersion: "question-relevance-prompt-v1",
+                promptArtifactRef:
+                  "runs/synthetic-intake-001/question-relevance-request.json",
+                promptArtifactSha256: "4".repeat(64),
+                responseArtifactRef:
+                  "runs/synthetic-intake-001/copilot-response.json",
+                responseArtifactSha256: "5".repeat(64),
+                startedAt: "2026-08-28T08:57:00.000Z",
+                completedAt: "2026-08-28T08:59:00.000Z"
+              },
+              verdict: "relevant",
+              rationale: "The source addresses the approved question.",
+              support: [
+                {
+                  anchor: {
+                    sourceDocumentId: "source-document-command-test",
+                    sourceDocumentArtifactRef:
+                      "runs/synthetic-intake-001/source-document.json",
+                    sourceDocumentArtifactSha256: "3".repeat(64),
+                    segmentId: "source-segment-command-test",
+                    segmentSha256: "6".repeat(64),
+                    quote: "Synthetic captured source.",
+                    quoteStartUtf8Byte: 0,
+                    quoteEndUtf8Byte: 26
+                  },
+                  relationToQuestion: "The source addresses the question."
+                }
+              ],
+              limitations: ["Synthetic source remains untrusted until review."]
+            },
+            decision: {
+              assessmentId: "question-relevance-assessment-command-test",
+              verdict: "relevant",
+              destination: "evidence_candidate_proposal",
+              approvalStatus: "pending_human_review",
+              ruleId: "question-relevance-positive-v1",
+              reason: "A grounded positive assessment may be proposed for review."
+            }
           },
           limitations: ["Synthetic source remains untrusted until review."]
         },
@@ -94,6 +160,39 @@ test("writes approved artifacts once and refuses to overwrite them", async () =>
       }),
       "utf8"
     );
+    const intakeValue = JSON.parse(await readFile(intakePath, "utf8")) as {
+      item: {
+        questionRelevance: {
+          assessmentArtifactSha256: string;
+          decisionArtifactSha256: string;
+          assessment: unknown;
+          decision: unknown;
+        };
+      };
+    };
+    const assessmentContent = JSON.stringify(
+      intakeValue.item.questionRelevance.assessment,
+      null,
+      2
+    );
+    const relevanceDecisionContent = JSON.stringify(
+      intakeValue.item.questionRelevance.decision,
+      null,
+      2
+    );
+    await writeFile(assessmentPath, assessmentContent, "utf8");
+    await writeFile(relevanceDecisionPath, relevanceDecisionContent, "utf8");
+    intakeValue.item.questionRelevance.assessmentArtifactSha256 = createHash(
+      "sha256"
+    )
+      .update(assessmentContent)
+      .digest("hex");
+    intakeValue.item.questionRelevance.decisionArtifactSha256 = createHash(
+      "sha256"
+    )
+      .update(relevanceDecisionContent)
+      .digest("hex");
+    await writeFile(intakePath, JSON.stringify(intakeValue), "utf8");
     const args = [
       "--import",
       "tsx",
@@ -126,6 +225,11 @@ test("writes approved artifacts once and refuses to overwrite them", async () =>
     assert.equal(
       snapshot.rawArtifactSha256,
       rawArtifactSha256
+    );
+    assert.equal(
+      (snapshot.item as { questionRelevance: { assessment: { verdict: string } } })
+        .questionRelevance.assessment.verdict,
+      "relevant"
     );
     assert.match(summary, /read-only/i);
 

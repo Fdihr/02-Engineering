@@ -68,6 +68,31 @@ const rawArtifactReference = (intake: unknown): string => {
   return intake.item.rawArtifactRef;
 };
 
+const questionRelevanceArtifactReferences = (
+  intake: unknown
+): { assessment: string; decision: string } | undefined => {
+  if (!isRecord(intake) || !isRecord(intake.item)) {
+    return undefined;
+  }
+  if (intake.item.provider !== "source_retrieval") {
+    return undefined;
+  }
+  if (!isRecord(intake.item.questionRelevance)) {
+    throw new Error("The intake artifact has no question-relevance lineage.");
+  }
+  const assessment = intake.item.questionRelevance.assessmentArtifactRef;
+  const decision = intake.item.questionRelevance.decisionArtifactRef;
+  if (
+    typeof assessment !== "string" ||
+    !assessment.trim() ||
+    typeof decision !== "string" ||
+    !decision.trim()
+  ) {
+    throw new Error("The intake artifact has incomplete question-relevance lineage.");
+  }
+  return { assessment, decision };
+};
+
 const main = async (): Promise<void> => {
   const decidedAt = new Date().toISOString();
   let decisionId = `review-${decidedAt.replaceAll(":", "-")}-${randomUUID()}`;
@@ -88,6 +113,37 @@ const main = async (): Promise<void> => {
       resolveRunArtifact(runRoot, rawArtifactRef, "Raw artifact")
     );
     const rawArtifactSha256 = createHash("sha256").update(rawArtifact).digest("hex");
+    const relevanceRefs = questionRelevanceArtifactReferences(intake);
+    const questionRelevanceArtifacts = relevanceRefs
+      ? await (async () => {
+          const [assessmentBytes, decisionBytes] = await Promise.all([
+            readFile(
+              resolveRunArtifact(
+                runRoot,
+                relevanceRefs.assessment,
+                "Question-relevance assessment"
+              )
+            ),
+            readFile(
+              resolveRunArtifact(
+                runRoot,
+                relevanceRefs.decision,
+                "Question-relevance decision"
+              )
+            )
+          ]);
+          return {
+            assessmentArtifactSha256: createHash("sha256")
+              .update(assessmentBytes)
+              .digest("hex"),
+            decisionArtifactSha256: createHash("sha256")
+              .update(decisionBytes)
+              .digest("hex"),
+            assessment: JSON.parse(assessmentBytes.toString("utf8")) as unknown,
+            decision: JSON.parse(decisionBytes.toString("utf8")) as unknown
+          };
+        })()
+      : undefined;
     const result = reviewEvidence({
       decisionId,
       reviewerId,
@@ -96,6 +152,7 @@ const main = async (): Promise<void> => {
       reason: options.reason,
       intakeArtifactRef,
       rawArtifactSha256,
+      questionRelevanceArtifacts,
       intake
     });
     if (!result.ok) {

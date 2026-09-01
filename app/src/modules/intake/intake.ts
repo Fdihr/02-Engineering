@@ -1,7 +1,9 @@
 import type {
+  CollectionLead,
   ContentCompleteness,
-  ProviderItem,
-  SeeristCollectionLineage
+  ContextItem,
+  SeeristCollectionLineage,
+  SeeristEvidenceCandidate
 } from "../../core/types.js";
 import { err, ok, type Result } from "../../core/result.js";
 import {
@@ -202,7 +204,9 @@ export const selectSeeristFeature = (
   return isRecord(selected) ? ok(selected) : err("INVALID_FEATURE_COLLECTION");
 };
 
-export const validateSource = (input: unknown): Result<ProviderItem, IntakeError> => {
+export const validateSource = (
+  input: unknown
+): Result<SeeristEvidenceCandidate | CollectionLead | ContextItem, IntakeError> => {
   if (!isRecord(input)) {
     return err("INVALID_SELECTION");
   }

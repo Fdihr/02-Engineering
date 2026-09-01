@@ -1,6 +1,6 @@
 # Implemented Workflow Baseline
 
-Status: Research-question approval, bounded Seerist collection, checksum-bound one-item intake, secure one-source retrieval, native and retrieved-source canonicalization, bounded Copilot PoC question relevance, human-input retrieved-source re-intake scaffolding, and evidence admission implemented and validated. Candidate conversion from the AI assessment remains pending.
+Status: Research-question approval, bounded Seerist collection, checksum-bound one-item intake, secure one-source retrieval, native and retrieved-source canonicalization, bounded Copilot PoC question relevance, positive-assessment candidate conversion, and evidence admission implemented and validated. The real NV candidate is pending human review.
 
 ## Product boundary
 
@@ -71,7 +71,7 @@ Run from `app/`:
 npm run review:evidence -- <intake-result.json> <approve|reject> <reviewer-id> <reason> [decision-id]
 ```
 
-The command confines the intake and raw artifact to its configured run root, hashes the referenced raw artifact, refuses to overwrite an existing decision directory, and writes canonical decision JSON plus a read-only Markdown receipt. An approved decision also writes `approved-evidence-snapshot.json`; rejection cannot create that artifact. Initial native Seerist intake is ineligible until positive-assessment candidate conversion exists.
+The command confines the intake and raw artifact to its configured run root, hashes the referenced raw artifact, refuses to overwrite an existing decision directory, and writes canonical decision JSON plus a read-only Markdown receipt. An approved decision also writes `approved-evidence-snapshot.json`; rejection cannot create that artifact. Initial native Seerist intake remains ineligible; only a checksum-bound candidate created from validated positive question relevance may enter this gate.
 
 No real Seerist item was approved or rejected during implementation validation. The successful command integration test uses synthetic artifacts in an isolated temporary directory.
 
@@ -120,23 +120,23 @@ The model-ready request contains the complete canonical source, fixed untrusted-
 
 This is an explicit development bridge, not a production Copilot API. The invocation records `github-copilot-vscode` and `not-exposed-by-host` because VS Code does not expose the underlying model identity to this workflow. An approved Azure AI Foundry deployment is the intended live adapter; it will replace transport without changing the provider-neutral request or assessment validators.
 
-The real NV source completed this path as `partially-relevant` with three exact anchors and destination `evidence_candidate_proposal / pending_human_review`. It reports the visit, possible purposes, Ratcliffe-to-Bortnikov participation, and Baltic hybrid-threat implications, but does not establish that the visit occurred specifically on 27 August or provide explicit cyber implications. This is a relevance proposal only; no candidate or evidence approval was created.
+The real NV source completed this path as `partially-relevant` with three exact anchors and destination `evidence_candidate_proposal / pending_human_review`. It reports the visit, possible purposes, Ratcliffe-to-Bortnikov participation, and Baltic hybrid-threat implications, but does not establish that the visit occurred specifically on 27 August or provide explicit cyber implications.
 
-## Transitional slice: retrieved-source re-intake
+## Completed slice: positive-assessment candidate conversion
 
-One resolved retrieval result + its verified source-lead lineage + a supplied relevance statement -> one new evidence candidate routed to pending human review.
+One resolved retrieval result + its verified source-lead lineage + one validated positive question-relevance assessment -> one new evidence candidate routed to pending human review.
 
 Run from `app/`:
 
 ```powershell
-npm run reintake:source -- <source-retrieval-result.json> <analyst-id> <relevance-to-question> [candidate-id]
+npm run reintake:source -- <source-retrieval-result.json> <question-relevance-assessment.json> [candidate-id]
 ```
 
-The command confines all referenced artifacts to the run root, verifies source-intake, request, raw-response, and retrieval-result checksums, and writes a non-overwritable canonical intake plus a body-free receipt. It cannot approve itself; `npm run review:evidence` remains a separate explicit decision.
+The command confines every referenced artifact to the run root; verifies source-intake, retrieval-request, raw-response, retrieval-result, canonical-document, assessment, decision, model-request, and model-response checksums; reconstructs the assessment and exact anchors; and writes a non-overwritable canonical intake plus a body-free receipt. `not-relevant` and `uncertain` assessments cannot become candidates. It cannot approve itself; `npm run review:evidence` remains a separate explicit human decision.
 
-The command's human-authored relevance input is now transitional and must not be used for live re-intake. The accepted replacement first creates a lossless provider-neutral source document with exact content-addressed anchors, then runs one bounded AI assessment tied to the exact approved question. Deterministic code validates schema, anchors, model provenance, and artifact lineage. Only a validated positive proposal may enter pending human evidence admission.
+The evidence gate validates the exact positive-assessment shape, reopens and hashes the persisted assessment and decision, preserves assessment and retrieval lineage in an approved snapshot, and rejects artifact drift or altered relevance routing. Candidate creation events are controller-attributed; evidence decisions remain human-attributed.
 
-The revised boundary is `../02-Contracts/retrieved-source-reintake.md`. Existing focused tests cover the reusable lineage, pending-only routing, command persistence, and evidence-gate mechanics. The AI assessment boundary is now implemented; conversion of a validated positive assessment into the existing pending candidate and preservation through evidence admission remain next. The live NV retrieval has not been re-intaked or approved.
+The active boundary is `../02-Contracts/retrieved-source-reintake.md`. Focused tests cover positive-only conversion, source and model artifact lineage, pending-only routing, path confinement, non-overwrite behavior, evidence-gate tampering, and assessment preservation through approval. On 2026-09-01, the live NV assessment was converted into candidate `nv-candidate-question-relevance-001`; it remains pending human review and is not approved.
 
 ## KISS boundary
 
@@ -191,10 +191,11 @@ Do not add:
 13. One approved four-query, sixteen-page Seerist discovery surfaced 50 unique source URLs across 22 clusters for the CIA Director Moscow question.
 14. Supported-API candidates provided close title-level counterparts for all eight human-supplied AskAnna citations, without depending on AskAnna's unsupported retrieval API.
 15. One-source retrieval preserves Firecrawl and publisher identity separately, records explicit redirect and target-status evidence, and cannot approve or intake its own output.
-16. The current retrieved-source re-intake proves artifact lineage and pending-only routing, but its human-authored relevance input is transitional and not approved for live use.
-17. The accepted next boundary makes AI responsible for a typed, source-grounded relevance proposal tied to the approved question; deterministic code validates it and humans retain evidence-admission authority.
+16. Retrieved-source candidate conversion accepts only a validated positive assessment and verifies complete retrieval, canonical-document, model-request, model-response, assessment, and decision lineage.
+17. AI remains responsible only for a typed, source-grounded relevance proposal; deterministic code creates the pending route and humans retain evidence-admission authority.
 18. Scalability must preserve the complete source and mandatory `Find -> Sweep -> Judge -> Write`; reuse, per-source isolation, checksum deduplication, and bounded scheduling provide throughput without lowering the final intelligence standard.
 19. Canonical source documents give retrieved and provider-captured content one downstream shape; a new source mechanism needs only a narrow adapter when the common contract remains satisfied.
+20. The real NV assessment now exists as pending candidate `nv-candidate-question-relevance-001`; no human evidence decision has been made.
 
 ## Legacy PoC input rule
 

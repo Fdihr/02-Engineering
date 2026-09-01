@@ -1,8 +1,8 @@
 # Retrieved Source Relevance and Re-intake
 
-Status: AI assessment boundary implemented as an interactive Copilot PoC; evidence-candidate migration pending
-Validated: 2026-08-31
-Implementation: `../app/src/modules/relevance/question-relevance.ts`, `../app/src/modules/relevance/copilot-poc.ts`, `../app/src/commands/prepare-question-relevance.ts`, `../app/src/commands/record-question-relevance.ts`
+Status: AI assessment and positive evidence-candidate conversion implemented and validated; real NV candidate pending human review
+Validated: 2026-09-01
+Implementation: `../app/src/modules/relevance/question-relevance.ts`, `../app/src/modules/intake/retrieved-source-intake.ts`, `../app/src/commands/prepare-question-relevance.ts`, `../app/src/commands/record-question-relevance.ts`, `../app/src/commands/reintake-source.ts`
 
 ## Purpose
 
@@ -12,24 +12,17 @@ Retrieval success does not establish relevance, credibility, factuality, or appr
 
 This is question relevance, not Vestas relevance. The AI may propose whether and how the source addresses the approved question. It cannot admit evidence, expand scope, or infer organizational impact.
 
-## Transitional implementation
+## Implemented commands
 
 Run from `app/`:
 
 ```powershell
-npm run reintake:source -- <source-retrieval-result.json> <analyst-id> <relevance-to-question> [candidate-id]
-```
-
-This command proves artifact confinement, checksum verification, non-overwrite behavior, pending-only routing, and evidence-gate compatibility. Its analyst-authored relevance argument does not scale and is superseded for live use by this revision.
-
-The human-input command remains disabled for live use. Its replacement is split into a provider-neutral request and validation boundary. The current PoC uses GitHub Copilot in VS Code as the interactive model executor because no approved Azure AI Foundry endpoint is available yet:
-
-```powershell
 npm run prepare:question-relevance -- <source-document.json>
 npm run record:question-relevance -- <question-relevance-request.json> <copilot-response.json>
+npm run reintake:source -- <source-retrieval-result.json> <question-relevance-assessment.json> [candidate-id]
 ```
 
-The first command verifies the retrieval, canonical document, and approved-question artifacts before creating a complete model-ready request. The second hashes the exact request and response, rechecks the source-document and question artifacts, validates every anchor, and persists the assessment plus controller-derived routing decision. Chat narrative and raw model prose cannot substitute for the typed response artifact or invoke evidence approval.
+The first command verifies the retrieval, canonical document, and approved-question artifacts before creating a complete model-ready request. The second hashes the exact request and response, rechecks the source-document and question artifacts, validates every anchor, and persists the assessment plus controller-derived routing decision. The third accepts only a validated positive assessment, verifies its sibling decision and complete retrieval, source-document, request, response, and assessment lineage, then creates one non-overwritable pending candidate. Chat narrative and raw model prose cannot substitute for the typed artifacts or invoke evidence approval.
 
 This is explicitly not a production Copilot API integration. Provenance records `provider: "github-copilot-vscode"` and `model: "not-exposed-by-host"`; the assessment must state that limitation. When an approved Foundry deployment becomes available, a narrow live adapter replaces this manual transport while the request, assessment, anchor, and authority contracts remain unchanged.
 
@@ -44,7 +37,7 @@ The command reconstructs unknown JSON and requires:
 5. A valid approved research question bound to the retrieval run and approved before retrieval.
 6. The original persisted collection-lead intake, revalidated through the existing exact-source retrieval gate.
 7. Matching run, provider-item, source-URL, and research-question lineage across the lead and retrieval.
-8. Exact SHA-256 matches for the source intake, retrieval request, and raw response, plus a newly computed SHA-256 for the retrieval-result artifact.
+8. Exact SHA-256 matches for the source intake, retrieval request, raw response, retrieval result, canonical source document, relevance assessment and decision, model request, and model response.
 9. A typed model assessment bound to the exact canonical source document and approved research-question ID.
 10. Model invocation identity, model and prompt-policy version, assessment time, allowed verdict, rationale, exact `SourceAnchor` references, and explicit limitations. The Copilot PoC records the underlying model version as unavailable rather than inventing one; a live enterprise adapter must record the deployed model identifier.
 11. A positive verdict of `relevant` or `partially-relevant`. `not-relevant` is retained as an audited exclusion; `uncertain` enters bounded human exception triage.
@@ -63,7 +56,7 @@ The model response has exactly four fields: `verdict`, `rationale`, `support`, a
 
 ## Pending candidate contract
 
-The next implementation step converts only a validated positive assessment into a candidate with `provider: "source_retrieval"`; it must not mislabel Firecrawl as the publisher or Seerist as the captured-content provider. It records:
+Conversion creates a candidate with `provider: "source_retrieval"` only from a validated positive assessment; it does not mislabel Firecrawl as the publisher or Seerist as the captured-content provider. It records:
 
 1. The approved research question.
 2. Publisher host plus requested and final source URLs.
@@ -84,7 +77,7 @@ evidence_candidate -> human_review -> pending_human_review
 
 It cannot produce `approved`. Only `npm run review:evidence` with a separate explicit human decision can create an approved snapshot. The human reviews the source and AI proposal; routine operation does not require the reviewer to author the initial relevance rationale.
 
-The evidence-admission validator reconstructs Seerist-native and retrieved-source candidates through separate branches. For a retrieved source, it recomputes the referenced raw artifact hash and requires equality with the re-intake lineage before a decision can succeed. After migration, retrieved-source approval must preserve the AI assessment, model invocation provenance, and retrieval lineage in the snapshot.
+The evidence-admission validator reconstructs Seerist-native and retrieved-source candidates through separate branches. For a retrieved source, it validates the exact positive-assessment shape, reopens and hashes the persisted assessment and decision, compares their parsed values with the candidate, recomputes the referenced raw artifact hash, and requires equality with the re-intake lineage before a decision can succeed. Retrieved-source approval preserves the AI assessment, model invocation provenance, and retrieval lineage in the snapshot.
 
 ## Artifacts and events
 
@@ -99,6 +92,14 @@ runs/<runId>/sources/<sourceItemId>/<sourceDocumentId>/question-relevance/<reque
     question-relevance-decision.json
 ```
 
+Successful conversion adds:
+
+```text
+runs/<runId>/source-reintakes/<candidateId>/
+  intake-result.json
+  intake-summary.md
+```
+
 The request includes the complete canonical source and is retained only in the ignored run folder. Console output and events omit source content. Proposal events are model-attributed, validation and persistence events are controller-attributed, and evidence decisions remain human-attributed.
 
 ## Modularity boundary
@@ -109,6 +110,6 @@ A future access provider can produce the canonical source-retrieval contract and
 
 ## Proven boundary
 
-Tests cover request-policy tampering, question binding, exact source anchors, altered quotes, prompt-policy and model provenance, all four verdict routes, model-authored authority rejection, source-document drift, path confinement, content-safe console and event output, and non-overwrite behavior.
+Tests cover request-policy tampering, question binding, exact source anchors, altered quotes, prompt-policy and model provenance, all four verdict routes, model-authored authority rejection, source-document drift, positive-only candidate conversion, full checksum lineage, path confinement, content-safe output, non-overwrite behavior, evidence-gate tampering, and assessment preservation in an approved snapshot.
 
-The real NV source completed one Copilot PoC assessment with verdict `partially-relevant`, three exact anchors, and destination `evidence_candidate_proposal`. The assessment notes that the article reports occurrence, possible purposes, participation, and hybrid-security implications, but does not establish a visit specifically on 27 August or explicit cyber implications. No evidence candidate or approval was created. Candidate conversion and preservation through human evidence admission remain pending.
+The real NV source completed one Copilot PoC assessment with verdict `partially-relevant`, three exact anchors, and destination `evidence_candidate_proposal`. On 2026-09-01, that assessment was converted into candidate `nv-candidate-question-relevance-001` with destination `human_review` and status `pending_human_review`. No human evidence decision or approval has been made.

@@ -1,12 +1,22 @@
 export const decideRoute = (item) => {
+    if (item.provider === "seerist" && item.role === "evidence_candidate") {
+        return {
+            providerItemId: item.providerItemId,
+            role: item.role,
+            destination: "source_canonicalization",
+            approvalStatus: "not_applicable",
+            ruleId: "RULE-EVIDENCE-CANONICALIZE-001",
+            reason: "Captured provider material requires canonicalization and question relevance"
+        };
+    }
     if (item.role === "evidence_candidate") {
         return {
             providerItemId: item.providerItemId,
             role: item.role,
             destination: "human_review",
             approvalStatus: "pending_human_review",
-            ruleId: "RULE-EVIDENCE-REVIEW-001",
-            reason: "Captured analyst material requires explicit human approval"
+            ruleId: "RULE-EVIDENCE-REVIEW-002",
+            reason: "Question-relevant captured material requires explicit human approval"
         };
     }
     if (item.role === "collection_lead") {

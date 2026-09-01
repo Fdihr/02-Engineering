@@ -1,18 +1,17 @@
 import { createHash, randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { isAbsolute, relative, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { reintakeRetrievedSource } from "../modules/intake/retrieved-source-intake.js";
 import { renderRetrievedSourceIntakeSummary } from "../modules/reporting/retrieved-source-intake-summary.js";
 
 type CommandOptions = {
   retrievalPath: string;
-  analystId: string;
-  relevanceToQuestion: string;
+  assessmentPath: string;
   candidateId: string;
 };
 
 const usage =
-  "Usage: npm run reintake:source -- <source-retrieval-result.json> <analyst-id> <relevance-to-question> [candidate-id]";
+  "Usage: npm run reintake:source -- <source-retrieval-result.json> <question-relevance-assessment.json> [candidate-id]";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -21,15 +20,13 @@ const nonEmptyString = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() ? value.trim() : undefined;
 
 const parseOptions = (args: string[]): CommandOptions => {
-  const [retrievalPath, analystId, relevanceToQuestion, requestedCandidateId, ...extra] =
-    args;
-  if (!retrievalPath || !analystId || !relevanceToQuestion || extra.length > 0) {
+  const [retrievalPath, assessmentPath, requestedCandidateId, ...extra] = args;
+  if (!retrievalPath || !assessmentPath || extra.length > 0) {
     throw new Error(usage);
   }
   return {
     retrievalPath,
-    analystId,
-    relevanceToQuestion,
+    assessmentPath,
     candidateId: requestedCandidateId ?? `retrieved-source-${randomUUID()}`
   };
 };
@@ -67,19 +64,32 @@ const readRetrievalLineageRefs = (
   return { sourceIntake, request, raw };
 };
 
+const readRelevanceRefs = (
+  assessment: unknown
+): { sourceDocument: string; prompt: string; response: string } => {
+  if (!isRecord(assessment) || !isRecord(assessment.modelInvocation)) {
+    throw new Error("The relevance assessment does not contain model lineage.");
+  }
+  const sourceDocument = nonEmptyString(assessment.sourceDocumentArtifactRef);
+  const prompt = nonEmptyString(assessment.modelInvocation.promptArtifactRef);
+  const response = nonEmptyString(assessment.modelInvocation.responseArtifactRef);
+  if (!sourceDocument || !prompt || !response) {
+    throw new Error("The relevance assessment contains incomplete artifact lineage.");
+  }
+  return { sourceDocument, prompt, response };
+};
+
 const main = async (): Promise<void> => {
-  const assessedAt = new Date().toISOString();
+  const convertedAt = new Date().toISOString();
   const runRoot = resolve(process.env.SOURCE_REINTAKE_RUN_DIR ?? "runs");
   const eventLogPath = resolve(runRoot, "source-reintake-events.jsonl");
   let candidateId: string | undefined;
-  let analystId: string | undefined;
   let runId: string | undefined;
   let outputArtifactRef: string | undefined;
 
   try {
     const options = parseOptions(process.argv.slice(2));
     candidateId = options.candidateId;
-    analystId = options.analystId;
     const retrievalPath = resolveRunArtifact(
       runRoot,
       options.retrievalPath,
@@ -87,30 +97,97 @@ const main = async (): Promise<void> => {
     );
     const retrievalBytes = await readFile(retrievalPath);
     const retrieval: unknown = JSON.parse(retrievalBytes.toString("utf8"));
-    const refs = readRetrievalLineageRefs(retrieval);
-    const sourceIntakePath = resolveRunArtifact(runRoot, refs.sourceIntake, "Source intake");
-    const requestPath = resolveRunArtifact(runRoot, refs.request, "Retrieval request");
-    const rawPath = resolveRunArtifact(runRoot, refs.raw, "Raw retrieval response");
-    const [sourceIntakeBytes, requestBytes, rawBytes] = await Promise.all([
+    const assessmentPath = resolveRunArtifact(
+      runRoot,
+      options.assessmentPath,
+      "Question-relevance assessment"
+    );
+    const assessmentBytes = await readFile(assessmentPath);
+    const relevanceAssessment: unknown = JSON.parse(
+      assessmentBytes.toString("utf8")
+    );
+    const retrievalRefs = readRetrievalLineageRefs(retrieval);
+    const relevanceRefs = readRelevanceRefs(relevanceAssessment);
+    const sourceIntakePath = resolveRunArtifact(
+      runRoot,
+      retrievalRefs.sourceIntake,
+      "Source intake"
+    );
+    const requestPath = resolveRunArtifact(
+      runRoot,
+      retrievalRefs.request,
+      "Retrieval request"
+    );
+    const rawPath = resolveRunArtifact(
+      runRoot,
+      retrievalRefs.raw,
+      "Raw retrieval response"
+    );
+    const sourceDocumentPath = resolveRunArtifact(
+      runRoot,
+      relevanceRefs.sourceDocument,
+      "Source document"
+    );
+    const promptPath = resolveRunArtifact(
+      runRoot,
+      relevanceRefs.prompt,
+      "Relevance request"
+    );
+    const responsePath = resolveRunArtifact(
+      runRoot,
+      relevanceRefs.response,
+      "Model response"
+    );
+    const decisionPath = resolveRunArtifact(
+      runRoot,
+      resolve(dirname(assessmentPath), "question-relevance-decision.json"),
+      "Question-relevance decision"
+    );
+    const [
+      sourceIntakeBytes,
+      requestBytes,
+      rawBytes,
+      sourceDocumentBytes,
+      decisionBytes,
+      promptBytes,
+      responseBytes
+    ] = await Promise.all([
       readFile(sourceIntakePath),
       readFile(requestPath),
-      readFile(rawPath)
+      readFile(rawPath),
+      readFile(sourceDocumentPath),
+      readFile(decisionPath),
+      readFile(promptPath),
+      readFile(responsePath)
     ]);
     const sourceIntake: unknown = JSON.parse(sourceIntakeBytes.toString("utf8"));
+    const sourceDocument: unknown = JSON.parse(
+      sourceDocumentBytes.toString("utf8")
+    );
+    const relevanceDecision: unknown = JSON.parse(decisionBytes.toString("utf8"));
     const result = reintakeRetrievedSource({
       candidateId,
-      analystId,
-      assessedAt,
-      relevanceToQuestion: options.relevanceToQuestion,
-      sourceIntakeArtifactRef: refs.sourceIntake,
+      convertedAt,
+      sourceIntakeArtifactRef: retrievalRefs.sourceIntake,
       retrievalArtifactRef: artifactRef(retrievalPath),
+      sourceDocumentArtifactRef: artifactRef(sourceDocumentPath),
+      assessmentArtifactRef: artifactRef(assessmentPath),
+      decisionArtifactRef: artifactRef(decisionPath),
       sourceIntake,
       retrieval,
+      sourceDocument,
+      relevanceAssessment,
+      relevanceDecision,
       artifactChecksums: {
         sourceIntakeSha256: sha256(sourceIntakeBytes),
         retrievalSha256: sha256(retrievalBytes),
         requestSha256: sha256(requestBytes),
-        rawSha256: sha256(rawBytes)
+        rawSha256: sha256(rawBytes),
+        sourceDocumentSha256: sha256(sourceDocumentBytes),
+        assessmentSha256: sha256(assessmentBytes),
+        decisionSha256: sha256(decisionBytes),
+        promptSha256: sha256(promptBytes),
+        responseSha256: sha256(responseBytes)
       }
     });
     if (!result.ok) {
@@ -132,11 +209,10 @@ const main = async (): Promise<void> => {
       `${JSON.stringify({
         candidateId,
         runId,
-        occurredAt: assessedAt,
-        actorType: "human",
-        actorId: analystId,
-        stage: "retrieved_source_reintake",
-        eventType: "source.reintake.completed",
+        occurredAt: convertedAt,
+        actorType: "controller",
+        stage: "evidence_candidate_conversion",
+        eventType: "evidence.candidate.proposed",
         status: "completed",
         artifactRef: outputArtifactRef
       })}\n`,
@@ -160,10 +236,9 @@ const main = async (): Promise<void> => {
           candidateId,
           runId,
           occurredAt: new Date().toISOString(),
-          actorType: "human",
-          actorId: analystId,
-          stage: "retrieved_source_reintake",
-          eventType: "source.reintake.failed",
+          actorType: "controller",
+          stage: "evidence_candidate_conversion",
+          eventType: "evidence.candidate.failed",
           status: "failed",
           artifactRef: outputArtifactRef,
           error: message

@@ -1,4 +1,6 @@
+import { isDeepStrictEqual } from "node:util";
 import type {
+  ApprovedResearchQuestion,
   EvidenceCandidate,
   RetrievedSourceEvidenceCandidate,
   SeeristCollectionLineage
@@ -25,6 +27,7 @@ export type EvidenceReviewError =
   | "NOT_PENDING_HUMAN_REVIEW"
   | "PROVIDER_ITEM_ID_MISMATCH"
   | "RAW_ARTIFACT_SHA256_MISMATCH"
+  | "QUESTION_RELEVANCE_ARTIFACT_MISMATCH"
   | "RESEARCH_QUESTION_RUN_MISMATCH"
   | ResearchQuestionError;
 
@@ -36,6 +39,12 @@ export type EvidenceReviewRequest = {
   reason: string;
   intakeArtifactRef: string;
   rawArtifactSha256: string;
+  questionRelevanceArtifacts?: {
+    assessmentArtifactSha256: string;
+    decisionArtifactSha256: string;
+    assessment: unknown;
+    decision: unknown;
+  };
   intake: unknown;
 };
 
@@ -54,6 +63,15 @@ const stringArray = (value: unknown): string[] | undefined =>
   Array.isArray(value) && value.every((entry) => typeof entry === "string")
     ? value
     : undefined;
+
+const hasOnlyKeys = (value: Record<string, unknown>, keys: string[]): boolean => {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return (
+    actual.length === expected.length &&
+    actual.every((key, index) => key === expected[index])
+  );
+};
 
 const sha256 = (value: unknown): string | undefined => {
   const normalized = nonEmptyString(value)?.toLowerCase();
@@ -99,6 +117,164 @@ const readSeeristCollectionLineage = (
   };
 };
 
+const isPositiveQuestionRelevance = (
+  value: unknown,
+  retrievalId: string,
+  retrievedAt: string,
+  researchQuestion: ApprovedResearchQuestion
+): value is RetrievedSourceEvidenceCandidate["questionRelevance"] => {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, [
+      "assessmentArtifactRef",
+      "assessmentArtifactSha256",
+      "decisionArtifactRef",
+      "decisionArtifactSha256",
+      "assessment",
+      "decision"
+    ]) ||
+    !isRecord(value.assessment) ||
+    !isRecord(value.decision)
+  ) {
+    return false;
+  }
+  const assessment = value.assessment;
+  const decision = value.decision;
+  if (
+    !hasOnlyKeys(assessment, [
+      "schemaVersion",
+      "id",
+      "status",
+      "runId",
+      "sourceItemId",
+      "researchQuestionId",
+      "researchQuestionArtifactRef",
+      "researchQuestionArtifactSha256",
+      "sourceDocumentId",
+      "sourceDocumentArtifactRef",
+      "sourceDocumentArtifactSha256",
+      "assessedAt",
+      "modelInvocation",
+      "verdict",
+      "rationale",
+      "support",
+      "limitations"
+    ]) ||
+    !hasOnlyKeys(decision, [
+      "assessmentId",
+      "verdict",
+      "destination",
+      "approvalStatus",
+      "ruleId",
+      "reason"
+    ]) ||
+    !nonEmptyString(value.assessmentArtifactRef) ||
+    !sha256(value.assessmentArtifactSha256) ||
+    !nonEmptyString(value.decisionArtifactRef) ||
+    !sha256(value.decisionArtifactSha256) ||
+    assessment.schemaVersion !== "question-relevance-assessment-v1" ||
+    assessment.status !== "proposed" ||
+    assessment.runId !== researchQuestion.runId ||
+    assessment.sourceItemId !== retrievalId ||
+    assessment.researchQuestionId !== researchQuestion.id ||
+    assessment.researchQuestionArtifactRef !== researchQuestion.artifactRef ||
+    assessment.researchQuestionArtifactSha256 !== researchQuestion.artifactSha256 ||
+    !nonEmptyString(assessment.id) ||
+    !nonEmptyString(assessment.sourceDocumentId) ||
+    !nonEmptyString(assessment.sourceDocumentArtifactRef) ||
+    !sha256(assessment.sourceDocumentArtifactSha256) ||
+    !nonEmptyString(assessment.assessedAt) ||
+    Number.isNaN(Date.parse(assessment.assessedAt as string)) ||
+    Date.parse(assessment.assessedAt as string) < Date.parse(retrievedAt) ||
+    (assessment.verdict !== "relevant" &&
+      assessment.verdict !== "partially-relevant") ||
+    !nonEmptyString(assessment.rationale) ||
+    !Array.isArray(assessment.support) ||
+    assessment.support.length === 0 ||
+    !stringArray(assessment.limitations) ||
+    !isRecord(assessment.modelInvocation)
+  ) {
+    return false;
+  }
+  const invocation = assessment.modelInvocation;
+  if (
+    !hasOnlyKeys(invocation, [
+      "id",
+      "provider",
+      "model",
+      "promptPolicyVersion",
+      "promptArtifactRef",
+      "promptArtifactSha256",
+      "responseArtifactRef",
+      "responseArtifactSha256",
+      "startedAt",
+      "completedAt"
+    ]) ||
+    !nonEmptyString(invocation.id) ||
+    !nonEmptyString(invocation.provider) ||
+    !nonEmptyString(invocation.model) ||
+    invocation.promptPolicyVersion !== "question-relevance-prompt-v1" ||
+    !nonEmptyString(invocation.promptArtifactRef) ||
+    !sha256(invocation.promptArtifactSha256) ||
+    !nonEmptyString(invocation.responseArtifactRef) ||
+    !sha256(invocation.responseArtifactSha256) ||
+    !nonEmptyString(invocation.startedAt) ||
+    !nonEmptyString(invocation.completedAt) ||
+    Number.isNaN(Date.parse(invocation.startedAt as string)) ||
+    Number.isNaN(Date.parse(invocation.completedAt as string)) ||
+    Date.parse(invocation.startedAt as string) >
+      Date.parse(invocation.completedAt as string) ||
+    Date.parse(invocation.completedAt as string) >
+      Date.parse(assessment.assessedAt as string)
+  ) {
+    return false;
+  }
+  const anchorsValid = assessment.support.every((entry) => {
+    if (
+      !isRecord(entry) ||
+      !hasOnlyKeys(entry, ["anchor", "relationToQuestion"]) ||
+      !isRecord(entry.anchor) ||
+      !nonEmptyString(entry.relationToQuestion)
+    ) {
+      return false;
+    }
+    const anchor = entry.anchor;
+    return (
+      hasOnlyKeys(anchor, [
+        "sourceDocumentId",
+        "sourceDocumentArtifactRef",
+        "sourceDocumentArtifactSha256",
+        "segmentId",
+        "segmentSha256",
+        "quote",
+        "quoteStartUtf8Byte",
+        "quoteEndUtf8Byte"
+      ]) &&
+      anchor.sourceDocumentId === assessment.sourceDocumentId &&
+      anchor.sourceDocumentArtifactRef === assessment.sourceDocumentArtifactRef &&
+      anchor.sourceDocumentArtifactSha256 ===
+        assessment.sourceDocumentArtifactSha256 &&
+      Boolean(nonEmptyString(anchor.segmentId)) &&
+      Boolean(sha256(anchor.segmentSha256)) &&
+      Boolean(nonEmptyString(anchor.quote)) &&
+      Number.isInteger(anchor.quoteStartUtf8Byte) &&
+      Number.isInteger(anchor.quoteEndUtf8Byte) &&
+      (anchor.quoteStartUtf8Byte as number) >= 0 &&
+      (anchor.quoteEndUtf8Byte as number) >
+        (anchor.quoteStartUtf8Byte as number)
+    );
+  });
+  return (
+    anchorsValid &&
+    decision.assessmentId === assessment.id &&
+    decision.verdict === assessment.verdict &&
+    decision.destination === "evidence_candidate_proposal" &&
+    decision.approvalStatus === "pending_human_review" &&
+    Boolean(nonEmptyString(decision.ruleId)) &&
+    Boolean(nonEmptyString(decision.reason))
+  );
+};
+
 const readRetrievedSourceCandidate = (
   value: Record<string, unknown>
 ): Result<RetrievedSourceEvidenceCandidate, EvidenceReviewError> => {
@@ -127,8 +303,7 @@ const readRetrievedSourceCandidate = (
     value.hasSourceMetadata !== true ||
     value.contentCompleteness !== "captured_content" ||
     !isRecord(value.source) ||
-    !isRecord(value.retrievalLineage) ||
-    !isRecord(value.analystAssessment)
+    !isRecord(value.retrievalLineage)
   ) {
     return err("INVALID_INTAKE_ARTIFACT");
   }
@@ -156,14 +331,6 @@ const readRetrievedSourceCandidate = (
   );
   const requestArtifactSha256 = sha256(value.retrievalLineage.requestArtifactSha256);
   const rawArtifactSha256 = sha256(value.retrievalLineage.rawArtifactSha256);
-  const analystId = nonEmptyString(value.analystAssessment.analystId);
-  const assessedAt = nonEmptyString(value.analystAssessment.assessedAt);
-  const researchQuestionId = nonEmptyString(
-    value.analystAssessment.researchQuestionId
-  );
-  const relevanceToQuestion = nonEmptyString(
-    value.analystAssessment.relevanceToQuestion
-  );
   if (
     !requestedUrl ||
     !finalUrl ||
@@ -181,13 +348,12 @@ const readRetrievedSourceCandidate = (
     !lineageRawArtifactRef ||
     lineageRawArtifactRef !== rawArtifactRef ||
     !rawArtifactSha256 ||
-    value.analystAssessment.actorType !== "human" ||
-    !analystId ||
-    !assessedAt ||
-    Number.isNaN(Date.parse(assessedAt)) ||
-    Date.parse(assessedAt) < Date.parse(retrievedAt) ||
-    researchQuestionId !== researchQuestionResult.value.id ||
-    !relevanceToQuestion
+    !isPositiveQuestionRelevance(
+      value.questionRelevance,
+      retrievalId,
+      retrievedAt,
+      researchQuestionResult.value
+    )
   ) {
     return err("INVALID_INTAKE_ARTIFACT");
   }
@@ -223,13 +389,7 @@ const readRetrievedSourceCandidate = (
       rawArtifactRef,
       rawArtifactSha256
     },
-    analystAssessment: {
-      actorType: "human",
-      analystId,
-      assessedAt,
-      researchQuestionId,
-      relevanceToQuestion
-    },
+    questionRelevance: value.questionRelevance,
     limitations
   });
 };
@@ -301,6 +461,24 @@ const readEvidenceCandidate = (
   });
 };
 
+const matchesQuestionRelevanceArtifacts = (
+  value: unknown,
+  item: RetrievedSourceEvidenceCandidate
+): boolean =>
+  isRecord(value) &&
+  hasOnlyKeys(value, [
+    "assessmentArtifactSha256",
+    "decisionArtifactSha256",
+    "assessment",
+    "decision"
+  ]) &&
+  sha256(value.assessmentArtifactSha256) ===
+    item.questionRelevance.assessmentArtifactSha256 &&
+  sha256(value.decisionArtifactSha256) ===
+    item.questionRelevance.decisionArtifactSha256 &&
+  isDeepStrictEqual(value.assessment, item.questionRelevance.assessment) &&
+  isDeepStrictEqual(value.decision, item.questionRelevance.decision);
+
 export const validateEvidenceReview = (
   input: unknown
 ): Result<ValidatedEvidenceReview, EvidenceReviewError> => {
@@ -349,6 +527,15 @@ export const validateEvidenceReview = (
   const itemResult = readEvidenceCandidate(itemValue);
   if (!itemResult.ok) {
     return itemResult;
+  }
+  if (
+    itemResult.value.provider === "source_retrieval" &&
+    !matchesQuestionRelevanceArtifacts(
+      input.questionRelevanceArtifacts,
+      itemResult.value
+    )
+  ) {
+    return err("QUESTION_RELEVANCE_ARTIFACT_MISMATCH");
   }
   const recordedRawArtifactSha256 =
     itemResult.value.provider === "source_retrieval"

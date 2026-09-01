@@ -13,6 +13,19 @@ const providerIdentifier = (value) => {
     }
     return nonEmptyString(value);
 };
+const sha256 = (value) => {
+    const normalized = nonEmptyString(value)?.toLowerCase();
+    return normalized && /^[a-f0-9]{64}$/.test(normalized) ? normalized : undefined;
+};
+const pathSafeId = (value) => {
+    const normalized = nonEmptyString(value);
+    return normalized &&
+        normalized !== "." &&
+        normalized !== ".." &&
+        /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(normalized)
+        ? normalized
+        : undefined;
+};
 const containsText = (value) => {
     if (nonEmptyString(value)) {
         return true;
@@ -22,14 +35,66 @@ const containsText = (value) => {
     }
     return isRecord(value) && Object.values(value).some(containsText);
 };
-const contentCompleteness = (item) => {
-    if (containsText(item.sanitizedBody) || containsText(item.body) || containsText(item.content)) {
+const capturedText = (value) => {
+    if (typeof value === "string" && value.trim()) {
+        return value;
+    }
+    if (!isRecord(value)) {
+        return undefined;
+    }
+    const english = value.en;
+    if (typeof english === "string" && english.trim()) {
+        return english;
+    }
+    const localizedValues = Object.values(value).filter((entry) => typeof entry === "string" && Boolean(entry.trim()));
+    return localizedValues.length === 1 ? localizedValues[0] : undefined;
+};
+export const readSeeristCapturedBody = (value) => {
+    if (!isRecord(value)) {
+        return undefined;
+    }
+    const item = isRecord(value.properties) ? value.properties : value;
+    return capturedText(item.sanitizedBody) ?? capturedText(item.body);
+};
+const contentCompleteness = (item, allowGenericContent) => {
+    if (readSeeristCapturedBody(item) ||
+        (allowGenericContent && containsText(item.content))) {
         return "captured_content";
     }
     if (containsText(item.sanitizedSummary) || containsText(item.summary)) {
         return "summary_only";
     }
     return "metadata_only";
+};
+const readCollectionLineage = (value, rawArtifactRef, rawArtifactSha256) => {
+    if (!isRecord(value)) {
+        return undefined;
+    }
+    const operationId = pathSafeId(value.operationId);
+    const requestManifestRef = nonEmptyString(value.requestManifestRef);
+    const requestManifestSha256 = sha256(value.requestManifestSha256);
+    const responseManifestRef = nonEmptyString(value.responseManifestRef);
+    const responseManifestSha256 = sha256(value.responseManifestSha256);
+    const lineageRawArtifactRef = nonEmptyString(value.rawArtifactRef);
+    const lineageRawArtifactSha256 = sha256(value.rawArtifactSha256);
+    if (!operationId ||
+        !requestManifestRef ||
+        !requestManifestSha256 ||
+        !responseManifestRef ||
+        !responseManifestSha256 ||
+        lineageRawArtifactRef !== rawArtifactRef ||
+        lineageRawArtifactSha256 !== rawArtifactSha256) {
+        return undefined;
+    }
+    return {
+        operationId,
+        requestManifestRef,
+        requestManifestSha256,
+        responseManifestRef,
+        responseManifestSha256,
+        rawArtifactRef: lineageRawArtifactRef,
+        rawArtifactSha256: lineageRawArtifactSha256
+    };
 };
 const stringValues = (...values) => values.flatMap((value) => {
     if (Array.isArray(value)) {
@@ -81,6 +146,14 @@ export const validateSource = (input) => {
     if (!rawArtifactRef) {
         return err("MISSING_RAW_ARTIFACT_REF");
     }
+    const rawArtifactSha256 = sha256(input.rawArtifactSha256);
+    if (!rawArtifactSha256) {
+        return err("INVALID_RAW_ARTIFACT_SHA256");
+    }
+    const collectionLineage = readCollectionLineage(input.collectionLineage, rawArtifactRef, rawArtifactSha256);
+    if (!collectionLineage) {
+        return err("INVALID_COLLECTION_LINEAGE");
+    }
     const researchQuestionResult = validateApprovedResearchQuestion(input.researchQuestion, retrievedAt);
     if (!researchQuestionResult.ok) {
         return researchQuestionResult;
@@ -93,7 +166,8 @@ export const validateSource = (input) => {
     const providerItemId = providerIdentifier(item.id) ?? providerIdentifier(rawItem.id);
     const sourceValue = nonEmptyString(item.source);
     const sourceType = sourceValue?.startsWith("http") ? undefined : sourceValue;
-    const completeness = contentCompleteness(item);
+    const contextMaterial = isContextEndpoint(endpoint) || sourceType === "country-background";
+    const completeness = contentCompleteness(item, contextMaterial);
     const references = Array.isArray(item.references) ? item.references : [];
     const base = {
         provider: "seerist",
@@ -103,6 +177,8 @@ export const validateSource = (input) => {
         providerTimestamp: nonEmptyString(item["@timestamp"]) ?? nonEmptyString(item.publishedDate),
         retrievedAt,
         rawArtifactRef,
+        rawArtifactSha256,
+        collectionLineage,
         sourceLinks: stringValues(item.link, item.source_url, sourceValue?.startsWith("http") ? sourceValue : undefined),
         referenceCount: references.length,
         hasSourceMetadata: isRecord(item.source_metadata),

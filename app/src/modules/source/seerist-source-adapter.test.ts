@@ -52,10 +52,10 @@ const selected = {
 
 const makeIntake = () => {
   const result = processSource(runId, "2026-08-31T08:01:00.000Z", selected);
-  assert.equal(result.ok, true);
   if (!result.ok) {
     throw new Error(result.error.cause);
   }
+  assert.equal(result.ok, true);
   return JSON.parse(JSON.stringify(result.value)) as typeof result.value;
 };
 

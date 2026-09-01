@@ -145,12 +145,70 @@ test("explicit approval preserves retrieved-source assessment and lineage", () =
         rawArtifactRef: "runs/retrieval-001/raw-firecrawl-response.json",
         rawArtifactSha256: "e".repeat(64)
       },
-      analystAssessment: {
-        actorType: "human",
-        analystId: "analyst-002",
-        assessedAt: "2026-08-28T09:30:00.000Z",
-        researchQuestionId: intake.item.researchQuestion.id,
-        relevanceToQuestion: "The publisher report directly addresses the approved question."
+      questionRelevance: {
+        assessmentArtifactRef:
+          "runs/retrieval-001/question-relevance-assessment.json",
+        assessmentArtifactSha256: "1".repeat(64),
+        decisionArtifactRef:
+          "runs/retrieval-001/question-relevance-decision.json",
+        decisionArtifactSha256: "2".repeat(64),
+        assessment: {
+          schemaVersion: "question-relevance-assessment-v1",
+          id: "question-relevance-assessment-001",
+          status: "proposed",
+          runId: intake.item.researchQuestion.runId,
+          sourceItemId: "retrieval-001",
+          researchQuestionId: intake.item.researchQuestion.id,
+          researchQuestionArtifactRef:
+            intake.item.researchQuestion.artifactRef,
+          researchQuestionArtifactSha256:
+            intake.item.researchQuestion.artifactSha256,
+          sourceDocumentId: "source-document-001",
+          sourceDocumentArtifactRef:
+            "runs/retrieval-001/source-document.json",
+          sourceDocumentArtifactSha256: "3".repeat(64),
+          assessedAt: "2026-08-28T09:30:00.000Z",
+          modelInvocation: {
+            id: "model-invocation-001",
+            provider: "github-copilot-vscode",
+            model: "not-exposed-by-host",
+            promptPolicyVersion: "question-relevance-prompt-v1",
+            promptArtifactRef:
+              "runs/retrieval-001/question-relevance-request.json",
+            promptArtifactSha256: "4".repeat(64),
+            responseArtifactRef: "runs/retrieval-001/copilot-response.json",
+            responseArtifactSha256: "5".repeat(64),
+            startedAt: "2026-08-28T09:20:00.000Z",
+            completedAt: "2026-08-28T09:25:00.000Z"
+          },
+          verdict: "relevant",
+          rationale: "The publisher report directly addresses the approved question.",
+          support: [
+            {
+              anchor: {
+                sourceDocumentId: "source-document-001",
+                sourceDocumentArtifactRef:
+                  "runs/retrieval-001/source-document.json",
+                sourceDocumentArtifactSha256: "3".repeat(64),
+                segmentId: "source-segment-001",
+                segmentSha256: "6".repeat(64),
+                quote: "Bounded publisher fact.",
+                quoteStartUtf8Byte: 0,
+                quoteEndUtf8Byte: 23
+              },
+              relationToQuestion: "The fact addresses the approved question."
+            }
+          ],
+          limitations: ["The source remains untrusted until human review."]
+        },
+        decision: {
+          assessmentId: "question-relevance-assessment-001",
+          verdict: "relevant",
+          destination: "evidence_candidate_proposal",
+          approvalStatus: "pending_human_review",
+          ruleId: "question-relevance-positive-v1",
+          reason: "A grounded positive assessment may be proposed for review."
+        }
       },
       limitations: ["Retrieved content remains untrusted until reviewed."]
     },
@@ -163,10 +221,19 @@ test("explicit approval preserves retrieved-source assessment and lineage", () =
       artifactRef: "runs/retrieval-001/raw-firecrawl-response.json"
     }
   };
+  const questionRelevanceArtifacts = {
+    assessmentArtifactSha256: "1".repeat(64),
+    decisionArtifactSha256: "2".repeat(64),
+    assessment: structuredClone(
+      retrievedIntake.item.questionRelevance.assessment
+    ),
+    decision: structuredClone(retrievedIntake.item.questionRelevance.decision)
+  };
   const result = reviewEvidence({
     ...request,
     decision: "approved",
     rawArtifactSha256: "e".repeat(64),
+    questionRelevanceArtifacts,
     intake: retrievedIntake
   });
 
@@ -177,7 +244,7 @@ test("explicit approval preserves retrieved-source assessment and lineage", () =
   assert.equal(result.value.snapshot.item.provider, "source_retrieval");
   if (result.value.snapshot.item.provider === "source_retrieval") {
     assert.equal(
-      result.value.snapshot.item.analystAssessment.researchQuestionId,
+      result.value.snapshot.item.questionRelevance.assessment.researchQuestionId,
       intake.item.researchQuestion.id
     );
     assert.equal(result.value.snapshot.item.retrievalLineage.retrievalId, "retrieval-001");
@@ -187,12 +254,40 @@ test("explicit approval preserves retrieved-source assessment and lineage", () =
     ...request,
     decision: "approved",
     rawArtifactSha256: "f".repeat(64),
+    questionRelevanceArtifacts,
     intake: retrievedIntake
   });
   assert.deepEqual(changedRawArtifact, {
     ok: false,
     error: "RAW_ARTIFACT_SHA256_MISMATCH"
   });
+
+  const changedRelevanceRoute = structuredClone(retrievedIntake);
+  changedRelevanceRoute.item.questionRelevance.decision.destination =
+    "audited_exclusion";
+  assert.deepEqual(
+    reviewEvidence({
+      ...request,
+      decision: "approved",
+      rawArtifactSha256: "e".repeat(64),
+      questionRelevanceArtifacts,
+      intake: changedRelevanceRoute
+    }),
+    { ok: false, error: "INVALID_INTAKE_ARTIFACT" }
+  );
+
+  const changedAssessmentArtifact = structuredClone(questionRelevanceArtifacts);
+  changedAssessmentArtifact.assessment.rationale = "Changed after conversion.";
+  assert.deepEqual(
+    reviewEvidence({
+      ...request,
+      decision: "approved",
+      rawArtifactSha256: "e".repeat(64),
+      questionRelevanceArtifacts: changedAssessmentArtifact,
+      intake: retrievedIntake
+    }),
+    { ok: false, error: "QUESTION_RELEVANCE_ARTIFACT_MISMATCH" }
+  );
 });
 
 test("collection leads cannot pass the evidence gate", () => {

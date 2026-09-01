@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type {
   RetrievedSourceEvidenceCandidate,
   RouteDecision,
@@ -5,9 +6,11 @@ import type {
 } from "../../core/types.js";
 import { err, ok, type Result } from "../../core/result.js";
 import { createLedgerEntry } from "../ledger/ledger.js";
+import { validateQuestionRelevanceAssessment } from "../relevance/question-relevance.js";
 import { validateApprovedResearchQuestion } from "../research/research-question.js";
 import { decideRoute } from "../routing/routing.js";
 import { isSafeSourceUrl, prepareSourceRetrieval } from "../retrieval/source-retrieval.js";
+import { validateSourceDocument } from "../source/source-document.js";
 
 const FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v2/scrape" as const;
 
@@ -15,15 +18,17 @@ export type RetrievedSourceIntakeError =
   | "INVALID_REINTAKE_INPUT"
   | "MISSING_CANDIDATE_ID"
   | "INVALID_CANDIDATE_ID"
-  | "MISSING_ANALYST_ID"
-  | "MISSING_RELEVANCE_TO_QUESTION"
-  | "INVALID_ASSESSMENT_TIME"
+  | "INVALID_CANDIDATE_TIME"
   | "INVALID_RETRIEVAL_RESULT"
   | "RETRIEVAL_NOT_RESOLVED"
   | "INVALID_SOURCE_INTAKE"
   | "SOURCE_INTAKE_MISMATCH"
   | "RESEARCH_QUESTION_MISMATCH"
-  | "INVALID_ARTIFACT_LINEAGE";
+  | "INVALID_ARTIFACT_LINEAGE"
+  | "INVALID_SOURCE_DOCUMENT"
+  | "SOURCE_DOCUMENT_MISMATCH"
+  | "INVALID_RELEVANCE_ASSESSMENT"
+  | "NON_POSITIVE_RELEVANCE";
 
 export type RetrievedSourceIntakeOutput = {
   item: RetrievedSourceEvidenceCandidate;
@@ -74,17 +79,9 @@ export const reintakeRetrievedSource = (
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(candidateId) || candidateId === "..") {
     return err("INVALID_CANDIDATE_ID");
   }
-  const analystId = nonEmptyString(input.analystId);
-  if (!analystId) {
-    return err("MISSING_ANALYST_ID");
-  }
-  const relevanceToQuestion = nonEmptyString(input.relevanceToQuestion);
-  if (!relevanceToQuestion) {
-    return err("MISSING_RELEVANCE_TO_QUESTION");
-  }
-  const assessedAt = validTime(input.assessedAt);
-  if (!assessedAt) {
-    return err("INVALID_ASSESSMENT_TIME");
+  const convertedAt = validTime(input.convertedAt);
+  if (!convertedAt) {
+    return err("INVALID_CANDIDATE_TIME");
   }
   if (!isRecord(input.retrieval) || !isRecord(input.artifactChecksums)) {
     return err("INVALID_REINTAKE_INPUT");
@@ -120,10 +117,6 @@ export const reintakeRetrievedSource = (
   if (retrieval.outcome !== "resolved" || retrieval.reason !== "content_retrieved") {
     return err("RETRIEVAL_NOT_RESOLVED");
   }
-  if (Date.parse(assessedAt) < Date.parse(receivedAt)) {
-    return err("INVALID_ASSESSMENT_TIME");
-  }
-
   const requestedUrl = nonEmptyString(retrieval.source.requestedUrl);
   const finalUrl = nonEmptyString(retrieval.source.finalUrl);
   const publisherHost = nonEmptyString(retrieval.source.publisherHost);
@@ -177,6 +170,9 @@ export const reintakeRetrievedSource = (
 
   const sourceIntakeArtifactRef = nonEmptyString(input.sourceIntakeArtifactRef);
   const retrievalArtifactRef = nonEmptyString(input.retrievalArtifactRef);
+  const sourceDocumentArtifactRef = nonEmptyString(input.sourceDocumentArtifactRef);
+  const assessmentArtifactRef = nonEmptyString(input.assessmentArtifactRef);
+  const decisionArtifactRef = nonEmptyString(input.decisionArtifactRef);
   const requestArtifactRef = nonEmptyString(retrieval.lineage.requestArtifactRef);
   const rawArtifactRef = nonEmptyString(retrieval.lineage.rawArtifactRef);
   const recordedSourceIntakeSha256 = sha256(retrieval.lineage.intakeArtifactSha256);
@@ -186,10 +182,20 @@ export const reintakeRetrievedSource = (
   const retrievalSha256 = sha256(input.artifactChecksums.retrievalSha256);
   const requestSha256 = sha256(input.artifactChecksums.requestSha256);
   const rawSha256 = sha256(input.artifactChecksums.rawSha256);
+  const sourceDocumentSha256 = sha256(
+    input.artifactChecksums.sourceDocumentSha256
+  );
+  const assessmentSha256 = sha256(input.artifactChecksums.assessmentSha256);
+  const decisionSha256 = sha256(input.artifactChecksums.decisionSha256);
+  const promptSha256 = sha256(input.artifactChecksums.promptSha256);
+  const responseSha256 = sha256(input.artifactChecksums.responseSha256);
   if (
     !sourceIntakeArtifactRef ||
     sourceIntakeArtifactRef !== retrieval.lineage.intakeArtifactRef ||
     !retrievalArtifactRef ||
+    !sourceDocumentArtifactRef ||
+    !assessmentArtifactRef ||
+    !decisionArtifactRef ||
     !requestArtifactRef ||
     !rawArtifactRef ||
     !recordedSourceIntakeSha256 ||
@@ -199,9 +205,78 @@ export const reintakeRetrievedSource = (
     !retrievalSha256 ||
     !requestSha256 ||
     !rawSha256 ||
+    !sourceDocumentSha256 ||
+    !assessmentSha256 ||
+    !decisionSha256 ||
+    !promptSha256 ||
+    !responseSha256 ||
     sourceIntakeSha256 !== recordedSourceIntakeSha256 ||
     requestSha256 !== recordedRequestSha256 ||
     rawSha256 !== recordedRawSha256
+  ) {
+    return err("INVALID_ARTIFACT_LINEAGE");
+  }
+
+  const sourceDocument = validateSourceDocument(input.sourceDocument);
+  if (!sourceDocument.ok) {
+    return err("INVALID_SOURCE_DOCUMENT");
+  }
+  if (
+    sourceDocument.value.runId !== runId ||
+    sourceDocument.value.sourceItemId !== retrievalId ||
+    sourceDocument.value.sourceKind !== "retrieved-publisher" ||
+    sourceDocument.value.sourceArtifactRef !== retrievalArtifactRef ||
+    sourceDocument.value.sourceArtifactSha256 !== retrievalSha256 ||
+    !isDeepStrictEqual(sourceDocument.value.lineageArtifactRefs, [
+      {
+        artifactRef: sourceIntakeArtifactRef,
+        artifactSha256: sourceIntakeSha256
+      },
+      { artifactRef: requestArtifactRef, artifactSha256: requestSha256 },
+      { artifactRef: rawArtifactRef, artifactSha256: rawSha256 }
+    ])
+  ) {
+    return err("SOURCE_DOCUMENT_MISMATCH");
+  }
+
+  if (!isRecord(input.relevanceAssessment) || !isRecord(input.relevanceDecision)) {
+    return err("INVALID_RELEVANCE_ASSESSMENT");
+  }
+  const relevance = validateQuestionRelevanceAssessment({
+    assessedAt: input.relevanceAssessment.assessedAt,
+    researchQuestion: researchQuestion.value,
+    sourceDocument: sourceDocument.value,
+    sourceDocumentArtifactRef,
+    sourceDocumentArtifactSha256: sourceDocumentSha256,
+    modelInvocation: input.relevanceAssessment.modelInvocation,
+    proposal: {
+      verdict: input.relevanceAssessment.verdict,
+      rationale: input.relevanceAssessment.rationale,
+      support: input.relevanceAssessment.support,
+      limitations: input.relevanceAssessment.limitations
+    }
+  });
+  if (
+    !relevance.ok ||
+    !isDeepStrictEqual(relevance.value.assessment, input.relevanceAssessment) ||
+    !isDeepStrictEqual(relevance.value.decision, input.relevanceDecision)
+  ) {
+    return err("INVALID_RELEVANCE_ASSESSMENT");
+  }
+  if (
+    relevance.value.decision.destination !== "evidence_candidate_proposal" ||
+    relevance.value.decision.approvalStatus !== "pending_human_review" ||
+    (relevance.value.assessment.verdict !== "relevant" &&
+      relevance.value.assessment.verdict !== "partially-relevant")
+  ) {
+    return err("NON_POSITIVE_RELEVANCE");
+  }
+  if (
+    Date.parse(convertedAt) < Date.parse(relevance.value.assessment.assessedAt) ||
+    relevance.value.assessment.modelInvocation.promptArtifactSha256 !==
+      promptSha256 ||
+    relevance.value.assessment.modelInvocation.responseArtifactSha256 !==
+      responseSha256
   ) {
     return err("INVALID_ARTIFACT_LINEAGE");
   }
@@ -242,12 +317,13 @@ export const reintakeRetrievedSource = (
       rawArtifactRef,
       rawArtifactSha256: rawSha256
     },
-    analystAssessment: {
-      actorType: "human",
-      analystId,
-      assessedAt,
-      researchQuestionId: researchQuestion.value.id,
-      relevanceToQuestion
+    questionRelevance: {
+      assessmentArtifactRef,
+      assessmentArtifactSha256: assessmentSha256,
+      decisionArtifactRef,
+      decisionArtifactSha256: decisionSha256,
+      assessment: relevance.value.assessment,
+      decision: relevance.value.decision
     },
     limitations
   };
@@ -255,6 +331,6 @@ export const reintakeRetrievedSource = (
   return ok({
     item,
     decision: decideRoute(item),
-    ledgerEntry: createLedgerEntry(runId, assessedAt, item)
+    ledgerEntry: createLedgerEntry(runId, convertedAt, item)
   });
 };

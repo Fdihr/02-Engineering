@@ -2,6 +2,42 @@ export type ProviderRole = "evidence_candidate" | "collection_lead" | "context";
 
 export type ContentCompleteness = "captured_content" | "summary_only" | "metadata_only";
 
+export type OriginatedValue<T> = {
+  value: T;
+  origin: "human" | "inferred";
+  assumptionReason?: string;
+};
+
+type MemoScopeDefinition = {
+  id: string;
+  runId: string;
+  version: number;
+  purpose: OriginatedValue<string>;
+  threatTopic: OriginatedValue<string>;
+  audience: OriginatedValue<string>;
+  geographies: OriginatedValue<string[]>;
+  timeWindow: OriginatedValue<{
+    from: string;
+    to: string;
+  }>;
+  requestedOutput?: OriginatedValue<"brief" | "memo" | "assessment">;
+};
+
+export type MemoScopeProposal = MemoScopeDefinition & {
+  status: "proposed";
+};
+
+export type ApprovedMemoScopeArtifact = MemoScopeDefinition & {
+  status: "approved";
+  approvedBy: string;
+  approvedAt: string;
+};
+
+export type ApprovedMemoScope = ApprovedMemoScopeArtifact & {
+  artifactRef: string;
+  artifactSha256: string;
+};
+
 type ResearchQuestionDefinition = {
   id: string;
   runId: string;
@@ -105,12 +141,13 @@ export type RetrievedSourceEvidenceCandidate = {
     rawArtifactRef: string;
     rawArtifactSha256: string;
   };
-  analystAssessment: {
-    actorType: "human";
-    analystId: string;
-    assessedAt: string;
-    researchQuestionId: string;
-    relevanceToQuestion: string;
+  questionRelevance: {
+    assessmentArtifactRef: string;
+    assessmentArtifactSha256: string;
+    decisionArtifactRef: string;
+    decisionArtifactSha256: string;
+    assessment: QuestionRelevanceAssessment;
+    decision: QuestionRelevanceDecision;
   };
   limitations: string[];
 };

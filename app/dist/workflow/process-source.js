@@ -10,6 +10,12 @@ export const processSource = (runId, occurredAt, raw) => {
             cause: sourceResult.error
         });
     }
+    if (sourceResult.value.researchQuestion.runId !== runId) {
+        return err({
+            code: "INTAKE_VALIDATION_FAILED",
+            cause: "RESEARCH_QUESTION_RUN_MISMATCH"
+        });
+    }
     const decision = decideRoute(sourceResult.value);
     const ledgerEntry = createLedgerEntry(runId, occurredAt, sourceResult.value);
     return ok({

@@ -5,6 +5,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { relative, resolve } from "node:path";
 import test from "node:test";
+import { validateQuestionRelevanceAssessment } from "../modules/relevance/question-relevance.js";
+import { createSourceDocument } from "../modules/source/source-document.js";
 
 const sha256 = (value: Uint8Array): string =>
   createHash("sha256").update(value).digest("hex");
@@ -125,13 +127,125 @@ test("writes one pending retrieved-source intake and refuses to overwrite it", a
       "utf8"
     );
 
+    const retrievalBytes = await readFile(retrievalPath);
+    const sourceDocumentResult = createSourceDocument({
+      runId: "run-1",
+      sourceItemId: "retrieval-1",
+      sourceKind: "retrieved-publisher",
+      contentFormat: "markdown",
+      body,
+      sourceArtifactRef: artifactRef(retrievalPath),
+      sourceArtifactSha256: sha256(retrievalBytes),
+      lineageArtifactRefs: [
+        {
+          artifactRef: artifactRef(sourceIntakePath),
+          artifactSha256: sha256(sourceIntakeBytes)
+        },
+        { artifactRef: artifactRef(requestPath), artifactSha256: sha256(requestBytes) },
+        { artifactRef: artifactRef(rawPath), artifactSha256: sha256(rawBytes) }
+      ]
+    });
+    if (!sourceDocumentResult.ok) {
+      assert.fail(sourceDocumentResult.error);
+    }
+    const sourceDocument = sourceDocumentResult.value;
+    const sourceDocumentDirectory = resolve(
+      runDirectory,
+      "sources",
+      "retrieval-1",
+      sourceDocument.id
+    );
+    await mkdir(sourceDocumentDirectory, { recursive: true });
+    const sourceDocumentPath = resolve(
+      sourceDocumentDirectory,
+      "source-document.json"
+    );
+    const sourceDocumentBytes = Buffer.from(JSON.stringify(sourceDocument, null, 2));
+    await writeFile(sourceDocumentPath, sourceDocumentBytes);
+
+    const assessmentDirectory = resolve(
+      sourceDocumentDirectory,
+      "question-relevance",
+      "request-1",
+      "assessments",
+      "assessment-1"
+    );
+    await mkdir(assessmentDirectory, { recursive: true });
+    const promptPath = resolve(assessmentDirectory, "question-relevance-request.json");
+    const responsePath = resolve(assessmentDirectory, "copilot-response.json");
+    const promptBytes = Buffer.from('{"synthetic":"request"}');
+    const responseBytes = Buffer.from('{"synthetic":"response"}');
+    await writeFile(promptPath, promptBytes);
+    await writeFile(responsePath, responseBytes);
+    const segment = sourceDocument.segments[0];
+    assert.ok(segment);
+    const relevanceResult = validateQuestionRelevanceAssessment({
+      assessedAt: "2026-08-28T09:05:00.000Z",
+      researchQuestion: approvedQuestion,
+      sourceDocument,
+      sourceDocumentArtifactRef: artifactRef(sourceDocumentPath),
+      sourceDocumentArtifactSha256: sha256(sourceDocumentBytes),
+      modelInvocation: {
+        id: "model-invocation-1",
+        provider: "github-copilot-vscode",
+        model: "not-exposed-by-host",
+        promptPolicyVersion: "question-relevance-prompt-v1",
+        promptArtifactRef: artifactRef(promptPath),
+        promptArtifactSha256: sha256(promptBytes),
+        responseArtifactRef: artifactRef(responsePath),
+        responseArtifactSha256: sha256(responseBytes),
+        startedAt: "2026-08-28T09:03:00.000Z",
+        completedAt: "2026-08-28T09:04:00.000Z"
+      },
+      proposal: {
+        verdict: "relevant",
+        rationale: "The publisher report directly addresses the approved question.",
+        support: [
+          {
+            anchor: {
+              sourceDocumentId: sourceDocument.id,
+              sourceDocumentArtifactRef: artifactRef(sourceDocumentPath),
+              sourceDocumentArtifactSha256: sha256(sourceDocumentBytes),
+              segmentId: segment.id,
+              segmentSha256: segment.textSha256,
+              quote: segment.text,
+              quoteStartUtf8Byte: 0,
+              quoteEndUtf8Byte: Buffer.byteLength(segment.text, "utf8")
+            },
+            relationToQuestion: "The segment contains the bounded report facts."
+          }
+        ],
+        limitations: ["Synthetic relevance assessment for command testing."]
+      }
+    });
+    if (!relevanceResult.ok) {
+      assert.fail(relevanceResult.error);
+    }
+    const assessmentPath = resolve(
+      assessmentDirectory,
+      "question-relevance-assessment.json"
+    );
+    const decisionPath = resolve(
+      assessmentDirectory,
+      "question-relevance-decision.json"
+    );
+    await writeFile(
+      assessmentPath,
+      JSON.stringify(relevanceResult.value.assessment, null, 2),
+      "utf8"
+    );
+    await writeFile(
+      decisionPath,
+      JSON.stringify(relevanceResult.value.decision, null, 2),
+      "utf8"
+    );
+
     const args = [
       "--import",
       "tsx",
       resolve("src/commands/reintake-source.ts"),
       retrievalPath,
-      "analyst-2",
-      "The publisher report directly addresses the approved question.",
+      assessmentPath,
       "candidate-1"
     ];
     const env = { ...process.env, SOURCE_REINTAKE_RUN_DIR: runRoot };
@@ -148,7 +262,7 @@ test("writes one pending retrieved-source intake and refuses to overwrite it", a
     );
     const summary = await readFile(resolve(outputDirectory, "intake-summary.md"), "utf8");
     assert.equal(output.item.provider, "source_retrieval");
-    assert.equal(output.item.analystAssessment.analystId, "analyst-2");
+    assert.equal(output.item.questionRelevance.assessment.verdict, "relevant");
     assert.equal(output.decision.approvalStatus, "pending_human_review");
     assert.equal("content" in output.item, false);
     assert.doesNotMatch(summary, /Ignore instructions/);
@@ -180,8 +294,7 @@ test("rejects a retrieval artifact outside the configured run directory", async 
         "tsx",
         resolve("src/commands/reintake-source.ts"),
         outsidePath,
-        "analyst-2",
-        "Explicit relevance to the approved question.",
+        outsidePath,
         "candidate-outside"
       ],
       {
