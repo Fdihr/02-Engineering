@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1400" viewBox="0 0 2400 1400" role="img" aria-labelledby="title description">
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1828" viewBox="0 0 2400 1828" role="img" aria-labelledby="title description">
   <title id="title">Seerist and OSINT evidence-grounded memo workflow</title>
-  <desc id="description">Canonical version 2.3 evidence-grounded memo workflow showing bounded Seerist and OSINT collection, lossless provider-neutral source documents, AI question-relevance proposals, deterministic pending-candidate validation, human evidence admission, four-goal source assurance, external claim synthesis, optional organizational context, quality verification, and human publication approval. Cyber threat intelligence is the first validated memo profile, not the product boundary.</desc>
+  <desc id="description">Canonical version 2.4 evidence-grounded memo workflow showing bounded Seerist and OSINT collection, lossless provider-neutral source documents, AI question-relevance proposals, deterministic pending-candidate validation, human evidence admission, geopolitical-profile source assurance through Extract, blind Sweep, code-owned Reconcile, single-source Assess, and lineage-checked Write, external claim synthesis, optional organizational context, quality verification, and human publication approval. Cyber threat intelligence is the first validated memo profile, not the product boundary.</desc>
 
   <defs>
     <style>
@@ -14,6 +14,7 @@
       .panel-title { fill: #FFFFFF; font-size: 18px; font-weight: 500; }
       .panel-subtitle { fill: #E3E5E8; font-size: 12px; font-weight: 400; }
       .card-title { fill: #1F3144; font-size: 15px; font-weight: 500; }
+      .inner-title { fill: #1F3144; font-size: 13px; font-weight: 500; }
       .body { fill: #606D7B; font-size: 13px; font-weight: 400; }
       .caption { fill: #606D7B; font-size: 12px; font-weight: 400; }
       .small { fill: #606D7B; font-size: 11px; font-weight: 400; }
@@ -45,9 +46,9 @@
     </marker>
   </defs>
 
-  <rect class="canvas" x="0" y="0" width="2400" height="1400" />
+  <rect class="canvas" x="0" y="0" width="2400" height="1828" />
   <text class="page-title" x="48" y="48">Seerist + OSINT evidence-grounded memo workflow</text>
-  <text class="page-subtitle" x="48" y="76">Version 2.3 | General memo core, profile-specific policy, and full source assurance</text>
+  <text class="page-subtitle" x="48" y="76">Version 2.4 | General memo core, geopolitical profile policy, and stage-owned source assurance</text>
 
   <rect class="det-card" x="1696" y="32" width="16" height="16" />
   <text class="caption" x="1720" y="45">Deterministic</text>
@@ -58,10 +59,10 @@
   <rect class="context-card" x="2088" y="32" width="16" height="16" />
   <text class="caption" x="2112" y="45">Separate authority</text>
 
-  <rect class="board" x="32" y="96" width="2336" height="1272" />
+  <rect class="board" x="32" y="96" width="2336" height="1700" />
 
   <!-- PANEL 1: INTAKE, COLLECTION, CLASSIFICATION -->
-  <rect class="panel" x="64" y="128" width="552" height="936" />
+  <rect class="panel" x="64" y="128" width="552" height="1364" />
   <rect class="panel-header" x="64" y="128" width="552" height="72" />
   <text class="panel-title" x="88" y="158">1. Intent, collection, and admission</text>
   <text class="panel-subtitle" x="88" y="181">AI proposes question relevance; deterministic code and humans retain state authority</text>
@@ -115,61 +116,96 @@
   <path class="primary-line" d="M 340 932 L 340 950" />
   <path class="feedback-line" d="M 88 772 L 48 772 L 48 612 L 86 612" />
 
-  <!-- PANEL 2: FOUR-GOAL SOURCE ASSURANCE -->
-  <rect class="panel" x="640" y="128" width="704" height="936" />
+  <!-- PANEL 2: STAGE-OWNED SOURCE ASSURANCE -->
+  <rect class="panel" x="640" y="128" width="704" height="1364" />
   <rect class="panel-header" x="640" y="128" width="704" height="72" />
   <text class="panel-title" x="664" y="158">2. Stage-owned source assurance</text>
-  <text class="panel-subtitle" x="664" y="181">Four bounded, controller-owned goal loops preserve semantic and audit checks</text>
+  <text class="panel-subtitle" x="664" y="181">Geopolitical profile: two elicitations, code-owned reconciliation, single-source assessment, typed note</text>
 
-  <rect class="artifact-card" x="664" y="224" width="656" height="64" />
-  <text class="card-title" x="688" y="250">Approved evidence snapshot + canonical source</text>
-  <text class="caption" x="688" y="272">Complete content | stable anchors | provenance | permitted claim kinds | limitations</text>
+  <rect class="artifact-card" x="664" y="224" width="656" height="80" />
+  <text class="card-title" x="688" y="252">Approved evidence snapshot + canonical source + approved IRs</text>
+  <text class="caption" x="688" y="274">Complete content | stable hash anchors | provenance | permitted claim kinds | limitations</text>
+  <text class="caption" x="688" y="294">IRs proposed by AI, approved at the panel 1 question gate; panel 2 cannot add or widen an IR</text>
 
-  <rect class="agent-card" x="664" y="320" width="312" height="136" />
-  <text class="card-title" x="688" y="348">Find goal loop</text>
-  <text class="body" x="688" y="374">Goal: supported atomic observations</text>
-  <text class="caption" x="688" y="400">Prepare -> Act -> Observe -> Check</text>
-  <text class="caption" x="688" y="424">Commit extraction for Judge</text>
+  <rect class="agent-card" x="664" y="328" width="312" height="224" />
+  <text class="card-title" x="688" y="356">Extract goal loop</text>
+  <text class="body" x="688" y="380">Goal: anchored atomic observations</text>
+  <text class="caption" x="688" y="400">Bottom-up from the source | chunking A</text>
+  <text class="caption" x="688" y="420">Typed: actor | action | event type | date</text>
+  <text class="caption" x="688" y="440">location | affected entity | anchor</text>
+  <text class="small" x="688" y="460">Kind: event | statement | assessment | forecast</text>
+  <text class="caption" x="688" y="480">Attribution chain: original vs relayed</text>
+  <text class="caption" x="688" y="500">Prepare -> Act -> Observe -> Check</text>
+  <text class="caption" x="688" y="520">Commit observations for Reconcile</text>
 
-  <rect class="agent-card" x="1008" y="320" width="312" height="136" />
-  <text class="card-title" x="1032" y="348">Sweep goal loop</text>
-  <text class="body" x="1032" y="374">Goal: independent coverage pass</text>
-  <text class="caption" x="1032" y="400">Prepare -> Act -> Observe -> Check</text>
-  <text class="caption" x="1032" y="424">Commit blind extraction for Judge</text>
+  <rect class="agent-card" x="1008" y="328" width="312" height="224" />
+  <text class="card-title" x="1032" y="356">Sweep goal loop</text>
+  <text class="body" x="1032" y="380">Goal: dispose every approved IR</text>
+  <text class="caption" x="1032" y="400">Top-down from IRs | chunking B</text>
+  <text class="caption" x="1032" y="420">Blind to Extract | same observation schema</text>
+  <text class="caption" x="1032" y="440">Same typing and claim kind as Extract</text>
+  <text class="caption" x="1032" y="460">covered | partial | silent | contradicted</text>
+  <text class="caption" x="1032" y="480">Prepare -> Act -> Observe -> Check</text>
+  <text class="caption" x="1032" y="500">Commit dispositions + observations</text>
+  <rect class="warning-chip" x="1208" y="528" width="88" height="8" />
 
-  <rect class="agent-card" x="664" y="488" width="656" height="144" />
-  <text class="card-title" x="688" y="516">Judge goal loop</text>
-  <text class="body" x="688" y="542">Goal: dispose every extraction against the original source.</text>
-  <text class="caption" x="688" y="568">Prepare -> Act -> Observe -> Check; retry when required conditions are unmet</text>
-  <text class="caption" x="688" y="592">Commit adjudicated source brief for Write</text>
-  <rect class="warning-chip" x="1208" y="608" width="88" height="8" />
+  <rect class="det-card" x="664" y="576" width="656" height="224" />
+  <text class="card-title" x="688" y="604">Reconcile (code-owned)</text>
+  <text class="body" x="688" y="628">Goal: dispose every observation from both passes against the canonical source</text>
+  <text class="caption" x="688" y="652">Code: anchor resolves at hash | merge needs anchor overlap + same claim kind; IR tags inherited</text>
+  <text class="caption" x="688" y="674">Code: schema valid | IR tags are approved IDs | untouched spans queued as residual</text>
+  <rect class="agent-card" x="688" y="688" width="608" height="52" />
+  <text class="inner-title" x="704" y="710">Bounded semantic check: one scoped call per observation, no memory across calls</text>
+  <text class="caption" x="704" y="730">Does the anchored span support the observation? yes | no. Residual span relevant? yes | no</text>
+  <text class="caption" x="688" y="762">Verdict: accepted | merged | rejected | unresolved; unresolved becomes a caveat, never dropped</text>
+  <text class="caption" x="688" y="784">Commit reconciled observation set for Assess</text>
 
-  <rect class="agent-card" x="664" y="664" width="656" height="120" />
-  <text class="card-title" x="688" y="692">Write goal loop</text>
-  <text class="body" x="688" y="718">Goal: faithful source note from the adjudicated brief.</text>
-  <text class="caption" x="688" y="744">Prepare -> Act -> Observe -> Check; commit only when no new claim is introduced</text>
+  <rect class="agent-card" x="664" y="824" width="656" height="180" />
+  <text class="card-title" x="688" y="852">Assess goal loop (single-source only)</text>
+  <text class="body" x="688" y="876">Goal: characterize the source, not the world</text>
+  <text class="caption" x="688" y="900">Reliability: access, track record, alignment and interest (state media, funders, audience)</text>
+  <text class="caption" x="688" y="922">Dependency: original vs relayed; a wire relayed by many outlets is one source</text>
+  <text class="caption" x="688" y="944">Per-IR coverage (assigns IR-untagged observations; no fit = out-of-IR) | limitations</text>
+  <text class="small" x="688" y="964">Excluded: information credibility, alternatives, confidence; those are cross-source judgments for panel 3</text>
+  <text class="caption" x="688" y="986">Prepare -> Act -> Observe -> Check; commit source assessment for Write</text>
 
-  <rect class="artifact-card" x="664" y="816" width="656" height="80" />
-  <text class="card-title" x="688" y="844">Typed source intelligence note</text>
-  <text class="caption" x="688" y="870">Accepted observations | judgments | question coverage | caveats | gaps</text>
+  <rect class="agent-card" x="664" y="1028" width="656" height="160" />
+  <text class="card-title" x="688" y="1056">Write goal loop</text>
+  <text class="body" x="688" y="1080">Goal: typed source note, canonical JSON first; prose is rendered from it</text>
+  <text class="caption" x="688" y="1104">Every statement carries observation IDs and IR IDs; no free text without lineage</text>
+  <text class="caption" x="688" y="1126">Code check: no statement without lineage | every accepted observation and IR disposition placed</text>
+  <text class="caption" x="688" y="1148">Semantic check: no statement exceeds its observations; a claim kind never upgrades in prose</text>
+  <text class="caption" x="688" y="1170">Commit only when both checks pass</text>
 
-  <rect class="quiet-card" x="664" y="928" width="656" height="104" />
-  <text class="card-title" x="688" y="956">Stage-owned deterministic controller</text>
-  <text class="body" x="688" y="982">Frozen goal + conditions -> scoped call -> observation -> retry or commit</text>
-  <text class="small" x="688" y="1008">Immutable attempts | bounded failure | model never chooses transition or next stage</text>
+  <rect class="artifact-card" x="664" y="1212" width="656" height="100" />
+  <text class="card-title" x="688" y="1240">Typed source intelligence note</text>
+  <text class="caption" x="688" y="1262">Typed observations | IR dispositions | source assessment | caveats | gaps | anchor lineage</text>
+  <text class="caption" x="688" y="1282">Out-of-IR observations are kept and routed to the question gate as proposed IRs, never dropped</text>
+  <text class="caption" x="688" y="1302">Single-source only: corroboration, confidence and indicators are assigned in panel 3</text>
 
-  <path class="primary-line" d="M 820 288 L 820 318" />
-  <path class="primary-line" d="M 1164 288 L 1164 318" />
-  <path class="primary-line" d="M 820 456 L 820 472 L 992 472 L 992 486" />
-  <path class="primary-line" d="M 1164 456 L 1164 472 L 992 472 L 992 486" />
-  <path class="primary-line" d="M 992 632 L 992 662" />
-  <path class="primary-line" d="M 992 784 L 992 814" />
+  <rect class="quiet-card" x="664" y="1336" width="656" height="132" />
+  <text class="card-title" x="688" y="1364">Stage-owned deterministic controller</text>
+  <text class="body" x="688" y="1388">Frozen goal + exit conditions -> scoped call -> observation -> retry or commit</text>
+  <text class="small" x="688" y="1410">Exit conditions must be satisfiable by an honest negative: silent and contradicted are valid variants</text>
+  <text class="small" x="688" y="1430">Retry = fresh context + deterministic failure reason only | immutable attempts | bounded failure</text>
+  <text class="small" x="688" y="1450">Model never chooses the transition | ship Extract first; add Sweep only if measured misses justify it</text>
+
+  <path class="primary-line" d="M 820 304 L 820 326" />
+  <path class="primary-line" d="M 1164 304 L 1164 326" />
+  <path class="primary-line" d="M 820 552 L 820 564 L 992 564 L 992 574" />
+  <path class="primary-line" d="M 1164 552 L 1164 564 L 992 564 L 992 574" />
+  <path class="primary-line" d="M 992 800 L 992 822" />
+  <path class="primary-line" d="M 992 1004 L 992 1026" />
+  <path class="primary-line" d="M 992 1188 L 992 1210" />
 
   <!-- Approved evidence enters source assurance. -->
   <path class="primary-line" d="M 592 948 L 628 948 L 628 256 L 662 256" />
 
+  <!-- Out-of-IR observations return as proposals to the human question gate. -->
+  <path class="feedback-line" d="M 664 1282 L 620 1282 L 620 280 L 594 280" />
+
   <!-- PANEL 3: SYNTHESIS, CONTEXT, STANDARD, OUTPUT -->
-  <rect class="panel" x="1368" y="128" width="968" height="936" />
+  <rect class="panel" x="1368" y="128" width="968" height="1364" />
   <rect class="panel-header" x="1368" y="128" width="968" height="72" />
   <text class="panel-title" x="1392" y="158">3. Synthesis, relevance, quality, and publication</text>
   <text class="panel-subtitle" x="1392" y="181">External facts first; Vestas context and memo standards remain separate authorities</text>
@@ -251,38 +287,38 @@
   <path class="feedback-line" d="M 2156 864 L 2156 840 L 2336 840 L 2336 668 L 2314 668" />
 
   <!-- Source notes enter external synthesis. -->
-  <path class="primary-line" d="M 1320 856 L 1352 856 L 1352 280 L 1390 280" />
+  <path class="primary-line" d="M 1320 1262 L 1352 1262 L 1352 280 L 1390 280" />
 
   <!-- FOUNDATION -->
-  <rect class="panel" x="64" y="1088" width="2272" height="248" />
-  <rect class="panel-header" x="64" y="1088" width="2272" height="56" />
-  <text class="panel-title" x="88" y="1123">4. Trust and implementation foundation</text>
-  <text class="panel-subtitle" x="480" y="1123">Explicit authorities, typed artifacts, deterministic transitions, and incremental delivery</text>
+  <rect class="panel" x="64" y="1516" width="2272" height="248" />
+  <rect class="panel-header" x="64" y="1516" width="2272" height="56" />
+  <text class="panel-title" x="88" y="1551">4. Trust and implementation foundation</text>
+  <text class="panel-subtitle" x="480" y="1551">Explicit authorities, typed artifacts, deterministic transitions, and incremental delivery</text>
 
-  <rect class="quiet-card" x="88" y="1168" width="520" height="144" />
-  <text class="card-title" x="112" y="1196">Three authorities never substitute</text>
-  <text class="body" x="112" y="1222">Evidence</text>
-  <text class="caption" x="208" y="1222">what happened</text>
-  <text class="body" x="112" y="1248">Vestas context</text>
-  <text class="caption" x="208" y="1248">why it matters</text>
-  <text class="body" x="112" y="1274">Memo standard</text>
-  <text class="caption" x="208" y="1274">how it is communicated</text>
+  <rect class="quiet-card" x="88" y="1596" width="520" height="144" />
+  <text class="card-title" x="112" y="1624">Three authorities never substitute</text>
+  <text class="body" x="112" y="1650">Evidence</text>
+  <text class="caption" x="208" y="1650">what happened</text>
+  <text class="body" x="112" y="1676">Vestas context</text>
+  <text class="caption" x="208" y="1676">why it matters</text>
+  <text class="body" x="112" y="1702">Memo standard</text>
+  <text class="caption" x="208" y="1702">how it is communicated</text>
 
-  <rect class="det-card" x="632" y="1168" width="520" height="144" />
-  <text class="card-title" x="656" y="1196">Code owns control</text>
-  <text class="body" x="656" y="1222">State | permissions | budgets | retries | validation</text>
-  <text class="caption" x="656" y="1248">Model output proposes artifacts; it never advances state.</text>
-  <text class="caption" x="656" y="1274">Raw inputs and every accepted claim remain traceable.</text>
+  <rect class="det-card" x="632" y="1596" width="520" height="144" />
+  <text class="card-title" x="656" y="1624">Code owns control</text>
+  <text class="body" x="656" y="1650">State | permissions | budgets | retries | validation</text>
+  <text class="caption" x="656" y="1676">Model output proposes artifacts; it never advances state.</text>
+  <text class="caption" x="656" y="1702">Raw inputs and every accepted claim remain traceable.</text>
 
-  <rect class="gate-card" x="1176" y="1168" width="520" height="144" />
-  <text class="card-title" x="1200" y="1196">Non-negotiable quality blockers</text>
-  <text class="body" x="1200" y="1222">Unsupported claim | bad citation | hidden dependency</text>
-  <text class="caption" x="1200" y="1248">No context-only corroboration or historical-fact leakage.</text>
-  <text class="caption" x="1200" y="1274">No confidence inflation or suppressed contradiction.</text>
+  <rect class="gate-card" x="1176" y="1596" width="520" height="144" />
+  <text class="card-title" x="1200" y="1624">Non-negotiable quality blockers</text>
+  <text class="body" x="1200" y="1650">Unsupported claim | bad citation | hidden dependency</text>
+  <text class="caption" x="1200" y="1676">No context-only corroboration or historical-fact leakage.</text>
+  <text class="caption" x="1200" y="1702">No confidence inflation or suppressed contradiction.</text>
 
-  <rect class="det-card" x="1720" y="1168" width="592" height="144" />
-  <text class="card-title" x="1744" y="1196">Current implementation slice</text>
-  <text class="body" x="1744" y="1222">Scope -> question -> collect -> canonicalize -> relevance -> candidate</text>
-  <text class="caption" x="1744" y="1248">Panel 1 complete: approved NV snapshot is ready for source assurance.</text>
-  <text class="caption" x="1744" y="1274">Scale only after each behavior works and is measured.</text>
+  <rect class="det-card" x="1720" y="1596" width="592" height="144" />
+  <text class="card-title" x="1744" y="1624">Current implementation slice</text>
+  <text class="body" x="1744" y="1650">Scope -> question -> collect -> canonicalize -> relevance -> candidate</text>
+  <text class="caption" x="1744" y="1676">Panel 1 complete: approved NV snapshot is ready for source assurance.</text>
+  <text class="caption" x="1744" y="1702">Scale only after each behavior works and is measured.</text>
 </svg>

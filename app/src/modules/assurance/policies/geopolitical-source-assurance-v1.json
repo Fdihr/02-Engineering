@@ -1,0 +1,15 @@
+{
+  "policyId": "geopolitical-source-assurance-v1",
+  "claimKinds": ["event", "statement", "assessment", "forecast"],
+  "attributionKinds": ["direct", "attributed", "relayed"],
+  "dateRoles": ["event", "reporting", "publication", "reference", "unknown"],
+  "dispositions": ["covered", "partial", "silent", "contradicted"],
+  "reviewVerdicts": ["supported", "unsupported", "duplicate", "chrome"],
+  "limits": {
+    "quoteMinUtf8Bytes": 20,
+    "quoteMaxUtf8Bytes": 600,
+    "textMaxChars": 240,
+    "maxObservations": 60,
+    "maxAttempts": 2
+  }
+}
