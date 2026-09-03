@@ -139,6 +139,79 @@ The evidence gate validates the exact positive-assessment shape, reopens and has
 
 The active boundary is `../02-Contracts/retrieved-source-reintake.md`. Focused tests cover positive-only conversion, source and model artifact lineage, pending-only routing, path confinement, non-overwrite behavior, evidence-gate tampering, and assessment preservation through approval. On 2026-09-01, the live NV assessment was converted into candidate `nv-candidate-question-relevance-001` and subsequently approved by `FDIHR` as decision `nv-evidence-review-001`.
 
+## Implemented slice: Panel 2 Extract under a deterministic controller
+
+One approved evidence snapshot + approved information requirements + versioned profile policy -> immutable model-ready request -> one interactive GitHub Copilot proposal -> deterministic checks, exact-span location, and anchor validation -> committed extraction.
+
+Run from `app/`:
+
+```powershell
+npm run approve:requirements -- <requirements-proposal.json> <approved-research-question.json> <reviewer-id>
+npm run prepare:assurance-extract -- <approved-evidence-snapshot.json> <approved-requirements.json> <profile-policy.json> [attempt-authorisation.json]
+npm run record:assurance-extract -- <extract-request.json> <copilot-response.json>
+npm run authorise:assurance-attempt -- <extract-failed.json> <profile-policy.json> <reviewer-id> <reason> [--revalidates=<copilot-response.json>]
+npm run prepare:assurance-review -- <extract-commit.json>
+npm run record:assurance-review -- <review-package.json> <review-response.json>
+npm run assemble:assurance -- <approved-evidence-snapshot.json> <extract-commit.json> <review-record.json>
+npm run measure:assurance -- <source-note.json> <extract-stage-directory> <review-record.json>
+```
+
+Panel 2 consumes Panel 1 artifacts without altering them. It reopens the canonical source document referenced by the approved snapshot, verifies its checksum, and reuses `validateSourceDocument` and `validateSourceAnchor` as the final authority on every anchor. It introduces no second normalization, no second document hash, and no character-offset anchors.
+
+### Measured failure classes and code-side responses
+
+The first live NV extraction produced three distinct failure classes across four attempts. Each was answered by removing work from the model rather than by relaxing a check.
+
+| Stage | Attempt | Failures | Class |
+| --- | --- | --- | --- |
+| `extract` | 1 | E2 x2, E3 x14 | Quote transcription |
+| `extract` | 2 | E3 x15 | Quote transcription |
+| `extract-2` | 1 | E2 x2 | Segment identifier transcription |
+| `extract-2` | 2 | E6 x1 | Coverage bookkeeping |
+| `extract-3` | 1 | none | Committed |
+
+Diagnosis and response for each class:
+
+1. Quote transcription. Every failing quote matched the canonical segment after markdown escapes, whitespace runs, quotation variants, and NFC were accounted for; the model selected correct spans but substituted lookalike codepoints. The response is an exact-span locator governed by a closed, versioned rule list. Normalization is used only to find the span; the stored anchor is always the segment's own bytes, and Panel 1's validator still runs on the result. Every observation records `proposedQuote` and `matchedVia`, so transcription drift stays measurable instead of invisible.
+2. Segment identifier transcription. Hash-like segment ids were fabricated on the first attempt of both stage runs. The prompt now addresses segments by short ordinal alias and code maps the alias back to the canonical id. The alias is a locator hint; the anchor is unchanged.
+3. Coverage bookkeeping. The single E6 failure was one missing index in a declared list of eleven, on a requirement whose observations were correctly tagged. `observationIndexes` was a hand-maintained copy of data the model had already supplied through `irIds`, so it was removed from the contract. Code derives the coverage set from the tags, and E6 keeps its exact semantics against the derived set: `silent` requires no tagged observation, and every other disposition requires at least one. A failure there now means the model's tags contradict its own dispositions, which is a judgement error worth failing on.
+
+The generalized rule taken from this: ask the model only for judgement, and derive every bookkeeping field in code.
+
+Three failure classes, three code-side fixes, zero loosening of an invariant. Quote fidelity failures fell from 15 to 0 once the locator landed and stayed at 0 afterwards.
+
+On the committed extraction, 4 of 20 quotes were byte-exact as transcribed and 16 required the locator, with whitespace reflow needed on all 16 and quotation-variant substitution on 7. Transcription drift is therefore the normal case rather than the exception, which makes the locator a permanent component and not a patch for one source. Models normalize whitespace and quotation marks even on clean text, and markdown-converted captures always carry escape artifacts, so the component is required regardless of any later improvement to Panel 1 canonicalization.
+
+### Re-validation boundary
+
+The committed extraction is the stored `extract-2` attempt 2 proposal re-validated under the corrected contract, with no new model invocation. This is permitted only under an explicit rule recorded in the authorisation artifact:
+
+> Re-validation of a stored proposal is permitted only when the contract change removes a bookkeeping requirement or makes a locator more tolerant, never when it alters an invariant on a judgement field.
+
+Both changes qualify. The authorisation names the superseded stage, its failure artifact checksum, and the originating model invocation. Failed stages are retained unchanged; the authorised stage supersedes them in lineage rather than replacing them. This is what separates a principled contract correction from selecting rules until an output passes.
+
+Attempt budget stays at two. Every attempt corrected what was reported and introduced no new failure, so retries were effective; the constraint was the number of failure classes, not the budget.
+
+### Requirement tagging criterion
+
+An observation earns an information-requirement tag only if it answers that requirement as written, not because it is about the same topic. Human review can remove a tag through `correctedIrIds` on a supported verdict; the proposed `irIds` stay in the commit and in the note, and coverage is derived from the corrected set.
+
+This keeps two different errors apart. A quote that does not support its text is a support failure. A supported observation attached to a requirement it does not answer is a tagging failure. Without the distinction, over-tagging would either inflate the coverage graph passed to Panel 3 or be absorbed into the support-failure rate and drive the wrong next slice. `tagPrecision` records tags proposed, tags removed, and the resulting precision. It is an added measurement and changes no pre-registered threshold.
+
+### Boundaries this slice preserves
+1. The model never sets an anchor, an observation id, or a coverage set.
+2. Retry feedback carries check ids, counts, and fixed rules only, never prior output or source content.
+3. `silent` is a first-class success; no check fails because a requirement is unmet by the source.
+4. Claim kind and attribution never upgrade anywhere in Panel 2.
+5. Every canonical artifact is write-once, and no command advances state from a model response.
+6. Events record ids, checksums, and typed errors, never prompts, quotes, or observation text.
+
+The active contract version and the exact check definitions an attempt was judged under are recorded in the request, the commit, and the source note lineage.
+
+### Open Panel 1 finding
+
+The admitted NV canonical segments carry markdown escape artifacts and internal newlines from the Firecrawl markdown capture. That is a Panel 1 canonicalization concern and is recorded as backlog only: changing it would produce a different canonical document and require a new admission decision. The locator is required regardless, because models normalize whitespace and quotation marks even on clean text.
+
 ## KISS boundary
 
 Keep this slice single-item, local, deterministic, and function-first.

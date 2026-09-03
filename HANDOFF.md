@@ -1,7 +1,7 @@
 # CTI Engineering Handoff
 
-Date: 2026-09-01
-Status: Panel 1 complete; real NV candidate approved as `nv-evidence-review-001` and ready for Panel 2 source assurance
+Date: 2026-09-03
+Status: Panel 2 Extract committed for the NV snapshot under contract v2; blocked on the human review pass that produces the source note and metrics
 Workspace root: `CTI/`
 Source domain: Agentic App Engineering
 Authority class: Current implementation direction and next-action handoff
@@ -154,8 +154,15 @@ The adapter honestly records `model: "not-exposed-by-host"`. This is not a produ
 
 The real NV assessment completed as `partially-relevant` with three exact anchors and controller-derived destination `evidence_candidate_proposal / pending_human_review`. On 2026-09-01 it was converted into candidate `nv-candidate-question-relevance-001`; human reviewer `FDIHR` then approved it in decision `nv-evidence-review-001`, creating snapshot `snapshot-nv-evidence-review-001` for source assurance.
 
-## Event-log boundary
+## Provider content storage decision
 
+The repository sits inside a OneDrive-synced, access-controlled team library, so ignored `runs/` content is stored in Vestas tenant cloud storage. This is recorded as a decision rather than treated as a leak: provider content lives there because organizational policy places work data there, and the library is the team's controlled channel.
+
+The contract owner has confirmed that Seerist's terms and the captured publisher pages permit internal storage of retrieved content, which closes the previously open retention question. Two rules continue to apply, because permission to store internally is not permission to publish. Raw provider content never leaves the tenant, and committing provider content to git remains a separate deliberate decision rather than an automatic consequence: committed test fixtures stay synthetic unless a specific fixture is explicitly approved. Content-free run values such as counts, rates, and checksums may be recorded in committed documentation.
+
+Operational consequences of that placement are handled in code and configuration. `git config core.longpaths true` is set, the deep working directory is reachable through a `subst` drive letter for shorter tool-visible paths, run directory identifiers are short, and the shared file layer wraps absolute paths with `toNamespacedPath`. Filesystem writes retry only `EPERM` and `EBUSY`, which are the transient locks a sync client causes; `EEXIST` is never retried because that is the write-once guard reporting a real collision. Windows PowerShell 5.1 still fails to enumerate the deepest paths, so prefer PowerShell 7 for directory listings.
+
+## Event-log boundary
 An event log is required from the first probe, but keep V1 implementation small.
 
 Initially record only:
@@ -235,8 +242,7 @@ These are design hypotheses. Keep what testing supports; simplify or revise what
 2. How should missing authorship, ambiguous timestamps, and provider references affect eligibility?
 3. What compact source support and explanation should the evidence gate show so humans can efficiently verify AI relevance proposals?
 4. Do bounded pages remain stable across source types and repeated runs?
-5. What provider restrictions govern retention of raw responses and test fixtures?
-6. Which Azure AI Foundry endpoint, model deployment, authentication mode, region, and retention policy will be approved for the live adapter?
+5. Which Azure AI Foundry endpoint, model deployment, authentication mode, region, and retention policy will be approved for the live adapter?
 
 ## Explicit non-goals for the next agent
 
@@ -276,7 +282,21 @@ At this handoff:
 
 ## Suggested opening prompt
 
-> Read `HANDOFF.md`, the completed baseline in `03-Workflow/first-slice.md`, the canonical workflow in `03-Workflow/memo-workflow.md`, and approved snapshot `app/runs/nv-evidence-review-001/approved-evidence-snapshot.json`. Implement the one-source `Find -> Sweep -> Judge -> Write` slice without changing its quality requirements.
+> Read `HANDOFF.md`, the implemented baseline in `03-Workflow/first-slice.md`, and the plan in `03-Workflow/source-assurance-poc-v1.md`. Panel 2 Extract is committed at `app/runs/research-cia-russia-20260828/assurance/snapshot-nv-evidence-review-001/extract-3/extract-commit.json` and the review package is built. The next action is the human review pass; do not start it for the reviewer and do not show them model observations before their blind sweep is recorded.
+
+## Immediate next action: human review pass
+
+Extract is committed with 20 observations. The review package is written and checksum-bound. Everything downstream waits on one human pass, in this order:
+
+1. Blind sweep. Read the whole admitted source once from `review/source-with-aliases.txt` and note, per approved requirement, the passages worth extracting, plus a disposition and any date roles. This must be produced before looking at the package, because it is the only honest baseline for the omission count and therefore for the decision on whether to build Sweep.
+2. Support pass. Judge each package row on its quote alone, at the stated claim kind and attribution. A statement written as an event is `unsupported`, and so is `direct` attribution on text the source ascribes to someone else.
+3. Tag correction. A supported observation attached to a requirement it does not answer is a tagging error, not a support failure: keep the verdict `supported` and remove the tag through `correctedIrIds`.
+4. Omissions. Diff the blind list against the accepted set; what remains becomes `humanObservations`.
+5. Requirement dispositions, then the source assessment. `dependency` must agree with the commit's attribution summary.
+
+Then run `record:assurance-review`, `assemble:assurance`, and `measure:assurance`. The five metric families decide the next slice.
+
+Two places deserve attention during the pass. The `ir-02` observations concern the date, where reporting date and event date are easily confused, which is what `date.role` exists to catch. And `ir-06`, cyber implications, has stayed `silent` through every attempt; that is the honest-negative rule working, and it should surface as a gap rather than be stretched.
 
 ## Human input still required
 

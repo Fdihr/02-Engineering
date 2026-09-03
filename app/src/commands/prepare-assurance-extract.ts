@@ -1,6 +1,7 @@
 import { access, mkdir, readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createExtractRequest } from "../modules/assurance/extract/request.js";
+import { validateAttemptAuthorisation } from "../modules/assurance/authorisation.js";
 import { createAssuranceEvent } from "../modules/assurance/events.js";
 import { validateProfilePolicy } from "../modules/assurance/policy.js";
 import { validateApprovedRequirements } from "../modules/assurance/requirements.js";
@@ -13,17 +14,19 @@ import {
   loadAdmittedSource,
   loadJsonArtifact,
   loadRunArtifact,
+  longPath,
   sha256,
   stageDirectory,
+  withSyncRetry,
   writeOnce
 } from "./assurance-io.js";
 
 const usage =
-  "Usage: npm run prepare:assurance-extract -- <approved-evidence-snapshot.json> <approved-requirements.json> <profile-policy.json>";
+  "Usage: npm run prepare:assurance-extract -- <approved-evidence-snapshot.json> <approved-requirements.json> <profile-policy.json> [attempt-authorisation.json]";
 
 const exists = async (path: string): Promise<boolean> => {
   try {
-    await access(path);
+    await access(longPath(path));
     return true;
   } catch {
     return false;
@@ -31,7 +34,9 @@ const exists = async (path: string): Promise<boolean> => {
 };
 
 const readPreviousFailures = async (path: string): Promise<CheckFailure[]> => {
-  const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+  const parsed: unknown = JSON.parse(
+    await withSyncRetry(() => readFile(longPath(path), "utf8"))
+  );
   if (!Array.isArray(parsed) || parsed.length === 0) {
     throw new Error("The previous attempt recorded no check failures to retry.");
   }
@@ -48,8 +53,13 @@ const main = async (): Promise<void> => {
   let outputArtifactRef: string | undefined;
 
   try {
-    const [snapshotPathValue, requirementsPathValue, policyPathValue, ...extra] =
-      process.argv.slice(2);
+    const [
+      snapshotPathValue,
+      requirementsPathValue,
+      policyPathValue,
+      authorisationPathValue,
+      ...extra
+    ] = process.argv.slice(2);
     if (
       !snapshotPathValue ||
       !requirementsPathValue ||
@@ -80,7 +90,40 @@ const main = async (): Promise<void> => {
     }
 
     const stageDir = stageDirectory(runRoot, runId, snapshotId);
-    const extractDir = resolve(stageDir, "extract");
+    let extractStageName = "extract";
+    if (authorisationPathValue) {
+      const authorisationArtifact = await loadRunArtifact(
+        runRoot,
+        authorisationPathValue,
+        "Attempt authorisation"
+      );
+      const authorisation = validateAttemptAuthorisation(
+        authorisationArtifact.value
+      );
+      if (!authorisation.ok) {
+        throw new Error(`Attempt authorisation rejected: ${authorisation.error}`);
+      }
+      if (
+        authorisation.value.runId !== runId ||
+        authorisation.value.snapshotId !== snapshotId
+      ) {
+        throw new Error("The authorisation does not match this admitted source.");
+      }
+      if (authorisation.value.policyId !== policy.value.policyId) {
+        throw new Error("The authorisation was issued for a different policy.");
+      }
+      const superseded = resolve(
+        stageDir,
+        authorisation.value.supersededStageDirectory,
+        "extract-failed.json"
+      );
+      if (!(await exists(superseded))) {
+        throw new Error("The superseded stage has no recorded failure.");
+      }
+      extractStageName = authorisation.value.stageDirectory;
+    }
+
+    const extractDir = resolve(stageDir, extractStageName);
     eventLogPath = resolve(stageDir, "events.jsonl");
     await ensureDirectory(extractDir);
 
@@ -91,7 +134,7 @@ const main = async (): Promise<void> => {
       throw new Error("The extract stage is already closed for this snapshot.");
     }
 
-    const recorded = (await readdir(extractDir, { withFileTypes: true }))
+    const recorded = (await readdir(longPath(extractDir), { withFileTypes: true }))
       .filter((entry) => entry.isDirectory() && /^attempt-\d+$/.test(entry.name))
       .map((entry) => Number.parseInt(entry.name.replace("attempt-", ""), 10))
       .sort((left, right) => left - right);
@@ -128,7 +171,7 @@ const main = async (): Promise<void> => {
     }
 
     const attemptDir = resolve(extractDir, `attempt-${attempt}`);
-    await mkdir(attemptDir);
+    await withSyncRetry(() => mkdir(longPath(attemptDir)));
     const contents = `${JSON.stringify(request.value, null, 2)}\n`;
     const requestSha256 = sha256(Buffer.from(contents, "utf8"));
     outputArtifactRef = await writeOnce(

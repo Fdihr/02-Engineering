@@ -7,11 +7,11 @@ import type {
 export const APPROVED_REQUIREMENTS_SCHEMA_VERSION =
   "approved-requirements-v1" as const;
 export const EXTRACT_REQUEST_SCHEMA_VERSION =
-  "source-assurance-extract-request-v1" as const;
+  "source-assurance-extract-request-v2" as const;
 export const EXTRACT_RESPONSE_SCHEMA_VERSION =
-  "source-assurance-copilot-poc-response-v1" as const;
+  "source-assurance-copilot-poc-response-v2" as const;
 export const EXTRACT_COMMIT_SCHEMA_VERSION =
-  "source-assurance-extract-commit-v1" as const;
+  "source-assurance-extract-commit-v2" as const;
 export const REVIEW_PACKAGE_SCHEMA_VERSION =
   "source-assurance-review-package-v1" as const;
 export const REVIEW_RESPONSE_SCHEMA_VERSION =
@@ -21,6 +21,8 @@ export const REVIEW_RECORD_SCHEMA_VERSION =
 export const SOURCE_NOTE_SCHEMA_VERSION = "source-intelligence-note-v1" as const;
 export const ASSURANCE_METRICS_SCHEMA_VERSION =
   "source-assurance-metrics-v1" as const;
+export const ATTEMPT_AUTHORISATION_SCHEMA_VERSION =
+  "source-assurance-attempt-authorisation-v1" as const;
 
 export const EXTRACT_PROVIDER = "github-copilot-vscode" as const;
 export const EXTRACT_MODEL = "not-exposed-by-host" as const;
@@ -35,6 +37,16 @@ export type DateRole =
   | "unknown";
 export type Disposition = "covered" | "partial" | "silent" | "contradicted";
 export type ReviewVerdict = "supported" | "unsupported" | "duplicate" | "chrome";
+
+/** Closed set of transformations permitted when locating a proposed quote. */
+export type QuoteMatchRule =
+  | "markdown-escape"
+  | "whitespace-collapse"
+  | "quote-variants"
+  | "nfc";
+
+/** Empty rule usage means the quote was already byte-exact. */
+export type QuoteMatchProvenance = "exact" | QuoteMatchRule[];
 
 export type ProfilePolicyLimits = {
   quoteMinUtf8Bytes: number;
@@ -51,6 +63,7 @@ export type ProfilePolicy = {
   dateRoles: DateRole[];
   dispositions: Disposition[];
   reviewVerdicts: ReviewVerdict[];
+  quoteMatchRules: QuoteMatchRule[];
   limits: ProfilePolicyLimits;
 };
 
@@ -103,7 +116,8 @@ export type AdmittedSource = {
 };
 
 export type ExtractObservation = {
-  segmentId: string;
+  /** Short ordinal alias shown in the prompt; code maps it to the canonical segment. */
+  segment: string;
   quote: string;
   text: string;
   claimKind: ClaimKind;
@@ -125,7 +139,6 @@ export type ExtractObservation = {
 export type ExtractDisposition = {
   irId: string;
   disposition: Disposition;
-  observationIndexes: number[];
   note?: string;
 };
 
@@ -136,8 +149,25 @@ export type ExtractOutput = {
 
 export type Observation = ExtractObservation & {
   observationId: string;
+  segmentId: string;
   anchor: SourceAnchor;
   origin: "model" | "human";
+  proposedQuote: string;
+  matchedVia: QuoteMatchProvenance;
+  /** Set at assembly when review removed a requirement tag; `irIds` keeps the proposal. */
+  correctedIrIds?: string[];
+};
+
+export type CheckDefinition = {
+  id: string;
+  rule: string;
+};
+
+/** The exact contract an attempt was judged under. */
+export type ExtractContract = {
+  requestSchemaVersion: typeof EXTRACT_REQUEST_SCHEMA_VERSION;
+  responseSchemaVersion: typeof EXTRACT_RESPONSE_SCHEMA_VERSION;
+  checks: CheckDefinition[];
 };
 
 export type IRDisposition = {
@@ -192,6 +222,7 @@ export type ExtractRequest = {
   researchQuestionId: string;
   requirementsApprovalId: string;
   policyId: string;
+  contract: ExtractContract;
   lineage: AssuranceLineage;
   feedback: CheckFailure[] | null;
   prompt: {
@@ -238,6 +269,7 @@ export type ExtractCommit = {
   researchQuestionId: string;
   requirementsApprovalId: string;
   policyId: string;
+  contract: ExtractContract;
   lineage: AssuranceLineage;
   invocation: ExtractInvocation;
   observations: Observation[];
@@ -267,6 +299,8 @@ export type ReviewVerdictEntry = {
   verdict: ReviewVerdict;
   note?: string;
   duplicateOf?: string;
+  /** Supported observations only: the proposed tags minus those the observation does not answer. */
+  correctedIrIds?: string[];
 };
 
 export type IRReviewEntry = {
@@ -341,6 +375,7 @@ export type SourceNote = {
   researchQuestionId: string;
   sourceDocumentId: string;
   lineage: AssuranceLineage & {
+    contract: ExtractContract;
     extractCommit: ArtifactBinding;
     reviewPackage: ArtifactBinding;
     reviewResponse: ArtifactBinding;
@@ -355,6 +390,29 @@ export type SourceNote = {
   attributionSummary: AttributionSummaryEntry[];
   caveats: string[];
   gaps: NoteGap[];
+};
+
+/** Explicit human authorisation for a new extract stage after a failed one. */
+export type AttemptAuthorisation = {
+  schemaVersion: typeof ATTEMPT_AUTHORISATION_SCHEMA_VERSION;
+  id: string;
+  runId: string;
+  snapshotId: string;
+  sequence: number;
+  stageDirectory: string;
+  supersededStageDirectory: string;
+  supersededFailure: ArtifactBinding;
+  policyId: string;
+  policy: ArtifactBinding;
+  reason: string;
+  /** Present only when a stored proposal is re-validated under a relaxed bookkeeping contract. */
+  revalidation?: {
+    rule: string;
+    originatingInvocationId: string;
+    originatingResponse: ArtifactBinding;
+  };
+  authorisedBy: string;
+  authorisedAt: string;
 };
 
 export type AssuranceMetrics = {
@@ -372,5 +430,15 @@ export type AssuranceMetrics = {
     underclaims: number;
   };
   quoteFidelityFailures: number;
+  transcriptionFidelity: {
+    exact: number;
+    normalised: number;
+    ruleCounts: Record<string, number>;
+  };
+  tagPrecision: {
+    tagsProposed: number;
+    tagsRemoved: number;
+    precision: number | null;
+  };
   recommendations: string[];
 };

@@ -4,6 +4,8 @@ import {
   EXTRACT_COMMIT_SCHEMA_VERSION,
   EXTRACT_MODEL,
   EXTRACT_PROVIDER,
+  EXTRACT_REQUEST_SCHEMA_VERSION,
+  EXTRACT_RESPONSE_SCHEMA_VERSION,
   type Disposition,
   type ExtractCommit,
   type ExtractInvocation,
@@ -135,6 +137,7 @@ export const validateExtractCommit = (
       "researchQuestionId",
       "requirementsApprovalId",
       "policyId",
+      "contract",
       "lineage",
       "invocation",
       "observations",
@@ -160,6 +163,7 @@ export const validateExtractCommit = (
   const policyId = nonEmptyString(value.policyId);
   const lineage = readAssuranceLineage(value.lineage);
   const invocation = readInvocation(value.invocation);
+  const contract = isRecord(value.contract) ? value.contract : undefined;
   if (
     !id ||
     !requestId ||
@@ -174,6 +178,10 @@ export const validateExtractCommit = (
     !policyId ||
     !lineage ||
     !invocation ||
+    !contract ||
+    !Array.isArray(contract.checks) ||
+    contract.requestSchemaVersion !== EXTRACT_REQUEST_SCHEMA_VERSION ||
+    contract.responseSchemaVersion !== EXTRACT_RESPONSE_SCHEMA_VERSION ||
     policyId !== policy.policyId
   ) {
     return err("INVALID_EXTRACT_COMMIT");
@@ -213,6 +221,7 @@ export const validateExtractCommit = (
     researchQuestionId,
     requirementsApprovalId,
     policyId,
+    contract: contract as ExtractCommit["contract"],
     lineage,
     invocation,
     observations,

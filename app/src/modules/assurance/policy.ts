@@ -5,6 +5,7 @@ import type {
   DateRole,
   Disposition,
   ProfilePolicy,
+  QuoteMatchRule,
   ReviewVerdict
 } from "./types.js";
 import {
@@ -41,6 +42,44 @@ const REVIEW_VERDICTS: ReviewVerdict[] = [
   "chrome"
 ];
 
+const KNOWN_QUOTE_MATCH_RULES: QuoteMatchRule[] = [
+  "markdown-escape",
+  "whitespace-collapse",
+  "quote-variants",
+  "nfc"
+];
+
+const POLICY_KEYS = [
+  "policyId",
+  "claimKinds",
+  "attributionKinds",
+  "dateRoles",
+  "dispositions",
+  "reviewVerdicts",
+  "quoteMatchRules",
+  "limits"
+];
+
+const REQUIRED_POLICY_KEYS = POLICY_KEYS.filter(
+  (key) => key !== "quoteMatchRules"
+);
+
+/** Absent rules mean exact-only matching; anything outside the closed set is rejected. */
+const readQuoteMatchRules = (value: unknown): QuoteMatchRule[] | undefined => {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const rules = value.filter((entry): entry is QuoteMatchRule =>
+    KNOWN_QUOTE_MATCH_RULES.includes(entry as QuoteMatchRule)
+  );
+  return rules.length === value.length && new Set(rules).size === rules.length
+    ? rules
+    : undefined;
+};
+
 const sameValues = <T extends string>(value: unknown, expected: T[]): T[] | undefined =>
   Array.isArray(value) &&
   value.length === expected.length &&
@@ -53,15 +92,8 @@ export const validateProfilePolicy = (
 ): Result<ProfilePolicy, ProfilePolicyError> => {
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, [
-      "policyId",
-      "claimKinds",
-      "attributionKinds",
-      "dateRoles",
-      "dispositions",
-      "reviewVerdicts",
-      "limits"
-    ]) ||
+    !Object.keys(value).every((key) => POLICY_KEYS.includes(key)) ||
+    !REQUIRED_POLICY_KEYS.every((key) => key in value) ||
     !isRecord(value.limits)
   ) {
     return err("INVALID_PROFILE_POLICY");
@@ -73,13 +105,15 @@ export const validateProfilePolicy = (
   const dateRoles = sameValues(value.dateRoles, DATE_ROLES);
   const dispositions = sameValues(value.dispositions, DISPOSITIONS);
   const reviewVerdicts = sameValues(value.reviewVerdicts, REVIEW_VERDICTS);
+  const quoteMatchRules = readQuoteMatchRules(value.quoteMatchRules);
   if (
     !policyId ||
     !claimKinds ||
     !attributionKinds ||
     !dateRoles ||
     !dispositions ||
-    !reviewVerdicts
+    !reviewVerdicts ||
+    !quoteMatchRules
   ) {
     return err("INVALID_POLICY_VALUES");
   }
@@ -122,6 +156,7 @@ export const validateProfilePolicy = (
     dateRoles,
     dispositions,
     reviewVerdicts,
+    quoteMatchRules,
     limits: {
       quoteMinUtf8Bytes,
       quoteMaxUtf8Bytes,

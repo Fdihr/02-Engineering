@@ -7,7 +7,9 @@ import type {
   DateRole,
   ExtractObservation,
   Observation,
-  ProfilePolicy
+  ProfilePolicy,
+  QuoteMatchProvenance,
+  QuoteMatchRule
 } from "./types.js";
 import {
   boundedString,
@@ -18,7 +20,7 @@ import {
 } from "./validators.js";
 
 const OBSERVATION_KEYS = [
-  "segmentId",
+  "segment",
   "quote",
   "text",
   "claimKind",
@@ -56,13 +58,13 @@ export const readExtractObservation = (
     return undefined;
   }
 
-  const segmentId = nonEmptyString(value.segmentId);
+  const segment = nonEmptyString(value.segment);
   const quote = typeof value.quote === "string" && value.quote ? value.quote : undefined;
   const text = boundedString(value.text, policy.limits.textMaxChars);
   const claimKind = policy.claimKinds.includes(value.claimKind as ClaimKind)
     ? (value.claimKind as ClaimKind)
     : undefined;
-  if (!segmentId || !quote || !text || !claimKind || !isRecord(value.attribution)) {
+  if (!segment || !quote || !text || !claimKind || !isRecord(value.attribution)) {
     return undefined;
   }
 
@@ -129,7 +131,7 @@ export const readExtractObservation = (
   }
 
   const observation: ExtractObservation = {
-    segmentId,
+    segment,
     quote,
     text,
     claimKind,
@@ -198,6 +200,28 @@ const readAnchor = (value: unknown): SourceAnchor | undefined => {
 
 export type ObservationError = "INVALID_OBSERVATION" | "OBSERVATION_ID_MISMATCH";
 
+const KNOWN_QUOTE_MATCH_RULES = [
+  "markdown-escape",
+  "whitespace-collapse",
+  "quote-variants",
+  "nfc"
+];
+
+const readMatchedVia = (value: unknown): QuoteMatchProvenance | undefined => {
+  if (value === "exact") {
+    return "exact";
+  }
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    new Set(value).size !== value.length ||
+    !value.every((entry) => KNOWN_QUOTE_MATCH_RULES.includes(entry as string))
+  ) {
+    return undefined;
+  }
+  return value as QuoteMatchRule[];
+};
+
 export const validateObservation = (
   value: unknown,
   policy: ProfilePolicy
@@ -205,16 +229,33 @@ export const validateObservation = (
   if (!isRecord(value)) {
     return err("INVALID_OBSERVATION");
   }
-  const { observationId: idValue, anchor: anchorValue, origin, ...rest } = value;
+  const {
+    observationId: idValue,
+    segmentId: segmentIdValue,
+    anchor: anchorValue,
+    origin,
+    proposedQuote: proposedQuoteValue,
+    matchedVia: matchedViaValue,
+    ...rest
+  } = value;
   const observation = readExtractObservation(rest, policy);
   const anchor = readAnchor(anchorValue);
   const id = nonEmptyString(idValue);
+  const segmentId = nonEmptyString(segmentIdValue);
+  const proposedQuote =
+    typeof proposedQuoteValue === "string" && proposedQuoteValue.trim()
+      ? proposedQuoteValue
+      : undefined;
+  const matchedVia = readMatchedVia(matchedViaValue);
   if (
     !observation ||
     !anchor ||
     !id ||
+    !segmentId ||
+    !proposedQuote ||
+    !matchedVia ||
     (origin !== "model" && origin !== "human") ||
-    anchor.segmentId !== observation.segmentId ||
+    anchor.segmentId !== segmentId ||
     anchor.quote !== observation.quote
   ) {
     return err("INVALID_OBSERVATION");
@@ -222,5 +263,13 @@ export const validateObservation = (
   if (observationId(anchor, observation.claimKind, observation.text) !== id) {
     return err("OBSERVATION_ID_MISMATCH");
   }
-  return ok({ ...observation, observationId: id, anchor, origin });
+  return ok({
+    ...observation,
+    observationId: id,
+    segmentId,
+    anchor,
+    origin,
+    proposedQuote,
+    matchedVia
+  });
 };

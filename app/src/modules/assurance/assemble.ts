@@ -93,7 +93,11 @@ export const assembleSourceNote = (
     if (verdict.verdict === "supported") {
       const { extractIndexes: _indexes, occurrences: _occurrences, ...accepted } =
         observation;
-      acceptedModelObservations.push(accepted);
+      acceptedModelObservations.push(
+        verdict.correctedIrIds
+          ? { ...accepted, correctedIrIds: verdict.correctedIrIds }
+          : accepted
+      );
       continue;
     }
     const rejected: RejectedObservation = {
@@ -110,8 +114,14 @@ export const assembleSourceNote = (
   }
 
   const accepted = [...acceptedModelObservations, ...reviewRecord.humanObservations];
-  const inScopeObservations = accepted.filter((entry) => entry.irIds.length > 0);
-  const outOfIrObservations = accepted.filter((entry) => entry.irIds.length === 0);
+  const effectiveTags = (observation: Observation): string[] =>
+    observation.correctedIrIds ?? observation.irIds;
+  const inScopeObservations = accepted.filter(
+    (entry) => effectiveTags(entry).length > 0
+  );
+  const outOfIrObservations = accepted.filter(
+    (entry) => effectiveTags(entry).length === 0
+  );
 
   const modelDispositionByIr = new Map(
     reviewPackage.modelDispositions.map((entry) => [entry.irId, entry])
@@ -134,7 +144,7 @@ export const assembleSourceNote = (
     }
 
     const observationIds = accepted
-      .filter((entry) => entry.irIds.includes(requirement.irId))
+      .filter((entry) => effectiveTags(entry).includes(requirement.irId))
       .map((entry) => entry.observationId);
     const finalDisposition: Disposition = human.disposition;
     if (finalDisposition === "silent" && observationIds.length > 0) {
@@ -209,6 +219,14 @@ export const assembleSourceNote = (
     "A fresh model session per attempt is a human attestation and is not technically enforced.",
     "Source assurance covers this single source only; corroboration and confidence are assigned later."
   ];
+  const normalisedMatches = accepted.filter(
+    (entry) => entry.matchedVia !== "exact"
+  ).length;
+  if (normalisedMatches > 0) {
+    caveats.push(
+      `${normalisedMatches} accepted observations were located under policy ${policy.policyId} quote-match rules; every stored anchor remains byte-exact against the canonical segment.`
+    );
+  }
   if (reviewRecord.assessment.dependency.kind !== "original") {
     caveats.push(
       `Reporting dependency is ${
@@ -231,6 +249,7 @@ export const assembleSourceNote = (
     sourceDocumentId: admitted.sourceDocument.id,
     lineage: {
       ...commit.lineage,
+      contract: commit.contract,
       extractCommit: input.commitArtifact,
       reviewPackage: reviewRecord.reviewPackage,
       reviewResponse: reviewRecord.reviewResponse,

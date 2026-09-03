@@ -18,20 +18,24 @@ import { boundedString, isRecord, nonEmptyString } from "../validators.js";
 
 export const EXTRACT_CHECK_RULES: Record<string, string> = {
   E1: "the response must be one JSON object matching the required shape, with permitted enumerations and text within the character limit",
-  E2: "every observation must name a segment id that exists in the source document",
-  E3: "every quote must be copied byte-for-byte and occur exactly once inside its named segment, within the policy length limits",
+  E2: "every observation must name a segment alias that appears in the rendered document",
+  E3: "every quote must be locatable in its named segment under the policy quote-match rules, uniquely and within the length limits",
   E4: "every irIds entry must be an approved information requirement id and must not repeat within one observation",
   E5: "dispositions must contain exactly one entry for every approved information requirement and no unknown id",
-  E6: "each disposition index set must equal exactly the indexes of observations tagged with that requirement, so silent has none and every other disposition has at least one",
+  E6: "a silent disposition requires no observation tagged with that requirement, and every other disposition requires at least one",
   E7: "a statement must use attributed or relayed attribution with attributedTo, and a relayed observation must name its upstream source",
   E8: "the observation count must not exceed the policy maximum",
   E9: "every derived anchor must be accepted by the canonical source document validator"
 };
 
+export const extractCheckDefinitions = (): Array<{ id: string; rule: string }> =>
+  Object.entries(EXTRACT_CHECK_RULES).map(([id, rule]) => ({ id, rule }));
+
 export type ExtractCheckContext = {
   document: SourceDocument;
   documentArtifactRef: string;
   documentArtifactSha256: string;
+  aliasToSegmentId: Map<string, string>;
   requirements: RequirementDefinition[];
   policy: ProfilePolicy;
 };
@@ -40,7 +44,7 @@ export type ExtractCheckOutcome =
   | { status: "passed"; observations: Observation[]; dispositions: IRDisposition[] }
   | { status: "failed"; failures: CheckFailure[] };
 
-const DISPOSITION_KEYS = ["irId", "disposition", "observationIndexes", "note"];
+const DISPOSITION_KEYS = ["irId", "disposition", "note"];
 
 const failure = (check: string, count: number): CheckFailure => ({
   check,
@@ -59,14 +63,7 @@ const readDisposition = (
   const disposition = policy.dispositions.includes(value.disposition as Disposition)
     ? (value.disposition as Disposition)
     : undefined;
-  if (!irId || !disposition || !Array.isArray(value.observationIndexes)) {
-    return undefined;
-  }
-  if (
-    !value.observationIndexes.every(
-      (entry) => typeof entry === "number" && Number.isInteger(entry)
-    )
-  ) {
+  if (!irId || !disposition) {
     return undefined;
   }
   const note = value.note === undefined ? undefined : boundedString(value.note, 400);
@@ -74,11 +71,7 @@ const readDisposition = (
     return undefined;
   }
 
-  const entry: ExtractDisposition = {
-    irId,
-    disposition,
-    observationIndexes: value.observationIndexes as number[]
-  };
+  const entry: ExtractDisposition = { irId, disposition };
   if (note) {
     entry.note = note;
   }
@@ -136,15 +129,20 @@ export const runExtractChecks = (
   const anchored: Observation[] = [];
 
   output.observations.forEach((observation) => {
-    const anchor = anchorQuote(
-      context.document,
-      context.documentArtifactRef,
-      context.documentArtifactSha256,
-      observation.segmentId,
-      observation.quote,
-      context.policy
-    );
-    if (!anchor.ok) {
+    const segmentId = context.aliasToSegmentId.get(observation.segment);
+    const anchor = segmentId
+      ? anchorQuote(
+          context.document,
+          context.documentArtifactRef,
+          context.documentArtifactSha256,
+          segmentId,
+          observation.quote,
+          context.policy
+        )
+      : undefined;
+    if (!anchor) {
+      record("E2");
+    } else if (!anchor.ok) {
       record(
         anchor.error === "SEGMENT_NOT_FOUND"
           ? "E2"
@@ -155,9 +153,17 @@ export const runExtractChecks = (
     } else {
       anchored.push({
         ...observation,
-        observationId: observationId(anchor.value, observation.claimKind, observation.text),
-        anchor: anchor.value,
-        origin: "model"
+        quote: anchor.value.anchor.quote,
+        observationId: observationId(
+          anchor.value.anchor,
+          observation.claimKind,
+          observation.text
+        ),
+        segmentId: anchor.value.anchor.segmentId,
+        anchor: anchor.value.anchor,
+        origin: "model",
+        proposedQuote: anchor.value.proposedQuote,
+        matchedVia: anchor.value.matchedVia
       });
     }
 
@@ -194,20 +200,10 @@ export const runExtractChecks = (
   }
 
   output.dispositions.forEach((disposition) => {
-    const expected = output.observations
-      .map((observation, index) => ({ observation, index }))
-      .filter((entry) => entry.observation.irIds.includes(disposition.irId))
-      .map((entry) => entry.index);
-    const actual = disposition.observationIndexes;
-    const uniqueActual = new Set(actual);
-    const inRange = actual.every(
-      (index) => index >= 0 && index < output.observations.length
-    );
-    const sameSet =
-      uniqueActual.size === actual.length &&
-      expected.length === actual.length &&
-      expected.every((index) => uniqueActual.has(index));
-    if (!inRange || !sameSet) {
+    const tagged = output.observations.filter((observation) =>
+      observation.irIds.includes(disposition.irId)
+    ).length;
+    if (disposition.disposition === "silent" ? tagged > 0 : tagged === 0) {
       record("E6");
     }
   });
@@ -224,17 +220,13 @@ export const runExtractChecks = (
   }
 
   const dispositions: IRDisposition[] = output.dispositions.map((disposition) => {
-    const observationIds = [
-      ...new Set(
-        disposition.observationIndexes.map(
-          (index) => anchored[index]?.observationId ?? ""
-        )
-      )
-    ].filter((entry) => entry !== "");
+    const observationIds = anchored
+      .filter((observation) => observation.irIds.includes(disposition.irId))
+      .map((observation) => observation.observationId);
     const entry: IRDisposition = {
       irId: disposition.irId,
       disposition: disposition.disposition,
-      observationIds
+      observationIds: [...new Set(observationIds)]
     };
     if (disposition.note) {
       entry.note = disposition.note;

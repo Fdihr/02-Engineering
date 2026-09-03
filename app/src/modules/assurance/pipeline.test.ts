@@ -213,7 +213,7 @@ const buildCommit = (proposal: unknown): ExtractCommit => {
     request: request.value,
     requestArtifact,
     responseValue: {
-      schemaVersion: "source-assurance-copilot-poc-response-v1",
+      schemaVersion: "source-assurance-copilot-poc-response-v2",
       requestId: request.value.id,
       invocationId: "copilot-session-1",
       provider: "github-copilot-vscode",
@@ -241,7 +241,7 @@ const buildCommit = (proposal: unknown): ExtractCommit => {
 const singleObservationProposal = {
   observations: [
     {
-      segmentId: segmentId(0),
+      segment: "01",
       quote: "The ministry announced a formal review on 4 March.",
       text: "The ministry announced a formal review.",
       claimKind: "event",
@@ -251,8 +251,8 @@ const singleObservationProposal = {
     }
   ],
   dispositions: [
-    { irId: "ir-01", disposition: "covered", observationIndexes: [0] },
-    { irId: "ir-02", disposition: "silent", observationIndexes: [] }
+    { irId: "ir-01", disposition: "covered" },
+    { irId: "ir-02", disposition: "silent" }
   ]
 };
 
@@ -275,7 +275,7 @@ const buildPackage = (source: ExtractCommit = commit) => {
 const reviewPackage = buildPackage();
 
 const humanObservation = {
-  segmentId: segmentId(1),
+  segment: "02",
   quote: "A spokesperson said the review would continue through spring.",
   text: "A spokesperson said the review would continue through spring.",
   claimKind: "statement",
@@ -342,8 +342,8 @@ test("orders the review package and collapses exact duplicates", () => {
       singleObservationProposal.observations[0]
     ],
     dispositions: [
-      { irId: "ir-01", disposition: "covered", observationIndexes: [0, 1] },
-      { irId: "ir-02", disposition: "silent", observationIndexes: [] }
+      { irId: "ir-01", disposition: "covered" },
+      { irId: "ir-02", disposition: "silent" }
     ]
   });
   const collapsed = buildPackage(duplicated);
@@ -516,6 +516,114 @@ test("measures the run and recommends the next experiment", () => {
   );
 });
 
+test("removes an over-tagged requirement without calling the quote unsupported", () => {
+  const overTagged = buildCommit({
+    observations: [
+      {
+        ...singleObservationProposal.observations[0],
+        irIds: ["ir-01", "ir-02"]
+      }
+    ],
+    dispositions: [
+      { irId: "ir-01", disposition: "covered" },
+      { irId: "ir-02", disposition: "covered" }
+    ]
+  });
+  const overTaggedPackage = buildPackage(overTagged);
+  const observationId = overTaggedPackage.observations[0]?.observationId ?? "";
+
+  const record = buildRecord(
+    {
+      ...baseResponse,
+      verdicts: [
+        { observationId, verdict: "supported", correctedIrIds: ["ir-01"] }
+      ],
+      humanObservations: [],
+      irReview: [
+        { irId: "ir-01", disposition: "covered" },
+        { irId: "ir-02", disposition: "silent", note: "The duration is not given." }
+      ]
+    },
+    overTaggedPackage
+  );
+  assert.equal(record.ok, true);
+  if (!record.ok) {
+    return;
+  }
+  assert.deepEqual(record.value.verdicts[0]?.correctedIrIds, ["ir-01"]);
+
+  const note = assembleSourceNote({
+    admitted,
+    commit: overTagged,
+    commitArtifact,
+    reviewPackage: overTaggedPackage,
+    reviewRecord: record.value,
+    reviewRecordArtifact: recordArtifact,
+    requirements,
+    policy,
+    assembledAt: "2026-03-14T00:00:00.000Z"
+  });
+  assert.equal(note.ok, true);
+  if (!note.ok) {
+    return;
+  }
+  assert.deepEqual(note.value.inScopeObservations[0]?.irIds, ["ir-01", "ir-02"]);
+  assert.deepEqual(note.value.inScopeObservations[0]?.correctedIrIds, ["ir-01"]);
+  assert.deepEqual(
+    note.value.irDispositions.find((entry) => entry.irId === "ir-02")
+      ?.observationIds,
+    []
+  );
+
+  const metrics = measureAssurance({
+    note: {
+      runId: note.value.runId,
+      snapshotId: note.value.snapshotId,
+      irDispositions: note.value.irDispositions,
+      matchedVia: ["exact"]
+    },
+    reviewPackage: overTaggedPackage,
+    reviewRecord: record.value,
+    attemptFailures: [[]],
+    measuredAt: "2026-03-15T00:00:00.000Z"
+  });
+  assert.equal(metrics.ok, true);
+  if (!metrics.ok) {
+    return;
+  }
+  assert.equal(metrics.value.supportFailureRate, 0);
+  assert.deepEqual(metrics.value.tagPrecision, {
+    tagsProposed: 2,
+    tagsRemoved: 1,
+    precision: 0.5
+  });
+});
+
+test("rejects corrected tags that are not a proper subset of the proposal", () => {
+  const observationId = reviewPackage.observations[0]?.observationId ?? "";
+  assert.deepEqual(
+    buildRecord({
+      ...baseResponse,
+      verdicts: [{ observationId, verdict: "supported", correctedIrIds: ["ir-02"] }]
+    }),
+    { ok: false, error: "INVALID_CORRECTED_TAGS" }
+  );
+  assert.deepEqual(
+    buildRecord({
+      ...baseResponse,
+      verdicts: [
+        {
+          observationId,
+          verdict: "unsupported",
+          note: "Not supported.",
+          correctedIrIds: []
+        }
+      ]
+    }),
+    { ok: false, error: "INVALID_CORRECTED_TAGS" }
+  );
+});
+
 test("measurement routes support failures separately from coverage mismatches", () => {
   const record = buildRecord({
     ...baseResponse,
@@ -551,7 +659,8 @@ test("measurement routes support failures separately from coverage mismatches", 
           modelDisposition: "silent",
           humanDisposition: "partial"
         }
-      ]
+      ],
+      matchedVia: ["exact"]
     },
     reviewPackage,
     reviewRecord: record.value,

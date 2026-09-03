@@ -167,10 +167,10 @@ test("anchors an exact quote inside its named segment", () => {
   );
   assert.equal(anchor.ok, true);
   if (anchor.ok) {
-    assert.equal(anchor.value.quote, quote);
-    assert.equal(anchor.value.segmentId, segment(1));
+    assert.equal(anchor.value.anchor.quote, quote);
+    assert.equal(anchor.value.anchor.segmentId, segment(1));
     assert.equal(
-      anchor.value.quoteEndUtf8Byte - anchor.value.quoteStartUtf8Byte,
+      anchor.value.anchor.quoteEndUtf8Byte - anchor.value.anchor.quoteStartUtf8Byte,
       Buffer.byteLength(quote, "utf8")
     );
   }
@@ -197,7 +197,7 @@ test("treats an identical line in another segment as a separate unique anchor", 
   assert.equal(first.ok, true);
   assert.equal(second.ok, true);
   if (first.ok && second.ok) {
-    assert.notEqual(first.value.segmentId, second.value.segmentId);
+    assert.notEqual(first.value.anchor.segmentId, second.value.anchor.segmentId);
   }
 });
 
@@ -230,7 +230,7 @@ test("rejects ambiguous, missing, short, and non-byte-exact quotes", () => {
       documentArtifactRef,
       documentArtifactSha256,
       segment(1),
-      "too short",
+      "ministry",
       policy
     ),
     { ok: false, error: "QUOTE_LENGTH_OUT_OF_POLICY" }
@@ -284,16 +284,16 @@ test("observation ids are stable for identical content and change with it", () =
   if (!anchor.ok) {
     return;
   }
-  const first = observationId(anchor.value, "event", "A review was announced.");
-  const second = observationId(anchor.value, "event", "A review was announced.");
+  const first = observationId(anchor.value.anchor, "event", "A review was announced.");
+  const second = observationId(anchor.value.anchor, "event", "A review was announced.");
   assert.equal(first, second);
   assert.notEqual(
     first,
-    observationId(anchor.value, "statement", "A review was announced.")
+    observationId(anchor.value.anchor, "statement", "A review was announced.")
   );
   assert.notEqual(
     first,
-    observationId(anchor.value, "event", "A different claim entirely.")
+    observationId(anchor.value.anchor, "event", "A different claim entirely.")
   );
 });
 

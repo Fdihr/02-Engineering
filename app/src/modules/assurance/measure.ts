@@ -6,6 +6,7 @@ import {
   type CheckFailure,
   type Disposition,
   type ProfilePolicy,
+  type QuoteMatchProvenance,
   type ReviewPackage,
   type ReviewRecord
 } from "./types.js";
@@ -25,6 +26,7 @@ export type MeasuredNote = {
     modelDisposition: Disposition;
     humanDisposition: Disposition;
   }>;
+  matchedVia: QuoteMatchProvenance[];
 };
 
 export const readMeasuredNote = (
@@ -34,7 +36,9 @@ export const readMeasuredNote = (
   if (
     !isRecord(value) ||
     value.schemaVersion !== SOURCE_NOTE_SCHEMA_VERSION ||
-    !Array.isArray(value.irDispositions)
+    !Array.isArray(value.irDispositions) ||
+    !Array.isArray(value.inScopeObservations) ||
+    !Array.isArray(value.outOfIrObservations)
   ) {
     return err("INVALID_SOURCE_NOTE");
   }
@@ -42,6 +46,27 @@ export const readMeasuredNote = (
   const snapshotId = nonEmptyString(value.snapshotId);
   if (!runId || !snapshotId) {
     return err("INVALID_SOURCE_NOTE");
+  }
+
+  const matchedVia: QuoteMatchProvenance[] = [];
+  for (const entry of [
+    ...value.inScopeObservations,
+    ...value.outOfIrObservations
+  ]) {
+    if (!isRecord(entry)) {
+      return err("INVALID_SOURCE_NOTE");
+    }
+    if (entry.matchedVia === "exact") {
+      matchedVia.push("exact");
+      continue;
+    }
+    if (
+      !Array.isArray(entry.matchedVia) ||
+      !entry.matchedVia.every((rule) => typeof rule === "string")
+    ) {
+      return err("INVALID_SOURCE_NOTE");
+    }
+    matchedVia.push(entry.matchedVia as QuoteMatchProvenance);
   }
 
   const irDispositions: MeasuredNote["irDispositions"] = [];
@@ -66,7 +91,7 @@ export const readMeasuredNote = (
     irDispositions.push({ irId, modelDisposition, humanDisposition });
   }
 
-  return ok({ runId, snapshotId, irDispositions });
+  return ok({ runId, snapshotId, irDispositions, matchedVia });
 };
 
 export type MeasureAssuranceInput = {
@@ -130,6 +155,39 @@ export const measureAssurance = (
     .filter((failure) => failure.check === "E3")
     .reduce((sum, failure) => sum + failure.count, 0);
 
+  const ruleCounts: Record<string, number> = {};
+  let exact = 0;
+  let normalised = 0;
+  for (const entry of input.note.matchedVia) {
+    if (entry === "exact") {
+      exact += 1;
+      continue;
+    }
+    normalised += 1;
+    for (const rule of entry) {
+      ruleCounts[rule] = (ruleCounts[rule] ?? 0) + 1;
+    }
+  }
+
+  const proposedTags = new Map(
+    input.reviewPackage.observations.map((entry) => [
+      entry.observationId,
+      entry.irIds.length
+    ])
+  );
+  let tagsProposed = 0;
+  let tagsRemoved = 0;
+  for (const verdict of input.reviewRecord.verdicts) {
+    if (verdict.verdict !== "supported") {
+      continue;
+    }
+    const proposed = proposedTags.get(verdict.observationId) ?? 0;
+    tagsProposed += proposed;
+    if (verdict.correctedIrIds) {
+      tagsRemoved += proposed - verdict.correctedIrIds.length;
+    }
+  }
+
   const recommendations: string[] = [];
   if (supportFailureRate !== null && supportFailureRate > 0.1) {
     recommendations.push(
@@ -177,6 +235,13 @@ export const measureAssurance = (
     omissionCount,
     dispositionMismatches: { total, overclaims, underclaims },
     quoteFidelityFailures,
+    transcriptionFidelity: { exact, normalised, ruleCounts },
+    tagPrecision: {
+      tagsProposed,
+      tagsRemoved,
+      precision:
+        tagsProposed > 0 ? (tagsProposed - tagsRemoved) / tagsProposed : null
+    },
     recommendations
   });
 };

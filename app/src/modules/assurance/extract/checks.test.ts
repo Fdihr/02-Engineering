@@ -8,6 +8,7 @@ import type {
   RequirementDefinition
 } from "../types.js";
 import { runExtractChecks, validateExtractProposal } from "./checks.js";
+import { segmentAliasMap } from "../render-document.js";
 
 const policyResult = validateProfilePolicy({
   policyId: "geopolitical-source-assurance-v1",
@@ -67,6 +68,7 @@ const context = {
   document,
   documentArtifactRef,
   documentArtifactSha256,
+  aliasToSegmentId: segmentAliasMap(document),
   requirements,
   policy
 };
@@ -74,7 +76,7 @@ const context = {
 const validProposal = {
   observations: [
     {
-      segmentId: segmentId(0),
+      segment: "01",
       quote: "The ministry announced a formal review on 4 March.",
       text: "The ministry announced a formal review.",
       claimKind: "event",
@@ -84,8 +86,8 @@ const validProposal = {
     }
   ],
   dispositions: [
-    { irId: "ir-01", disposition: "covered", observationIndexes: [0] },
-    { irId: "ir-02", disposition: "silent", observationIndexes: [] }
+    { irId: "ir-01", disposition: "covered" },
+    { irId: "ir-02", disposition: "silent" }
   ]
 };
 
@@ -124,8 +126,8 @@ test("accepts zero observations when every requirement is silent", () => {
     parse({
       observations: [],
       dispositions: [
-        { irId: "ir-01", disposition: "silent", observationIndexes: [] },
-        { irId: "ir-02", disposition: "silent", observationIndexes: [] }
+        { irId: "ir-01", disposition: "silent" },
+        { irId: "ir-02", disposition: "silent" }
       ]
     }),
     context
@@ -155,9 +157,7 @@ test("E2 rejects an unknown segment id", () => {
   assert.deepEqual(
     failureChecks({
       ...validProposal,
-      observations: [
-        { ...validProposal.observations[0], segmentId: "source-segment-missing" }
-      ]
+      observations: [{ ...validProposal.observations[0], segment: "99" }]
     }),
     ["E2"]
   );
@@ -193,8 +193,8 @@ test("E4 rejects unapproved or repeated requirement ids", () => {
       ...validProposal,
       observations: [{ ...validProposal.observations[0], irIds: ["ir-99"] }],
       dispositions: [
-        { irId: "ir-01", disposition: "silent", observationIndexes: [] },
-        { irId: "ir-02", disposition: "silent", observationIndexes: [] }
+        { irId: "ir-01", disposition: "silent" },
+        { irId: "ir-02", disposition: "silent" }
       ]
     }),
     ["E4"]
@@ -215,7 +215,7 @@ test("E5 rejects missing, unknown, or duplicated requirement dispositions", () =
     failureChecks({
       ...validProposal,
       dispositions: [
-        { irId: "ir-01", disposition: "covered", observationIndexes: [0] }
+        { irId: "ir-01", disposition: "covered" }
       ]
     }),
     ["E5"]
@@ -224,9 +224,9 @@ test("E5 rejects missing, unknown, or duplicated requirement dispositions", () =
     failureChecks({
       ...validProposal,
       dispositions: [
-        { irId: "ir-01", disposition: "covered", observationIndexes: [0] },
-        { irId: "ir-02", disposition: "silent", observationIndexes: [] },
-        { irId: "ir-03", disposition: "silent", observationIndexes: [] }
+        { irId: "ir-01", disposition: "covered" },
+        { irId: "ir-02", disposition: "silent" },
+        { irId: "ir-03", disposition: "silent" }
       ]
     }),
     ["E5"]
@@ -238,8 +238,8 @@ test("E6 requires each disposition index set to equal its tagged observations", 
     failureChecks({
       ...validProposal,
       dispositions: [
-        { irId: "ir-01", disposition: "covered", observationIndexes: [] },
-        { irId: "ir-02", disposition: "silent", observationIndexes: [] }
+        { irId: "ir-01", disposition: "silent" },
+        { irId: "ir-02", disposition: "silent" }
       ]
     }),
     ["E6"]
@@ -248,8 +248,8 @@ test("E6 requires each disposition index set to equal its tagged observations", 
     failureChecks({
       ...validProposal,
       dispositions: [
-        { irId: "ir-01", disposition: "covered", observationIndexes: [0] },
-        { irId: "ir-02", disposition: "partial", observationIndexes: [0] }
+        { irId: "ir-01", disposition: "covered" },
+        { irId: "ir-02", disposition: "partial" }
       ]
     }),
     ["E6"]
@@ -258,11 +258,11 @@ test("E6 requires each disposition index set to equal its tagged observations", 
     failureChecks({
       ...validProposal,
       dispositions: [
-        { irId: "ir-01", disposition: "covered", observationIndexes: [0, 5] },
-        { irId: "ir-02", disposition: "silent", observationIndexes: [] }
+        { irId: "ir-01", disposition: "contradicted" },
+        { irId: "ir-02", disposition: "silent" }
       ]
     }),
-    ["E6"]
+    []
   );
 });
 

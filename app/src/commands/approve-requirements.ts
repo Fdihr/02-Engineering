@@ -9,8 +9,10 @@ import {
   commandError,
   ensureDirectory,
   loadRunArtifact,
+  longPath,
   resolveRunArtifact,
   sha256,
+  withSyncRetry,
   writeJsonOnce
 } from "./assurance-io.js";
 
@@ -72,7 +74,7 @@ const main = async (): Promise<void> => {
     const parent = resolve(runRoot, runId, "requirements");
     const directory = resolve(parent, approved.value.proposalId);
     await ensureDirectory(parent);
-    await mkdir(directory);
+    await withSyncRetry(() => mkdir(longPath(directory)));
     outputArtifactRef = await writeJsonOnce(
       resolve(directory, "approved-requirements.json"),
       approved.value

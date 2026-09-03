@@ -22,6 +22,7 @@ import {
   validTime
 } from "../validators.js";
 import { runExtractChecks, validateExtractProposal } from "./checks.js";
+import { segmentAliasMap } from "../render-document.js";
 
 export type ExtractRecordError =
   | "INVALID_EXTRACT_RESPONSE"
@@ -174,6 +175,7 @@ export const recordExtractResponse = (
     document: admitted.sourceDocument,
     documentArtifactRef: admitted.sourceDocumentArtifact.artifactRef,
     documentArtifactSha256: admitted.sourceDocumentArtifact.artifactSha256,
+    aliasToSegmentId: segmentAliasMap(admitted.sourceDocument),
     requirements: requirements.requirements,
     policy
   });
@@ -198,6 +200,7 @@ export const recordExtractResponse = (
       researchQuestionId: admitted.researchQuestion.id,
       requirementsApprovalId: requirements.approvalId,
       policyId: policy.policyId,
+      contract: request.contract,
       lineage: request.lineage,
       invocation: {
         id: response.value.invocationId,

@@ -12,9 +12,11 @@ import {
   ensureDirectory,
   loadCommitContext,
   loadRunArtifact,
+  longPath,
   requireChecksum,
   resolveRunArtifact,
   stageDirectory,
+  withSyncRetry,
   writeJsonOnce
 } from "./assurance-io.js";
 
@@ -24,7 +26,7 @@ const usage =
 const readAttemptFailures = async (
   extractDir: string
 ): Promise<CheckFailure[][]> => {
-  const attempts = (await readdir(extractDir, { withFileTypes: true }))
+  const attempts = (await readdir(longPath(extractDir), { withFileTypes: true }))
     .filter((entry) => entry.isDirectory() && /^attempt-\d+$/.test(entry.name))
     .map((entry) => entry.name)
     .sort();
@@ -32,7 +34,7 @@ const readAttemptFailures = async (
   const failures: CheckFailure[][] = [];
   for (const attempt of attempts) {
     const parsed: unknown = JSON.parse(
-      await readFile(resolve(extractDir, attempt, "checks.json"), "utf8")
+      await withSyncRetry(() => readFile(longPath(resolve(extractDir, attempt, "checks.json")), "utf8"))
     );
     if (!Array.isArray(parsed)) {
       throw new Error(`Attempt ${attempt} has an invalid checks record.`);

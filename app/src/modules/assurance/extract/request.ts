@@ -1,13 +1,16 @@
 import { err, ok, type Result } from "../../../core/result.js";
 import {
   EXTRACT_REQUEST_SCHEMA_VERSION,
+  EXTRACT_RESPONSE_SCHEMA_VERSION,
   type AdmittedSource,
   type ApprovedRequirements,
   type ArtifactBinding,
   type CheckFailure,
+  type ExtractContract,
   type ExtractRequest,
   type ProfilePolicy
 } from "../types.js";
+import { extractCheckDefinitions } from "./checks.js";
 import { renderDocumentForPrompt } from "../render-document.js";
 import {
   boundedString,
@@ -38,8 +41,8 @@ const outputShape = (policy: ProfilePolicy): string =>
     "Return one JSON object with exactly these top-level keys: observations, dispositions.",
     "",
     "observations is an array. Each entry has exactly these keys:",
-    "  segmentId      required string, the id on the [segment: ...] marker line the quote came from",
-    "  quote          required string, copied byte-for-byte from that segment",
+    "  segment        required string, the two-digit alias on the [segment NN] line the quote came from",
+    "  quote          required string, copied from that segment",
     `  text           required string, one atomic claim, at most ${policy.limits.textMaxChars} characters`,
     `  claimKind      required, one of: ${policy.claimKinds.join(" | ")}`,
     "  attribution    required object with keys kind and optional attributedTo",
@@ -54,10 +57,12 @@ const outputShape = (policy: ProfilePolicy): string =>
     "",
     "dispositions is an array with exactly one entry per approved information requirement.",
     "Each entry has exactly these keys:",
-    "  irId                required approved information requirement id",
-    `  disposition         required, one of: ${policy.dispositions.join(" | ")}`,
-    "  observationIndexes  required array of zero-based indexes into observations",
-    "  note                optional string",
+    "  irId        required approved information requirement id",
+    `  disposition required, one of: ${policy.dispositions.join(" | ")}`,
+    "  note        optional string",
+    "",
+    "Do not list observation indexes. Coverage is derived from the irIds you place on each",
+    "observation, so a requirement marked silent must have no observation tagged with it.",
     "",
     "Omit optional keys entirely rather than sending null or an empty string."
   ].join("\n");
@@ -68,9 +73,10 @@ const systemPrompt = (policy: ProfilePolicy): string =>
     "",
     "1. Extract only what this source asserts. Never add outside knowledge, context, or inference.",
     "2. One atomic claim per observation. Split compound sentences into separate observations.",
-    "3. Support every observation with a quote copied byte-for-byte from the single named segment.",
+    "3. Support every observation with a quote taken from the single segment you name.",
     `   A quote must be between ${policy.limits.quoteMinUtf8Bytes} and ${policy.limits.quoteMaxUtf8Bytes} UTF-8 bytes`,
-    "   and must occur exactly once inside that segment. Prefer the shortest unique supporting span.",
+    "   and must correspond to exactly one place inside that segment. Prefer the shortest unique span.",
+    "   Name the segment by its two-digit alias, such as 07, from the [segment NN] line above the text.",
     "4. Apply these fixed definitions:",
     "   event      the source presents something as having happened or existing",
     "   statement  the source reports that a party said something; this is evidence that it was said, not that it is true",
@@ -229,6 +235,12 @@ export const createExtractRequest = (
     feedback
   });
 
+  const contract: ExtractContract = {
+    requestSchemaVersion: EXTRACT_REQUEST_SCHEMA_VERSION,
+    responseSchemaVersion: EXTRACT_RESPONSE_SCHEMA_VERSION,
+    checks: extractCheckDefinitions()
+  };
+
   return ok({
     schemaVersion: EXTRACT_REQUEST_SCHEMA_VERSION,
     id: `extract-request-${sha256Text(identity)}`,
@@ -243,6 +255,7 @@ export const createExtractRequest = (
     researchQuestionId: admitted.researchQuestion.id,
     requirementsApprovalId: requirements.approvalId,
     policyId: policy.policyId,
+    contract,
     lineage: {
       snapshot: admitted.snapshot,
       evidenceDecision: admitted.evidenceDecision,
@@ -268,6 +281,41 @@ export const createExtractRequest = (
   });
 };
 
+const readExtractContract = (value: unknown): ExtractContract | undefined => {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, [
+      "requestSchemaVersion",
+      "responseSchemaVersion",
+      "checks"
+    ]) ||
+    value.requestSchemaVersion !== EXTRACT_REQUEST_SCHEMA_VERSION ||
+    value.responseSchemaVersion !== EXTRACT_RESPONSE_SCHEMA_VERSION ||
+    !Array.isArray(value.checks) ||
+    value.checks.length === 0
+  ) {
+    return undefined;
+  }
+  const checks = value.checks.map((entry) =>
+    isRecord(entry) && hasOnlyKeys(entry, ["id", "rule"])
+      ? {
+          id: boundedString(entry.id, 16),
+          rule: boundedString(entry.rule, 400)
+        }
+      : undefined
+  );
+  return checks.every(
+    (entry): entry is { id: string; rule: string } =>
+      entry !== undefined && Boolean(entry.id) && Boolean(entry.rule)
+  )
+    ? {
+        requestSchemaVersion: EXTRACT_REQUEST_SCHEMA_VERSION,
+        responseSchemaVersion: EXTRACT_RESPONSE_SCHEMA_VERSION,
+        checks
+      }
+    : undefined;
+};
+
 export const validateExtractRequest = (
   value: unknown
 ): Result<ExtractRequest, ExtractRequestError> => {
@@ -287,6 +335,7 @@ export const validateExtractRequest = (
       "researchQuestionId",
       "requirementsApprovalId",
       "policyId",
+      "contract",
       "lineage",
       "feedback",
       "prompt"
@@ -314,6 +363,7 @@ export const validateExtractRequest = (
   const system = nonEmptyString(value.prompt.system);
   const user = nonEmptyString(value.prompt.user);
   const lineage = readAssuranceLineage(value.lineage);
+  const contract = readExtractContract(value.contract);
   const feedback = readFeedback(value.feedback);
 
   if (
@@ -331,6 +381,7 @@ export const validateExtractRequest = (
     !system ||
     !user ||
     !lineage ||
+    !contract ||
     feedback === undefined
   ) {
     return err("INVALID_EXTRACT_REQUEST");
@@ -350,6 +401,7 @@ export const validateExtractRequest = (
     researchQuestionId,
     requirementsApprovalId,
     policyId,
+    contract,
     lineage,
     feedback,
     prompt: { system, user }

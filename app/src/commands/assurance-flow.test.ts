@@ -170,7 +170,7 @@ test("runs one admitted source through the source-assurance commands", async () 
     };
     assert.equal(request.feedback, null);
     assert.match(request.prompt.user, /ir-01/);
-    assert.match(request.prompt.user, /\[segment: source-segment-/);
+    assert.match(request.prompt.user, /\[segment 01\]/);
 
     const secondPrepare = run(
       "prepare-assurance-extract",
@@ -182,7 +182,7 @@ test("runs one admitted source through the source-assurance commands", async () 
 
     const responsePath = resolve(requestPath, "..", "copilot-response.json");
     await writeJson(responsePath, {
-      schemaVersion: "source-assurance-copilot-poc-response-v1",
+      schemaVersion: "source-assurance-copilot-poc-response-v2",
       requestId: request.id,
       invocationId: "copilot-session-1",
       provider: "github-copilot-vscode",
@@ -194,7 +194,7 @@ test("runs one admitted source through the source-assurance commands", async () 
       proposal: {
         observations: [
           {
-            segmentId: documentResult.value.segments[0]?.id,
+            segment: "01",
             quote: "The ministry announced a formal review on 4 March.",
             text: "The ministry announced a formal review.",
             claimKind: "event",
@@ -204,8 +204,8 @@ test("runs one admitted source through the source-assurance commands", async () 
           }
         ],
         dispositions: [
-          { irId: "ir-01", disposition: "covered", observationIndexes: [0] },
-          { irId: "ir-02", disposition: "silent", observationIndexes: [] }
+          { irId: "ir-01", disposition: "covered" },
+          { irId: "ir-02", disposition: "silent" }
         ]
       }
     });
@@ -248,7 +248,7 @@ test("runs one admitted source through the source-assurance commands", async () 
       })),
       humanObservations: [
         {
-          segmentId: documentResult.value.segments[1]?.id,
+          segment: "02",
           quote: "A spokesperson said the review would continue through spring.",
           text: "A spokesperson said the review would continue through spring.",
           claimKind: "statement",

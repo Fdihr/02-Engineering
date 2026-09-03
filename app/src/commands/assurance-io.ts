@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import {
+  dirname,
+  isAbsolute,
+  relative,
+  resolve,
+  toNamespacedPath
+} from "node:path";
 import type { SourceDocument } from "../core/types.js";
 import { validateSourceDocument } from "../modules/source/source-document.js";
 import { validateExtractCommit } from "../modules/assurance/extract/commit.js";
@@ -24,6 +30,32 @@ export type LoadedArtifact = {
 
 export const assuranceRunRoot = (): string =>
   resolve(process.env.SOURCE_ASSURANCE_RUN_DIR ?? "runs");
+
+/** Windows path-length escape hatch; refs and confinement checks keep the plain form. */
+export const longPath = (path: string): string => toNamespacedPath(path);
+
+const TRANSIENT_SYNC_ERRORS = new Set(["EPERM", "EBUSY"]);
+
+/**
+ * Retries only the transient locks a sync client causes. EEXIST is never retried:
+ * that is the write-once guard reporting a real collision.
+ */
+export const withSyncRetry = async <T>(
+  operation: () => Promise<T>,
+  attempts = 3
+): Promise<T> => {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? "";
+      if (!TRANSIENT_SYNC_ERRORS.has(code) || attempt >= attempts) {
+        throw error;
+      }
+      await new Promise((done) => setTimeout(done, 50 * attempt));
+    }
+  }
+};
 
 export const artifactRef = (path: string): string =>
   relative(process.cwd(), path).replaceAll("\\", "/");
@@ -50,7 +82,7 @@ export const resolveRunArtifact = (
 export const loadJsonArtifact = async (
   path: string
 ): Promise<LoadedArtifact> => {
-  const bytes = await readFile(path);
+  const bytes = await withSyncRetry(() => readFile(longPath(path)));
   return {
     path,
     binding: { artifactRef: artifactRef(path), artifactSha256: sha256(bytes) },
@@ -78,7 +110,9 @@ export const requireChecksum = (
 
 /** Canonical assurance outputs are write-once; an existing file is an error, never an overwrite. */
 export const writeOnce = async (path: string, contents: string): Promise<string> => {
-  await writeFile(path, contents, { encoding: "utf8", flag: "wx" });
+  await withSyncRetry(() =>
+    writeFile(longPath(path), contents, { encoding: "utf8", flag: "wx" })
+  );
   return artifactRef(path);
 };
 
@@ -91,7 +125,9 @@ export const appendAssuranceEvent = async (
   logPath: string,
   event: AssuranceEvent
 ): Promise<void> => {
-  await appendFile(logPath, `${JSON.stringify(event)}\n`, "utf8");
+  await withSyncRetry(() =>
+    appendFile(longPath(logPath), `${JSON.stringify(event)}\n`, "utf8")
+  );
 };
 
 export const stageDirectory = (
@@ -101,7 +137,7 @@ export const stageDirectory = (
 ): string => resolve(runRoot, runId, "assurance", snapshotId);
 
 export const ensureDirectory = async (path: string): Promise<void> => {
-  await mkdir(path, { recursive: true });
+  await withSyncRetry(() => mkdir(longPath(path), { recursive: true }));
 };
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
@@ -152,7 +188,7 @@ export const loadAdmittedSource = async (
     "Source document"
   );
 
-  const questionBytes = await readFile(questionPath);
+  const questionBytes = await withSyncRetry(() => readFile(longPath(questionPath)));
   const parsedQuestion = asRecord(
     JSON.parse(questionBytes.toString("utf8")) as unknown
   );

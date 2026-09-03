@@ -716,7 +716,7 @@ runs/research-cia-russia-20260828/
 
 Canonical application outputs are write-once. Human response files are versioned inputs; after a record attempt, their exact bytes are preserved and checksum-bound by the resulting record or failure event. Event entries never contain prompts, source text, quotes, observation text, or sensitive context.
 
-Everything under `runs/` remains ignored. Until provider retention is settled, no NV source, prompt, response, note, or metric artifact is committed. Synthetic structural fixtures are the only committed test data. Content-free metric values may be added to workflow documentation only after confirming the applicable retention rule.
+Everything under `runs/` remains ignored. The contract owner has confirmed that internal storage of retrieved provider content is permitted, so run artifacts may be retained in the tenant's controlled library. Committing provider content to git remains a separate deliberate decision: committed test data stays synthetic unless a specific fixture is explicitly approved. Content-free values such as counts, rates, and checksums may be recorded in committed documentation.
 
 ## 14. Tests
 
@@ -768,7 +768,7 @@ The real NV run is an ignored external check after deterministic tests pass. It 
 
 These decisions do not block deterministic module construction unless stated:
 
-1. Confirm provider rules for retaining raw and derived artifacts before recording any content-free run values in committed documentation.
+1. Decide whether any specific provider-derived fixture should be committed to git now that internal storage is permitted; the default remains synthetic test data.
 2. Decide how many measured sources are required before provisional metric thresholds become policy.
 3. Confirm whether the 600 UTF-8 byte quote maximum is sufficient during the required preflight against the admitted NV document. Changing it before a run requires updating the versioned policy, not special-case code.
 4. Fresh Copilot sessions remain human-attested rather than technically enforced for this PoC and must appear as a source-note limitation.

@@ -2,6 +2,7 @@ import type { SourceDocument } from "../../../core/types.js";
 import { err, ok, type Result } from "../../../core/result.js";
 import { anchorQuote } from "../anchoring.js";
 import { observationId } from "../ids.js";
+import { segmentAliasMap } from "../render-document.js";
 import {
   hasAllowedKeys,
   readExtractObservation,
@@ -38,6 +39,7 @@ export type ReviewRecordError =
   | "RESPONSE_NOT_BOUND_TO_PACKAGE"
   | "INVALID_VERDICT_COVERAGE"
   | "INVALID_DUPLICATE_REFERENCE"
+  | "INVALID_CORRECTED_TAGS"
   | "INVALID_HUMAN_OBSERVATION"
   | "DUPLICATE_HUMAN_OBSERVATION"
   | "INVALID_IR_REVIEW"
@@ -171,13 +173,25 @@ export const recordReview = (
       index
     ])
   );
+  const proposedTags = new Map(
+    input.reviewPackage.observations.map((entry) => [
+      entry.observationId,
+      entry.irIds
+    ])
+  );
 
   const verdicts: ReviewVerdictEntry[] = [];
   const seenVerdicts = new Set<string>();
   for (const entry of value.verdicts) {
     if (
       !isRecord(entry) ||
-      !hasAllowedKeys(entry, ["observationId", "verdict", "note", "duplicateOf"])
+      !hasAllowedKeys(entry, [
+        "observationId",
+        "verdict",
+        "note",
+        "duplicateOf",
+        "correctedIrIds"
+      ])
     ) {
       return err("INVALID_REVIEW_RESPONSE");
     }
@@ -220,6 +234,24 @@ export const recordReview = (
     if (duplicateOf) {
       verdictEntry.duplicateOf = duplicateOf;
     }
+
+    if (entry.correctedIrIds !== undefined) {
+      const proposed = proposedTags.get(observationIdValue) ?? [];
+      if (verdict !== "supported" || !Array.isArray(entry.correctedIrIds)) {
+        return err("INVALID_CORRECTED_TAGS");
+      }
+      const corrected = entry.correctedIrIds.map((value) => nonEmptyString(value));
+      if (
+        !corrected.every((value): value is string => value !== undefined) ||
+        new Set(corrected).size !== corrected.length ||
+        corrected.some((irId) => !proposed.includes(irId)) ||
+        corrected.length >= proposed.length
+      ) {
+        return err("INVALID_CORRECTED_TAGS");
+      }
+      verdictEntry.correctedIrIds = corrected;
+    }
+
     verdicts.push(verdictEntry);
   }
   if (seenVerdicts.size !== input.reviewPackage.observations.length) {
@@ -255,27 +287,39 @@ export const recordReview = (
     ) {
       return err("INVALID_HUMAN_OBSERVATION");
     }
+    const segmentId = segmentAliasMap(input.document).get(observation.segment);
+    if (!segmentId) {
+      return err("INVALID_HUMAN_OBSERVATION");
+    }
     const anchor = anchorQuote(
       input.document,
       documentArtifact.artifactRef,
       documentArtifact.artifactSha256,
-      observation.segmentId,
+      segmentId,
       observation.quote,
       input.policy
     );
     if (!anchor.ok) {
       return err("INVALID_HUMAN_OBSERVATION");
     }
-    const id = observationId(anchor.value, observation.claimKind, observation.text);
+    const id = observationId(
+      anchor.value.anchor,
+      observation.claimKind,
+      observation.text
+    );
     if (humanIds.has(id) || packageOrder.has(id)) {
       return err("DUPLICATE_HUMAN_OBSERVATION");
     }
     humanIds.add(id);
     humanObservations.push({
       ...observation,
+      quote: anchor.value.anchor.quote,
       observationId: id,
-      anchor: anchor.value,
-      origin: "human"
+      segmentId: anchor.value.anchor.segmentId,
+      anchor: anchor.value.anchor,
+      origin: "human",
+      proposedQuote: anchor.value.proposedQuote,
+      matchedVia: anchor.value.matchedVia
     });
   }
 
@@ -403,7 +447,13 @@ export const validateReviewRecord = (
   for (const entry of value.verdicts) {
     if (
       !isRecord(entry) ||
-      !hasAllowedKeys(entry, ["observationId", "verdict", "note", "duplicateOf"])
+      !hasAllowedKeys(entry, [
+        "observationId",
+        "verdict",
+        "note",
+        "duplicateOf",
+        "correctedIrIds"
+      ])
     ) {
       return err("INVALID_REVIEW_RESPONSE");
     }
@@ -433,6 +483,19 @@ export const validateReviewRecord = (
       verdictEntry.duplicateOf = duplicateOf;
     } else if (entry.duplicateOf !== undefined) {
       return err("INVALID_DUPLICATE_REFERENCE");
+    }
+    if (entry.correctedIrIds !== undefined) {
+      if (verdict !== "supported" || !Array.isArray(entry.correctedIrIds)) {
+        return err("INVALID_CORRECTED_TAGS");
+      }
+      const corrected = entry.correctedIrIds.map((item) => nonEmptyString(item));
+      if (
+        !corrected.every((item): item is string => item !== undefined) ||
+        new Set(corrected).size !== corrected.length
+      ) {
+        return err("INVALID_CORRECTED_TAGS");
+      }
+      verdictEntry.correctedIrIds = corrected;
     }
     verdicts.push(verdictEntry);
   }
