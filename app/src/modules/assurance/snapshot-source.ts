@@ -127,6 +127,8 @@ export const validateAdmittedSource = (
 
   const item = snapshot.item;
   const limitations = boundedStringArray(item.limitations, 24, 2_000);
+  const source = isRecord(item.source) ? item.source : undefined;
+  const publisherHost = source ? nonEmptyString(source.publisherHost) : undefined;
   if (
     item.role !== "evidence_candidate" ||
     item.providerItemId !== candidateId ||
@@ -187,6 +189,9 @@ export const validateAdmittedSource = (
 
   const researchQuestion: ApprovedResearchQuestion = question.value;
   const sourceDocument: SourceDocument = document.value;
+  if (sourceDocument.sourceKind === "retrieved-publisher" && !publisherHost) {
+    return err("INVALID_EVIDENCE_CANDIDATE");
+  }
 
   return ok({
     snapshotId,
@@ -207,6 +212,9 @@ export const validateAdmittedSource = (
       artifactRef: sourceDocumentArtifactRef,
       artifactSha256: sourceDocumentArtifactSha256
     },
+    sourceIdentity: publisherHost
+      ? { kind: "publisher", publisherHost: publisherHost.toLowerCase() }
+      : { kind: "unknown" },
     researchQuestion,
     sourceDocument,
     sourceLimitations: limitations

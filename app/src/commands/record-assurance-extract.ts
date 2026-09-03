@@ -2,6 +2,8 @@ import { dirname, resolve } from "node:path";
 import { recordExtractResponse } from "../modules/assurance/extract/record.js";
 import { validateExtractRequest } from "../modules/assurance/extract/request.js";
 import { createAssuranceEvent } from "../modules/assurance/events.js";
+import { createOpenExceptionItem } from "../modules/exceptions/exception-item.js";
+import { persistExceptionItem } from "./exception-io.js";
 import { validateProfilePolicy } from "../modules/assurance/policy.js";
 import { validateApprovedRequirements } from "../modules/assurance/requirements.js";
 import {
@@ -142,6 +144,36 @@ const main = async (): Promise<void> => {
         failedAt: recordedAt,
         failures
       });
+      const failureArtifact = await loadRunArtifact(
+        runRoot,
+        outputArtifactRef,
+        "Extract failure"
+      );
+      const exception = createOpenExceptionItem({
+        kind: "bounded-failure",
+        runId,
+        refs: [failureArtifact.binding, requestArtifact.binding],
+        raisedAt: recordedAt
+      });
+      if (!exception.ok) {
+        throw new Error(`Exception item rejected: ${exception.error}`);
+      }
+      const persistedException = await persistExceptionItem(runRoot, exception.value);
+      await appendAssuranceEvent(
+        eventLogPath,
+        createAssuranceEvent({
+          runId,
+          snapshotId,
+          occurredAt: recordedAt,
+          actorType: "controller",
+          step: "exception",
+          eventType: "exception.bounded-failure.raised",
+          status: "completed",
+          attempt,
+          artifactRef: persistedException.binding.artifactRef,
+          artifactSha256: persistedException.binding.artifactSha256
+        })
+      );
     }
     await appendAssuranceEvent(
       eventLogPath,

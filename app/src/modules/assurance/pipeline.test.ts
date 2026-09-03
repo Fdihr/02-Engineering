@@ -102,6 +102,7 @@ const admittedResult = validateAdmittedSource({
       providerItemId: "candidate-1",
       contentCompleteness: "captured_content",
       limitations: ["Retrieved content remains untrusted."],
+      source: { publisherHost: "example.test" },
       researchQuestion: approvedQuestion,
       questionRelevance: {
         assessment: {
@@ -303,6 +304,7 @@ const baseResponse = {
   packageSha256: packageArtifact.artifactSha256,
   reviewerId: "TESTER",
   reviewedAt: "2026-03-12T00:00:00.000Z",
+  supportPass: "performed",
   omissionPass: "performed",
   verdicts: reviewPackage.observations.map((entry) => ({
     observationId: entry.observationId,
@@ -360,7 +362,65 @@ test("records a bound review with anchored human observations", () => {
   if (record.ok) {
     assert.equal(record.value.humanObservations.length, 1);
     assert.equal(record.value.humanObservations[0]?.origin, "human");
-    assert.equal(record.value.assessment.dependency.kind, "mixed");
+    assert.ok("dependency" in record.value.assessment);
+    if ("dependency" in record.value.assessment) {
+      assert.equal(record.value.assessment.dependency.kind, "mixed");
+    }
+  }
+});
+
+const provisionalResponse = {
+  packageSha256: packageArtifact.artifactSha256,
+  reviewerId: "PROVISIONAL-CONTROLLER",
+  reviewedAt: "2026-03-12T00:00:00.000Z",
+  supportPass: "not-performed",
+  omissionPass: "not-performed",
+  verdicts: [],
+  humanObservations: [],
+  irReview: []
+};
+
+test("records provisional review state without human judgments", () => {
+  const record = buildRecord(provisionalResponse);
+  assert.equal(record.ok, true);
+  if (!record.ok) {
+    return;
+  }
+  assert.equal(record.value.supportPass, "not-performed");
+  assert.equal(record.value.irReviewBasis, "not-performed");
+  assert.deepEqual(record.value.assessment, { status: "not-assessed" });
+  assert.deepEqual(
+    record.value.verdicts.map((entry) => entry.verdict),
+    reviewPackage.observations.map(() => "unreviewed")
+  );
+
+  const explicit = buildRecord({
+    ...provisionalResponse,
+    assessment: { status: "not-assessed" }
+  });
+  assert.equal(explicit.ok, true);
+});
+
+test("rejects every contradictory provisional judgment field", () => {
+  const observationId = reviewPackage.observations[0]?.observationId ?? "";
+  const contradictions = [
+    { ...provisionalResponse, omissionPass: "performed" },
+    {
+      ...provisionalResponse,
+      verdicts: [{ observationId, verdict: "supported" }]
+    },
+    { ...provisionalResponse, humanObservations: [humanObservation] },
+    {
+      ...provisionalResponse,
+      irReview: [{ irId: "ir-01", disposition: "covered" }]
+    },
+    { ...provisionalResponse, assessment }
+  ];
+  for (const response of contradictions) {
+    assert.deepEqual(buildRecord(response), {
+      ok: false,
+      error: "INVALID_SUPPORT_PASS"
+    });
   }
 });
 
@@ -454,6 +514,66 @@ test("assembles a lineage-complete note with disjoint observation sets", () => {
   );
 });
 
+test("assembles provisional observations and null human dispositions honestly", () => {
+  const note = buildNote(provisionalResponse);
+  assert.equal(note.ok, true);
+  if (!note.ok) {
+    return;
+  }
+  assert.equal(note.value.reviewStatus, "provisional");
+  assert.ok(
+    [...note.value.inScopeObservations, ...note.value.outOfIrObservations].every(
+      (entry) => entry.reviewVerdict === "unreviewed"
+    )
+  );
+  assert.ok(
+    note.value.irDispositions.every(
+      (entry) => entry.humanDisposition === null && entry.finalDisposition === null
+    )
+  );
+  assert.deepEqual(note.value.assessment, { status: "not-assessed" });
+  assert.equal(
+    note.value.caveats.filter(
+      (entry) =>
+        entry ===
+        "Observations not reviewed by a human; evidence in this note is provisional."
+    ).length,
+    1
+  );
+  assert.ok(
+    !note.value.caveats.some((entry) =>
+      entry.startsWith("No omission pass was performed")
+    )
+  );
+});
+
+test("reviewed notes can supersede but never edit provisional notes", () => {
+  const provisional = buildNote(provisionalResponse);
+  const reviewedRecord = buildRecord(baseResponse);
+  if (!provisional.ok || !reviewedRecord.ok) {
+    throw new Error("Expected provisional note and reviewed record");
+  }
+  const reviewed = assembleSourceNote({
+    admitted,
+    commit,
+    commitArtifact,
+    reviewPackage,
+    reviewRecord: reviewedRecord.value,
+    reviewRecordArtifact: recordArtifact,
+    supersededNote: provisional.value,
+    requirements,
+    policy,
+    assembledAt: "2026-03-16T00:00:00.000Z"
+  });
+  assert.equal(reviewed.ok, true);
+  if (reviewed.ok) {
+    assert.equal(reviewed.value.reviewStatus, "reviewed");
+    assert.equal(reviewed.value.supersedesNoteId, provisional.value.id);
+    assert.equal(provisional.value.reviewStatus, "provisional");
+    assert.equal(provisional.value.supersedesNoteId, undefined);
+  }
+});
+
 test("assembly fails on disposition inconsistency instead of repairing it", () => {
   assert.deepEqual(
     buildNote({
@@ -515,6 +635,53 @@ test("measures the run and recommends the next experiment", () => {
       entry.includes("requirement tagging")
     )
   );
+});
+
+test("provisional measurement leaves every review metric unmeasured", () => {
+  const note = buildNote(provisionalResponse);
+  const record = buildRecord(provisionalResponse);
+  if (!note.ok || !record.ok) {
+    throw new Error("Expected a provisional note and review record");
+  }
+  const measuredNote = readMeasuredNote(note.value, policy);
+  if (!measuredNote.ok) {
+    throw new Error(measuredNote.error);
+  }
+  const metrics = measureAssurance({
+    note: measuredNote.value,
+    reviewPackage,
+    reviewRecord: record.value,
+    attemptFailures: [[]],
+    measuredAt: "2026-03-15T00:00:00.000Z"
+  });
+  assert.equal(metrics.ok, true);
+  if (!metrics.ok) {
+    return;
+  }
+  assert.equal(metrics.value.reviewStatus, "provisional");
+  assert.equal(metrics.value.reviewedModelObservations, null);
+  assert.equal(metrics.value.supportFailureRate, null);
+  assert.equal(metrics.value.chromeRate, null);
+  assert.equal(metrics.value.omissionCount, null);
+  assert.deepEqual(metrics.value.dispositionMismatches, {
+    total: null,
+    overclaims: null,
+    underclaims: null
+  });
+  assert.deepEqual(metrics.value.tagPrecision, {
+    tagsProposed: null,
+    tagsRemoved: null,
+    precision: null
+  });
+  for (const warning of [
+    "support pass remains unmeasured",
+    "Chrome rate remains unmeasured",
+    "Sweep decision remains unmeasured",
+    "Tag precision remains unmeasured",
+    "Disposition comparison remains unmeasured"
+  ]) {
+    assert.ok(metrics.value.recommendations.some((entry) => entry.includes(warning)));
+  }
 });
 
 test("removes an over-tagged requirement without calling the quote unsupported", () => {
@@ -580,6 +747,7 @@ test("removes an over-tagged requirement without calling the quote unsupported",
     note: {
       runId: note.value.runId,
       snapshotId: note.value.snapshotId,
+      reviewStatus: "reviewed",
       irDispositions: note.value.irDispositions,
       matchedVia: ["exact"]
     },
@@ -664,6 +832,7 @@ test("records an unperformed omission pass as unmeasured, never as zero", () => 
     note: {
       runId: note.value.runId,
       snapshotId: note.value.snapshotId,
+      reviewStatus: "reviewed",
       irDispositions: note.value.irDispositions,
       matchedVia: ["exact"]
     },
@@ -715,6 +884,7 @@ test("measurement routes support failures separately from coverage mismatches", 
     note: {
       runId: "run-1",
       snapshotId: "snapshot-decision-1",
+      reviewStatus: "reviewed",
       irDispositions: [
         {
           irId: "ir-01",

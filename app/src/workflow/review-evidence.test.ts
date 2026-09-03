@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ProcessOutput } from "./process-source.js";
 import { reviewEvidence } from "./review-evidence.js";
+import { admitEvidenceUnderPolicy } from "./admit-evidence.js";
 
 const intake: ProcessOutput = {
   item: {
@@ -248,6 +249,107 @@ test("explicit approval preserves retrieved-source assessment and lineage", () =
       intake.item.researchQuestion.id
     );
     assert.equal(result.value.snapshot.item.retrievalLineage.retrievalId, "retrieval-001");
+  }
+
+  const autoAdmit = {
+    relevance: "relevant" as const,
+    requireCodeValidatedAnchors: true as const,
+    readiness: ["ready", "qualified"] as Array<"ready" | "qualified">,
+    rejectSynthetic: true as const,
+    requireWithinBudget: true as const
+  };
+  const humanMode = admitEvidenceUnderPolicy({
+    policy: {
+      policyId: "compatibility-human-admission-v1",
+      version: 1,
+      mode: "human",
+      autoAdmit
+    },
+    humanReview: {
+      ...request,
+      decision: "approved",
+      rawArtifactSha256: "e".repeat(64),
+      questionRelevanceArtifacts,
+      intake: retrievedIntake
+    }
+  });
+  assert.deepEqual(humanMode, result);
+
+  const controllerInput = {
+    decisionId: "controller-admission-001",
+    decidedAt: "2026-08-28T10:00:00.000Z",
+    intakeArtifactRef: request.intakeArtifactRef,
+    rawArtifactSha256: "e".repeat(64),
+    questionRelevanceArtifacts,
+    intake: retrievedIntake,
+    readiness: "ready" as const,
+    anchorsCodeValidated: true,
+    synthetic: false,
+    withinBudget: true
+  };
+  const controllerMode = admitEvidenceUnderPolicy({
+    policy: {
+      policyId: "controller-admission-v1",
+      version: 1,
+      mode: "controller",
+      autoAdmit
+    },
+    controller: controllerInput
+  });
+  assert.equal(controllerMode.ok, true);
+  if (controllerMode.ok && controllerMode.value.outcome === "approved") {
+    assert.deepEqual(
+      Object.keys(controllerMode.value.snapshot).sort(),
+      Object.keys(result.value.snapshot).sort()
+    );
+    assert.equal(
+      controllerMode.value.snapshot.admittedBy,
+      "controller:controller-admission-v1"
+    );
+    assert.equal(controllerMode.value.event.actorType, "controller");
+  } else {
+    assert.fail("Expected controller admission approval");
+  }
+
+  assert.deepEqual(
+    admitEvidenceUnderPolicy({
+      policy: {
+        policyId: "controller-admission-v1",
+        version: 1,
+        mode: "controller",
+        autoAdmit
+      },
+      controller: { ...controllerInput, withinBudget: false }
+    }),
+    { ok: false, error: "CONTROLLER_ADMISSION_CHECK_FAILED" }
+  );
+
+  const partialIntake = structuredClone(retrievedIntake);
+  partialIntake.item.questionRelevance.assessment.verdict = "partially-relevant";
+  partialIntake.item.questionRelevance.decision.verdict = "partially-relevant";
+  const partialArtifacts = structuredClone(questionRelevanceArtifacts);
+  partialArtifacts.assessment.verdict = "partially-relevant";
+  partialArtifacts.decision.verdict = "partially-relevant";
+  const partial = admitEvidenceUnderPolicy({
+    policy: {
+      policyId: "controller-admission-v1",
+      version: 1,
+      mode: "controller",
+      autoAdmit
+    },
+    controller: {
+      ...controllerInput,
+      questionRelevanceArtifacts: partialArtifacts,
+      intake: partialIntake
+    }
+  });
+  assert.equal(partial.ok, true);
+  if (partial.ok) {
+    assert.equal(partial.value.outcome, "exception");
+    if (partial.value.outcome === "exception") {
+      assert.equal(partial.value.exception.kind, "uncertain-relevance");
+      assert.equal(partial.value.exception.status, "open");
+    }
   }
 
   const revision = reviewEvidence({

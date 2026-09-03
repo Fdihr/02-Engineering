@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1828" viewBox="0 0 2400 1828" role="img" aria-labelledby="title description">
   <title id="title">Seerist and OSINT evidence-grounded memo workflow</title>
-  <desc id="description">Canonical version 2.4 evidence-grounded memo workflow showing bounded Seerist and OSINT collection, lossless provider-neutral source documents, AI question-relevance proposals, deterministic pending-candidate validation, human evidence admission, geopolitical-profile source assurance through Extract, blind Sweep, code-owned Reconcile, single-source Assess, and lineage-checked Write, external claim synthesis, optional organizational context, quality verification, and human publication approval. Cyber threat intelligence is the first validated memo profile, not the product boundary.</desc>
+  <desc id="description">Canonical version 2.5 evidence-grounded memo workflow showing one memo-level intent gate, bounded Seerist and OSINT collection, policy admission with human exception triage, provider-neutral source assurance, external claim synthesis, optional organizational context, deterministic quality verification, and a human publication gate with sampled audit. Governance remains outside the per-memo loop.</desc>
 
   <defs>
     <style>
@@ -48,7 +48,7 @@
 
   <rect class="canvas" x="0" y="0" width="2400" height="1828" />
   <text class="page-title" x="48" y="48">Seerist + OSINT evidence-grounded memo workflow</text>
-  <text class="page-subtitle" x="48" y="76">Version 2.4 | General memo core, geopolitical profile policy, and stage-owned source assurance</text>
+  <text class="page-subtitle" x="48" y="76">Version 2.5 | Human effort per memo: intent, publication, pushed exceptions, and governance</text>
 
   <rect class="det-card" x="1696" y="32" width="16" height="16" />
   <text class="caption" x="1720" y="45">Deterministic</text>
@@ -65,12 +65,12 @@
   <rect class="panel" x="64" y="128" width="552" height="1364" />
   <rect class="panel-header" x="64" y="128" width="552" height="72" />
   <text class="panel-title" x="88" y="158">1. Intent, collection, and admission</text>
-  <text class="panel-subtitle" x="88" y="181">AI proposes question relevance; deterministic code and humans retain state authority</text>
+  <text class="panel-subtitle" x="88" y="181">One intent gate before collection; code admits under policy and pushes exceptions</text>
 
   <rect class="human-card" x="88" y="224" width="504" height="112" />
-  <text class="card-title" x="112" y="252">Approve scope and research questions</text>
-  <text class="body" x="112" y="278">Purpose | audience | geography | time window | questions</text>
-  <text class="caption" x="112" y="302">No provider call before both explicit human approvals.</text>
+  <text class="card-title" x="112" y="252">Human intent gate</text>
+  <text class="body" x="112" y="278">Request | scope | org relevance | questions | IRs</text>
+  <text class="caption" x="112" y="302">One memo-level approval; no collection before it.</text>
   <rect class="tested-chip" x="480" y="312" width="88" height="8" />
 
   <rect class="det-card" x="88" y="360" width="504" height="136" />
@@ -103,10 +103,10 @@
   <text class="caption" x="112" y="914">Code validates lineage and exact anchors; AI has no approval authority.</text>
   <rect class="tested-chip" x="480" y="924" width="88" height="8" />
 
-  <rect class="human-card" x="88" y="952" width="504" height="88" />
-  <text class="card-title" x="112" y="980">Human evidence admission</text>
-  <text class="body" x="112" y="1006">Review anchored proposal | approve | reject | revise</text>
-  <text class="caption" x="112" y="1028">Only approved candidates enter source assurance.</text>
+  <rect class="det-card" x="88" y="952" width="504" height="88" />
+  <text class="card-title" x="112" y="980">Policy admission + human exception triage</text>
+  <text class="body" x="112" y="1006">Relevant + ready + valid anchors -> code admits</text>
+  <text class="caption" x="112" y="1028">Partial | uncertain | bounded failure -> pushed exception.</text>
   <rect class="tested-chip" x="480" y="1032" width="88" height="8" />
 
   <path class="primary-line" d="M 340 336 L 340 358" />
@@ -278,8 +278,8 @@
   <rect class="human-card" x="2000" y="864" width="312" height="144" />
   <text class="card-title" x="2024" y="892">Human publication gate</text>
   <text class="body" x="2024" y="918">Approve | reject | targeted revision</text>
-  <text class="caption" x="2024" y="944">Only a human can approve.</text>
-  <text class="small" x="2024" y="976">Prior versions remain immutable.</text>
+  <text class="caption" x="2024" y="944">Lineage drill-down | sampled audit (N from policy)</text>
+  <text class="small" x="2024" y="976">Only a human can publish; calibration is recorded.</text>
   <rect class="tested-chip" x="2200" y="984" width="88" height="8" />
 
   <path class="primary-line" d="M 1852 832 L 1852 862" />
@@ -316,9 +316,9 @@
   <text class="caption" x="1200" y="1676">No context-only corroboration or historical-fact leakage.</text>
   <text class="caption" x="1200" y="1702">No confidence inflation or suppressed contradiction.</text>
 
-  <rect class="det-card" x="1720" y="1596" width="592" height="144" />
-  <text class="card-title" x="1744" y="1624">Current implementation slice</text>
-  <text class="body" x="1744" y="1650">Scope -> question -> collect -> canonicalize -> relevance -> candidate</text>
-  <text class="caption" x="1744" y="1676">Panel 1 complete: approved NV snapshot is ready for source assurance.</text>
-  <text class="caption" x="1744" y="1702">Scale only after each behavior works and is measured.</text>
+  <rect class="human-card" x="1720" y="1596" width="592" height="144" />
+  <text class="card-title" x="1744" y="1624">Human surfaces</text>
+  <text class="body" x="1744" y="1650">Intent | publication | exceptions | governance</text>
+  <text class="caption" x="1744" y="1676">Human effort is per memo, never per source.</text>
+  <text class="caption" x="1744" y="1702">Everything else is machine work or a named interim stand-in.</text>
 </svg>

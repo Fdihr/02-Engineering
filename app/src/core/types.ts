@@ -235,7 +235,7 @@ export type EvidenceReviewEvent = {
   decisionId: string;
   sourceRunId: string;
   occurredAt: string;
-  actorType: "human";
+  actorType: "human" | "controller";
   actorId: string;
   stage: "evidence_admission";
   eventType:

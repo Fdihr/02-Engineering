@@ -17,6 +17,7 @@ import {
   type IRReviewEntry,
   type Observation,
   type ProfilePolicy,
+  type ReviewAssessment,
   type ReviewPackage,
   type ReviewRecord,
   type ReviewVerdict,
@@ -44,6 +45,7 @@ export type ReviewRecordError =
   | "DUPLICATE_HUMAN_OBSERVATION"
   | "INVALID_IR_REVIEW"
   | "MISSING_IR_REVIEW_NOTE"
+  | "INVALID_SUPPORT_PASS"
   | "INVALID_OMISSION_PASS"
   | "INVALID_ASSESSMENT"
   | "INVALID_RECORD_TIME"
@@ -113,6 +115,13 @@ const readAssessment = (value: unknown): Assessment | undefined => {
   };
 };
 
+const readReviewAssessment = (value: unknown): ReviewAssessment | undefined => {
+  if (isRecord(value) && hasOnlyKeys(value, ["status"]) && value.status === "not-assessed") {
+    return { status: "not-assessed" };
+  }
+  return readAssessment(value);
+};
+
 export type RecordReviewInput = {
   reviewPackage: ReviewPackage;
   packageArtifact: ArtifactBinding;
@@ -140,18 +149,22 @@ export const recordReview = (
   }
 
   const value = input.responseValue;
+  const responseKeys = [
+    "packageSha256",
+    "reviewerId",
+    "reviewedAt",
+    "supportPass",
+    "omissionPass",
+    "verdicts",
+    "humanObservations",
+    "irReview",
+    "assessment"
+  ];
+  const requiredResponseKeys = responseKeys.filter((key) => key !== "assessment");
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, [
-      "packageSha256",
-      "reviewerId",
-      "reviewedAt",
-      "omissionPass",
-      "verdicts",
-      "humanObservations",
-      "irReview",
-      "assessment"
-    ]) ||
+    !hasAllowedKeys(value, responseKeys) ||
+    !requiredResponseKeys.every((key) => key in value) ||
     !Array.isArray(value.verdicts) ||
     !Array.isArray(value.humanObservations) ||
     !Array.isArray(value.irReview)
@@ -169,14 +182,36 @@ export const recordReview = (
     return err("RESPONSE_NOT_BOUND_TO_PACKAGE");
   }
 
+  const supportPass =
+    value.supportPass === "performed" || value.supportPass === "not-performed"
+      ? value.supportPass
+      : undefined;
   const omissionPass =
     value.omissionPass === "performed" || value.omissionPass === "not-performed"
       ? value.omissionPass
       : undefined;
+  if (!supportPass) {
+    return err("INVALID_SUPPORT_PASS");
+  }
+  if (!omissionPass) {
+    return err("INVALID_OMISSION_PASS");
+  }
+
+  const provisional = supportPass === "not-performed";
   if (
-    !omissionPass ||
-    (omissionPass === "not-performed" && value.humanObservations.length > 0)
+    provisional &&
+    (omissionPass !== "not-performed" ||
+      value.verdicts.length > 0 ||
+      value.humanObservations.length > 0 ||
+      value.irReview.length > 0 ||
+      (value.assessment !== undefined &&
+        (!isRecord(value.assessment) ||
+          !hasOnlyKeys(value.assessment, ["status"]) ||
+          value.assessment.status !== "not-assessed")))
   ) {
+    return err("INVALID_SUPPORT_PASS");
+  }
+  if (omissionPass === "not-performed" && value.humanObservations.length > 0) {
     return err("INVALID_OMISSION_PASS");
   }
 
@@ -193,9 +228,14 @@ export const recordReview = (
     ])
   );
 
-  const verdicts: ReviewVerdictEntry[] = [];
+  const verdicts: ReviewVerdictEntry[] = provisional
+    ? input.reviewPackage.observations.map((entry) => ({
+        observationId: entry.observationId,
+        verdict: "unreviewed"
+      }))
+    : [];
   const seenVerdicts = new Set<string>();
-  for (const entry of value.verdicts) {
+  for (const entry of provisional ? [] : value.verdicts) {
     if (
       !isRecord(entry) ||
       !hasAllowedKeys(entry, [
@@ -267,13 +307,13 @@ export const recordReview = (
 
     verdicts.push(verdictEntry);
   }
-  if (seenVerdicts.size !== input.reviewPackage.observations.length) {
+  if (!provisional && seenVerdicts.size !== input.reviewPackage.observations.length) {
     return err("INVALID_VERDICT_COVERAGE");
   }
 
   const humanObservations: Observation[] = [];
   const humanIds = new Set<string>();
-  for (const entry of value.humanObservations) {
+  for (const entry of provisional ? [] : value.humanObservations) {
     const observation = readExtractObservation(entry, input.policy);
     if (!observation) {
       return err("INVALID_HUMAN_OBSERVATION");
@@ -338,7 +378,7 @@ export const recordReview = (
 
   const irReview: IRReviewEntry[] = [];
   const seenIrIds = new Set<string>();
-  for (const entry of value.irReview) {
+  for (const entry of provisional ? [] : value.irReview) {
     if (!isRecord(entry) || !hasAllowedKeys(entry, ["irId", "disposition", "note"])) {
       return err("INVALID_IR_REVIEW");
     }
@@ -367,13 +407,16 @@ export const recordReview = (
   }
   const approvedIrIds = input.requirements.requirements.map((entry) => entry.irId);
   if (
+    !provisional &&
     seenIrIds.size !== approvedIrIds.length ||
-    approvedIrIds.some((irId) => !seenIrIds.has(irId))
+    (!provisional && approvedIrIds.some((irId) => !seenIrIds.has(irId)))
   ) {
     return err("INVALID_IR_REVIEW");
   }
 
-  const assessment = readAssessment(value.assessment);
+  const assessment = provisional
+    ? ({ status: "not-assessed" } as const)
+    : readAssessment(value.assessment);
   if (!assessment) {
     return err("INVALID_ASSESSMENT");
   }
@@ -389,8 +432,13 @@ export const recordReview = (
     policyId: input.policy.policyId,
     reviewerId,
     reviewedAt,
+    supportPass,
     omissionPass,
-    irReviewBasis: omissionPass === "performed" ? "full-source" : "rows-only",
+    irReviewBasis: provisional
+      ? "not-performed"
+      : omissionPass === "performed"
+        ? "full-source"
+        : "rows-only",
     reviewPackage: packageArtifact,
     reviewResponse: responseArtifact,
     verdicts,
@@ -415,6 +463,7 @@ export const validateReviewRecord = (
       "policyId",
       "reviewerId",
       "reviewedAt",
+      "supportPass",
       "omissionPass",
       "irReviewBasis",
       "reviewPackage",
@@ -441,7 +490,11 @@ export const validateReviewRecord = (
   const reviewedAt = validTime(value.reviewedAt);
   const reviewPackage = readArtifactBinding(value.reviewPackage);
   const reviewResponse = readArtifactBinding(value.reviewResponse);
-  const assessment = readAssessment(value.assessment);
+  const assessment = readReviewAssessment(value.assessment);
+  const supportPass =
+    value.supportPass === "performed" || value.supportPass === "not-performed"
+      ? value.supportPass
+      : undefined;
   const omissionPass =
     value.omissionPass === "performed" || value.omissionPass === "not-performed"
       ? value.omissionPass
@@ -456,14 +509,34 @@ export const validateReviewRecord = (
     !reviewedAt ||
     !reviewPackage ||
     !reviewResponse ||
+    !supportPass ||
     !omissionPass ||
     value.irReviewBasis !==
-      (omissionPass === "performed" ? "full-source" : "rows-only") ||
+      (supportPass === "not-performed"
+        ? "not-performed"
+        : omissionPass === "performed"
+          ? "full-source"
+          : "rows-only") ||
     policyId !== policy.policyId
   ) {
     return err("INVALID_REVIEW_RESPONSE");
   }
   if (!assessment) {
+    return err("INVALID_ASSESSMENT");
+  }
+  const provisional = supportPass === "not-performed";
+  if (
+    provisional &&
+    (omissionPass !== "not-performed" ||
+      value.humanObservations.length > 0 ||
+      value.irReview.length > 0 ||
+      !isRecord(assessment) ||
+      !("status" in assessment) ||
+      assessment.status !== "not-assessed")
+  ) {
+    return err("INVALID_SUPPORT_PASS");
+  }
+  if (!provisional && "status" in assessment) {
     return err("INVALID_ASSESSMENT");
   }
 
@@ -482,10 +555,17 @@ export const validateReviewRecord = (
       return err("INVALID_REVIEW_RESPONSE");
     }
     const observationIdValue = nonEmptyString(entry.observationId);
-    const verdict = policy.reviewVerdicts.includes(entry.verdict as ReviewVerdict)
-      ? (entry.verdict as ReviewVerdict)
-      : undefined;
-    if (!observationIdValue || !verdict) {
+    const verdict =
+      entry.verdict === "unreviewed"
+        ? "unreviewed"
+        : policy.reviewVerdicts.includes(entry.verdict as ReviewVerdict)
+          ? (entry.verdict as ReviewVerdict)
+          : undefined;
+    if (
+      !observationIdValue ||
+      !verdict ||
+      (provisional ? verdict !== "unreviewed" : verdict === "unreviewed")
+    ) {
       return err("INVALID_REVIEW_RESPONSE");
     }
     const verdictEntry: ReviewVerdictEntry = {
@@ -568,8 +648,13 @@ export const validateReviewRecord = (
     policyId,
     reviewerId,
     reviewedAt,
+    supportPass,
     omissionPass,
-    irReviewBasis: omissionPass === "performed" ? "full-source" : "rows-only",
+    irReviewBasis: provisional
+      ? "not-performed"
+      : omissionPass === "performed"
+        ? "full-source"
+        : "rows-only",
     reviewPackage,
     reviewResponse,
     verdicts,

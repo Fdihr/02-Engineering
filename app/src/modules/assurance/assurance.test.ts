@@ -103,6 +103,7 @@ export const snapshotValue = {
     role: "evidence_candidate",
     providerItemId: "candidate-1",
     contentCompleteness: "captured_content",
+    source: { publisherHost: "example.test" },
     limitations: ["Retrieved content remains untrusted."],
     researchQuestion: approvedQuestion,
     questionRelevance: {
@@ -141,9 +142,20 @@ export const admittedInput = {
 };
 
 test("accepts a policy and rejects altered policy values", () => {
-  assert.equal(validateProfilePolicy(policyValue).ok, true);
+  const legacy = validateProfilePolicy(policyValue);
+  assert.equal(legacy.ok, true);
+  if (legacy.ok) {
+    assert.equal(legacy.value.admissionPolicy.mode, "human");
+  }
   assert.deepEqual(
     validateProfilePolicy({ ...policyValue, claimKinds: ["event"] }),
+    { ok: false, error: "INVALID_POLICY_VALUES" }
+  );
+  assert.deepEqual(
+    validateProfilePolicy({
+      ...policyValue,
+      reviewVerdicts: [...policyValue.reviewVerdicts, "unreviewed"]
+    }),
     { ok: false, error: "INVALID_POLICY_VALUES" }
   );
   assert.deepEqual(
@@ -153,6 +165,26 @@ test("accepts a policy and rejects altered policy values", () => {
     }),
     { ok: false, error: "INVALID_POLICY_LIMITS" }
   );
+  const controller = validateProfilePolicy({
+    ...policyValue,
+    policyId: "geopolitical-source-assurance-v4",
+    admissionPolicy: {
+      policyId: "geopolitical-controller-admission-v1",
+      version: 1,
+      mode: "controller",
+      autoAdmit: {
+        relevance: "relevant",
+        requireCodeValidatedAnchors: true,
+        readiness: ["ready", "qualified"],
+        rejectSynthetic: true,
+        requireWithinBudget: true
+      }
+    }
+  });
+  assert.equal(controller.ok, true);
+  if (controller.ok) {
+    assert.equal(controller.value.admissionPolicy.mode, "controller");
+  }
 });
 
 test("anchors an exact quote inside its named segment", () => {

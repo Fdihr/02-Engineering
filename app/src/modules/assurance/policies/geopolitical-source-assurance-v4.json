@@ -1,0 +1,33 @@
+{
+  "policyId": "geopolitical-source-assurance-v4",
+  "claimKinds": ["event", "statement", "assessment", "forecast"],
+  "attributionKinds": ["direct", "attributed", "relayed"],
+  "dateRoles": ["event", "reporting", "publication", "reference", "unknown"],
+  "dispositions": ["covered", "partial", "silent", "contradicted"],
+  "reviewVerdicts": ["supported", "unsupported", "duplicate", "chrome"],
+  "quoteMatchRules": [
+    "markdown-escape",
+    "whitespace-collapse",
+    "quote-variants",
+    "nfc"
+  ],
+  "admissionPolicy": {
+    "policyId": "geopolitical-controller-admission-v1",
+    "version": 1,
+    "mode": "controller",
+    "autoAdmit": {
+      "relevance": "relevant",
+      "requireCodeValidatedAnchors": true,
+      "readiness": ["ready", "qualified"],
+      "rejectSynthetic": true,
+      "requireWithinBudget": true
+    }
+  },
+  "limits": {
+    "quoteMinUtf8Bytes": 20,
+    "quoteMaxUtf8Bytes": 600,
+    "textMaxChars": 240,
+    "maxObservations": 60,
+    "maxAttempts": 2
+  }
+}

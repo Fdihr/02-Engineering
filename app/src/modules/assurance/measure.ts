@@ -21,10 +21,11 @@ export type MeasureError =
 export type MeasuredNote = {
   runId: string;
   snapshotId: string;
+  reviewStatus: "provisional" | "reviewed";
   irDispositions: Array<{
     irId: string;
     modelDisposition: Disposition;
-    humanDisposition: Disposition;
+    humanDisposition: Disposition | null;
   }>;
   matchedVia: QuoteMatchProvenance[];
 };
@@ -44,7 +45,11 @@ export const readMeasuredNote = (
   }
   const runId = nonEmptyString(value.runId);
   const snapshotId = nonEmptyString(value.snapshotId);
-  if (!runId || !snapshotId) {
+  const reviewStatus =
+    value.reviewStatus === "provisional" || value.reviewStatus === "reviewed"
+      ? value.reviewStatus
+      : undefined;
+  if (!runId || !snapshotId || !reviewStatus) {
     return err("INVALID_SOURCE_NOTE");
   }
 
@@ -80,18 +85,25 @@ export const readMeasuredNote = (
     )
       ? (entry.modelDisposition as Disposition)
       : undefined;
-    const humanDisposition = policy.dispositions.includes(
-      entry.humanDisposition as Disposition
-    )
-      ? (entry.humanDisposition as Disposition)
-      : undefined;
-    if (!irId || !modelDisposition || !humanDisposition) {
+    const humanDisposition =
+      entry.humanDisposition === null
+        ? null
+        : policy.dispositions.includes(entry.humanDisposition as Disposition)
+          ? (entry.humanDisposition as Disposition)
+          : undefined;
+    if (
+      !irId ||
+      !modelDisposition ||
+      humanDisposition === undefined ||
+      (reviewStatus === "provisional" && humanDisposition !== null) ||
+      (reviewStatus === "reviewed" && humanDisposition === null)
+    ) {
       return err("INVALID_SOURCE_NOTE");
     }
     irDispositions.push({ irId, modelDisposition, humanDisposition });
   }
 
-  return ok({ runId, snapshotId, irDispositions, matchedVia });
+  return ok({ runId, snapshotId, reviewStatus, irDispositions, matchedVia });
 };
 
 export type MeasureAssuranceInput = {
@@ -116,17 +128,34 @@ export const measureAssurance = (
     return err("REVIEW_RECORD_MISMATCH");
   }
 
-  const reviewedModelObservations = input.reviewPackage.observations.length;
-  const counts = { supported: 0, unsupported: 0, duplicate: 0, chrome: 0 };
+  const provisional = input.reviewRecord.supportPass === "not-performed";
+  if (provisional !== (input.note.reviewStatus === "provisional")) {
+    return err("REVIEW_RECORD_MISMATCH");
+  }
+
+  const reviewedModelObservations = provisional
+    ? null
+    : input.reviewPackage.observations.length;
+  const counts = {
+    supported: 0,
+    unsupported: 0,
+    duplicate: 0,
+    chrome: 0,
+    unreviewed: 0
+  };
   for (const verdict of input.reviewRecord.verdicts) {
     counts[verdict.verdict] += 1;
   }
 
   const supportDenominator = counts.supported + counts.unsupported;
   const supportFailureRate =
-    supportDenominator > 0 ? counts.unsupported / supportDenominator : null;
+    !provisional && supportDenominator > 0
+      ? counts.unsupported / supportDenominator
+      : null;
   const chromeRate =
-    reviewedModelObservations > 0 ? counts.chrome / reviewedModelObservations : null;
+    reviewedModelObservations !== null && reviewedModelObservations > 0
+      ? counts.chrome / reviewedModelObservations
+      : null;
   const omissionCount =
     input.reviewRecord.omissionPass === "performed"
       ? input.reviewRecord.humanObservations.length
@@ -137,6 +166,9 @@ export const measureAssurance = (
   let overclaims = 0;
   let underclaims = 0;
   for (const disposition of input.note.irDispositions) {
+    if (disposition.humanDisposition === null) {
+      continue;
+    }
     if (disposition.modelDisposition === disposition.humanDisposition) {
       continue;
     }
@@ -192,9 +224,18 @@ export const measureAssurance = (
     }
   }
 
-  const measuredUnderclaims = rowsOnly ? null : underclaims;
+  const measuredUnderclaims = provisional || rowsOnly ? null : underclaims;
 
   const recommendations: string[] = [];
+  if (provisional) {
+    recommendations.push(
+      "The support pass remains unmeasured: observations were not reviewed by a human.",
+      "Chrome rate remains unmeasured: no human support pass classified page chrome.",
+      "The Sweep decision remains unmeasured: no omission pass was performed for this run.",
+      "Tag precision remains unmeasured: no human reviewed observation-to-requirement tags.",
+      "Disposition comparison remains unmeasured: no human requirement dispositions were recorded."
+    );
+  }
   if (supportFailureRate !== null && supportFailureRate > 0.1) {
     recommendations.push(
       "Build the bounded semantic support check: the support failure rate exceeds 0.10."
@@ -205,16 +246,16 @@ export const measureAssurance = (
       "Improve or independently check requirement tagging and coverage: model and human dispositions disagree."
     );
   }
-  if (rowsOnly) {
+  if (!provisional && rowsOnly) {
     recommendations.push(
       "Under-claims are unmeasured: requirement dispositions were judged from the extracted rows alone, so a requirement the model wrongly called silent cannot be detected."
     );
   }
-  if (omissionCount === null) {
+  if (!provisional && omissionCount === null) {
     recommendations.push(
       "The Sweep decision remains unmeasured: no omission pass was performed for this run."
     );
-  } else if (omissionCount >= 2) {
+  } else if (omissionCount !== null && omissionCount >= 2) {
     recommendations.push(
       "Build the blind requirement-driven Sweep stage: the human omission pass found two or more missed observations."
     );
@@ -244,23 +285,26 @@ export const measureAssurance = (
     measuredAt,
     runId: input.note.runId,
     snapshotId: input.note.snapshotId,
+    reviewStatus: input.note.reviewStatus,
     reviewedModelObservations,
     supportFailureRate,
     chromeRate,
     omissionCount,
     irReviewBasis: input.reviewRecord.irReviewBasis,
     dispositionMismatches: {
-      total,
-      overclaims,
+      total: provisional ? null : total,
+      overclaims: provisional ? null : overclaims,
       underclaims: measuredUnderclaims
     },
     quoteFidelityFailures,
     transcriptionFidelity: { exact, normalised, ruleCounts },
     tagPrecision: {
-      tagsProposed,
-      tagsRemoved,
+      tagsProposed: provisional ? null : tagsProposed,
+      tagsRemoved: provisional ? null : tagsRemoved,
       precision:
-        tagsProposed > 0 ? (tagsProposed - tagsRemoved) / tagsProposed : null
+        !provisional && tagsProposed > 0
+          ? (tagsProposed - tagsRemoved) / tagsProposed
+          : null
     },
     recommendations
   });

@@ -9,6 +9,7 @@ import {
   type ExtractCommit,
   type NoteGap,
   type NoteIRDisposition,
+  type NoteObservation,
   type Observation,
   type ProfilePolicy,
   type RejectedObservation,
@@ -26,7 +27,8 @@ export type AssembleError =
   | "IR_DISPOSITION_UNSUPPORTED"
   | "IR_DISPOSITION_SILENT_WITH_EVIDENCE"
   | "MISSING_MODEL_DISPOSITION"
-  | "MISSING_HUMAN_DISPOSITION";
+  | "MISSING_HUMAN_DISPOSITION"
+  | "INVALID_SUPERSESSION";
 
 export type AssembleSourceNoteInput = {
   admitted: AdmittedSource;
@@ -35,6 +37,7 @@ export type AssembleSourceNoteInput = {
   reviewPackage: ReviewPackage;
   reviewRecord: ReviewRecord;
   reviewRecordArtifact: ArtifactBinding;
+  supersededNote?: SourceNote;
   requirements: ApprovedRequirements;
   policy: ProfilePolicy;
   assembledAt: string;
@@ -53,6 +56,7 @@ export const assembleSourceNote = (
   }
 
   const { admitted, commit, reviewPackage, reviewRecord, requirements, policy } = input;
+  const provisional = reviewRecord.supportPass === "not-performed";
   if (
     commit.policyId !== policy.policyId ||
     reviewRecord.policyId !== policy.policyId
@@ -78,25 +82,54 @@ export const assembleSourceNote = (
   ) {
     return err("REVIEW_PACKAGE_MISMATCH");
   }
+  if (
+    (provisional && input.supersededNote) ||
+    (input.supersededNote &&
+      (input.supersededNote.reviewStatus !== "provisional" ||
+        input.supersededNote.snapshotId !== admitted.snapshotId ||
+        input.supersededNote.runId !== admitted.runId ||
+        input.supersededNote.candidateId !== admitted.candidateId))
+  ) {
+    return err("INVALID_SUPERSESSION");
+  }
 
   const verdictByObservation = new Map(
     reviewRecord.verdicts.map((entry) => [entry.observationId, entry])
   );
 
-  const acceptedModelObservations: Observation[] = [];
+  const acceptedModelObservations: NoteObservation[] = [];
   const rejectedObservations: RejectedObservation[] = [];
   for (const observation of reviewPackage.observations) {
     const verdict = verdictByObservation.get(observation.observationId);
     if (!verdict) {
       return err("REVIEW_PACKAGE_MISMATCH");
     }
+    if (verdict.verdict === "unreviewed") {
+      if (!provisional) {
+        return err("REVIEW_PACKAGE_MISMATCH");
+      }
+      const { extractIndexes: _indexes, occurrences: _occurrences, ...unreviewed } =
+        observation;
+      acceptedModelObservations.push({
+        ...unreviewed,
+        reviewVerdict: "unreviewed"
+      });
+      continue;
+    }
     if (verdict.verdict === "supported") {
+      if (provisional) {
+        return err("REVIEW_PACKAGE_MISMATCH");
+      }
       const { extractIndexes: _indexes, occurrences: _occurrences, ...accepted } =
         observation;
       acceptedModelObservations.push(
         verdict.correctedIrIds
-          ? { ...accepted, correctedIrIds: verdict.correctedIrIds }
-          : accepted
+          ? {
+              ...accepted,
+              correctedIrIds: verdict.correctedIrIds,
+              reviewVerdict: "supported"
+            }
+          : { ...accepted, reviewVerdict: "supported" }
       );
       continue;
     }
@@ -113,7 +146,13 @@ export const assembleSourceNote = (
     rejectedObservations.push(rejected);
   }
 
-  const accepted = [...acceptedModelObservations, ...reviewRecord.humanObservations];
+  const accepted: NoteObservation[] = [
+    ...acceptedModelObservations,
+    ...reviewRecord.humanObservations.map((observation) => ({
+      ...observation,
+      reviewVerdict: "supported" as const
+    }))
+  ];
   const effectiveTags = (observation: Observation): string[] =>
     observation.correctedIrIds ?? observation.irIds;
   const inScopeObservations = accepted.filter(
@@ -139,41 +178,42 @@ export const assembleSourceNote = (
     if (!model) {
       return err("MISSING_MODEL_DISPOSITION");
     }
-    if (!human) {
+    if (!provisional && !human) {
       return err("MISSING_HUMAN_DISPOSITION");
     }
 
     const observationIds = accepted
       .filter((entry) => effectiveTags(entry).includes(requirement.irId))
       .map((entry) => entry.observationId);
-    const finalDisposition: Disposition = human.disposition;
-    if (finalDisposition === "silent" && observationIds.length > 0) {
+    const finalDisposition: Disposition | null = human?.disposition ?? null;
+    if (!provisional && finalDisposition === "silent" && observationIds.length > 0) {
       return err("IR_DISPOSITION_SILENT_WITH_EVIDENCE");
     }
-    if (finalDisposition !== "silent" && observationIds.length === 0) {
+    if (!provisional && finalDisposition !== "silent" && observationIds.length === 0) {
       return err("IR_DISPOSITION_UNSUPPORTED");
     }
 
     const entry: NoteIRDisposition = {
       irId: requirement.irId,
       modelDisposition: model.disposition,
-      humanDisposition: human.disposition,
+      humanDisposition: human?.disposition ?? null,
       finalDisposition,
       observationIds
     };
-    if (human.note) {
+    if (human?.note) {
       entry.note = human.note;
     }
     irDispositions.push(entry);
 
-    if (finalDisposition === "partial" || finalDisposition === "silent") {
-      const gap: NoteGap = { irId: requirement.irId, disposition: finalDisposition };
-      if (human.note) {
+    const gapDisposition = finalDisposition ?? model.disposition;
+    if (gapDisposition === "partial" || gapDisposition === "silent") {
+      const gap: NoteGap = { irId: requirement.irId, disposition: gapDisposition };
+      if (human?.note) {
         gap.note = human.note;
       }
       gaps.push(gap);
     }
-    if (finalDisposition === "contradicted") {
+    if (!provisional && finalDisposition === "contradicted") {
       contradictedIrIds.push(requirement.irId);
     }
   }
@@ -206,7 +246,9 @@ export const assembleSourceNote = (
 
   const caveats = [
     ...admitted.sourceLimitations,
-    ...reviewRecord.assessment.limitations,
+    ...(reviewRecord.assessment && "limitations" in reviewRecord.assessment
+      ? reviewRecord.assessment.limitations
+      : []),
     ...contradictedIrIds.map(
       (irId) => `The source contradicts the presupposition of ${irId}.`
     ),
@@ -227,17 +269,24 @@ export const assembleSourceNote = (
       `${normalisedMatches} accepted observations were located under policy ${policy.policyId} quote-match rules; every stored anchor remains byte-exact against the canonical segment.`
     );
   }
-  if (reviewRecord.omissionPass === "not-performed") {
+  if (provisional) {
+    caveats.push(
+      "Observations not reviewed by a human; evidence in this note is provisional."
+    );
+  } else if (reviewRecord.omissionPass === "not-performed") {
     caveats.push(
       "No omission pass was performed: the coverage picture is the model's alone and may miss source material relevant to an approved requirement."
     );
   }
-  if (reviewRecord.irReviewBasis === "rows-only") {
+  if (!provisional && reviewRecord.irReviewBasis === "rows-only") {
     caveats.push(
       "Requirement dispositions were judged from the extracted observations alone, not from a fresh reading of the source, so a requirement wrongly recorded as silent would not have been detected."
     );
   }
-  if (reviewRecord.assessment.dependency.kind !== "original") {
+  if (
+    "dependency" in reviewRecord.assessment &&
+    reviewRecord.assessment.dependency.kind !== "original"
+  ) {
     caveats.push(
       `Reporting dependency is ${
         reviewRecord.assessment.dependency.kind
@@ -257,6 +306,11 @@ export const assembleSourceNote = (
     candidateId: admitted.candidateId,
     researchQuestionId: admitted.researchQuestion.id,
     sourceDocumentId: admitted.sourceDocument.id,
+    sourceIdentity: admitted.sourceIdentity,
+    reviewStatus: provisional ? "provisional" : "reviewed",
+    ...(input.supersededNote
+      ? { supersedesNoteId: input.supersededNote.id }
+      : {}),
     lineage: {
       ...commit.lineage,
       contract: commit.contract,

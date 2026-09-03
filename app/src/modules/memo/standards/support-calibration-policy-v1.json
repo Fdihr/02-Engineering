@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "support-calibration-policy-v1",
+  "id": "support-calibration-default-v1",
+  "version": 1,
+  "sampleSizePerMemo": 5,
+  "minimumSampledVerdicts": 30,
+  "minimumMemos": 6,
+  "maximumDisagreementRate": 0.05,
+  "thresholdStatus": "provisional-untested",
+  "unvalidatedLimitation": "support check: model-only, unvalidated"
+}

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "outlet-identity-table-v1",
+  "id": "geopolitical-outlets-v1",
+  "version": 1,
+  "outlets": [
+    {
+      "outletId": "outlet-nyt",
+      "canonicalName": "The New York Times",
+      "aliases": ["NYT", "New York Times"],
+      "domains": ["nytimes.com"]
+    },
+    {
+      "outletId": "outlet-nv",
+      "canonicalName": "NV",
+      "aliases": ["New Voice"],
+      "domains": ["nv.ua"]
+    },
+    {
+      "outletId": "outlet-alpha",
+      "canonicalName": "Alpha News",
+      "aliases": ["Alpha"],
+      "domains": ["alpha.example"]
+    },
+    {
+      "outletId": "outlet-beta",
+      "canonicalName": "Beta News",
+      "aliases": ["Beta"],
+      "domains": ["beta.example"]
+    },
+    {
+      "outletId": "outlet-synthetic",
+      "canonicalName": "Synthetic Relay",
+      "aliases": ["Synthetic Note"],
+      "domains": ["synthetic.example"]
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "synthesis-profile-policy-v1",
+  "id": "geopolitical-synthesis-v1",
+  "version": 1,
+  "outletIdentityTableId": "geopolitical-outlets-v1",
+  "coverageCaveatPrefixes": [
+    "Observations not reviewed by a human",
+    "No omission pass was performed",
+    "Requirement dispositions were judged from the extracted observations alone"
+  ],
+  "claimKindRules": [
+    {
+      "id": "kind-event",
+      "supportingObservationKind": "event",
+      "permittedClaimKinds": ["reported-fact"]
+    },
+    {
+      "id": "kind-statement",
+      "supportingObservationKind": "statement",
+      "permittedClaimKinds": ["statement"]
+    },
+    {
+      "id": "kind-assessment",
+      "supportingObservationKind": "assessment",
+      "permittedClaimKinds": ["statement", "analytic-assessment"]
+    },
+    {
+      "id": "kind-forecast",
+      "supportingObservationKind": "forecast",
+      "permittedClaimKinds": ["statement", "analytic-forecast"]
+    }
+  ],
+  "confidenceCeilingRules": [
+    { "id": "ceiling-zero-fact", "independentSourceCount": "zero-or-unknown", "minimumSourceReliability": "any", "claimKind": "reported-fact", "ceiling": "unknown", "testStatus": "untested" },
+    { "id": "ceiling-zero-statement", "independentSourceCount": "zero-or-unknown", "minimumSourceReliability": "any", "claimKind": "statement", "ceiling": "unknown", "testStatus": "untested" },
+    { "id": "ceiling-zero-assessment", "independentSourceCount": "zero-or-unknown", "minimumSourceReliability": "any", "claimKind": "analytic-assessment", "ceiling": "unknown", "testStatus": "untested" },
+    { "id": "ceiling-zero-forecast", "independentSourceCount": "zero-or-unknown", "minimumSourceReliability": "any", "claimKind": "analytic-forecast", "ceiling": "unknown", "testStatus": "untested" },
+
+    { "id": "ceiling-one-limited-fact", "independentSourceCount": "one", "minimumSourceReliability": "unknown-or-limited", "claimKind": "reported-fact", "ceiling": "low", "testStatus": "tested" },
+    { "id": "ceiling-one-limited-statement", "independentSourceCount": "one", "minimumSourceReliability": "unknown-or-limited", "claimKind": "statement", "ceiling": "low", "testStatus": "untested" },
+    { "id": "ceiling-one-limited-assessment", "independentSourceCount": "one", "minimumSourceReliability": "unknown-or-limited", "claimKind": "analytic-assessment", "ceiling": "low", "testStatus": "untested" },
+    { "id": "ceiling-one-limited-forecast", "independentSourceCount": "one", "minimumSourceReliability": "unknown-or-limited", "claimKind": "analytic-forecast", "ceiling": "low", "testStatus": "untested" },
+
+    { "id": "ceiling-one-established-fact", "independentSourceCount": "one", "minimumSourceReliability": "established", "claimKind": "reported-fact", "ceiling": "moderate", "testStatus": "tested" },
+    { "id": "ceiling-one-established-statement", "independentSourceCount": "one", "minimumSourceReliability": "established", "claimKind": "statement", "ceiling": "moderate", "testStatus": "untested" },
+    { "id": "ceiling-one-established-assessment", "independentSourceCount": "one", "minimumSourceReliability": "established", "claimKind": "analytic-assessment", "ceiling": "low", "testStatus": "untested" },
+    { "id": "ceiling-one-established-forecast", "independentSourceCount": "one", "minimumSourceReliability": "established", "claimKind": "analytic-forecast", "ceiling": "low", "testStatus": "untested" },
+
+    { "id": "ceiling-two-limited-fact", "independentSourceCount": "two-plus", "minimumSourceReliability": "unknown-or-limited", "claimKind": "reported-fact", "ceiling": "low", "testStatus": "untested" },
+    { "id": "ceiling-two-limited-statement", "independentSourceCount": "two-plus", "minimumSourceReliability": "unknown-or-limited", "claimKind": "statement", "ceiling": "low", "testStatus": "untested" },
+    { "id": "ceiling-two-limited-assessment", "independentSourceCount": "two-plus", "minimumSourceReliability": "unknown-or-limited", "claimKind": "analytic-assessment", "ceiling": "low", "testStatus": "untested" },
+    { "id": "ceiling-two-limited-forecast", "independentSourceCount": "two-plus", "minimumSourceReliability": "unknown-or-limited", "claimKind": "analytic-forecast", "ceiling": "low", "testStatus": "untested" },
+
+    { "id": "ceiling-two-established-fact", "independentSourceCount": "two-plus", "minimumSourceReliability": "established", "claimKind": "reported-fact", "ceiling": "high", "testStatus": "tested" },
+    { "id": "ceiling-two-established-statement", "independentSourceCount": "two-plus", "minimumSourceReliability": "established", "claimKind": "statement", "ceiling": "high", "testStatus": "untested" },
+    { "id": "ceiling-two-established-assessment", "independentSourceCount": "two-plus", "minimumSourceReliability": "established", "claimKind": "analytic-assessment", "ceiling": "moderate", "testStatus": "untested" },
+    { "id": "ceiling-two-established-forecast", "independentSourceCount": "two-plus", "minimumSourceReliability": "established", "claimKind": "analytic-forecast", "ceiling": "moderate", "testStatus": "untested" }
+  ]
+}

@@ -3,6 +3,7 @@ import { assembleSourceNote } from "../modules/assurance/assemble.js";
 import { createAssuranceEvent } from "../modules/assurance/events.js";
 import { validateReviewPackage } from "../modules/assurance/review/package.js";
 import { validateReviewRecord } from "../modules/assurance/review/record.js";
+import { validateSynthesisSourceNote } from "../modules/synthesis/source-note.js";
 import {
   appendAssuranceEvent,
   assuranceRunRoot,
@@ -17,7 +18,7 @@ import {
 } from "./assurance-io.js";
 
 const usage =
-  "Usage: npm run assemble:assurance -- <approved-evidence-snapshot.json> <extract-commit.json> <review-record.json>";
+  "Usage: npm run assemble:assurance -- <approved-evidence-snapshot.json> <extract-commit.json> <review-record.json> [superseded-provisional-note.json]";
 
 const main = async (): Promise<void> => {
   const assembledAt = new Date().toISOString();
@@ -28,7 +29,7 @@ const main = async (): Promise<void> => {
   let outputArtifactRef: string | undefined;
 
   try {
-    const [snapshotPathValue, commitPathValue, recordPathValue, ...extra] =
+    const [snapshotPathValue, commitPathValue, recordPathValue, supersededPathValue, ...extra] =
       process.argv.slice(2);
     if (!snapshotPathValue || !commitPathValue || !recordPathValue || extra.length > 0) {
       throw new Error(usage);
@@ -64,6 +65,20 @@ const main = async (): Promise<void> => {
       throw new Error(`Review package rejected: ${reviewPackage.error}`);
     }
 
+    let supersededNote;
+    if (supersededPathValue) {
+      const supersededArtifact = await loadRunArtifact(
+        runRoot,
+        supersededPathValue,
+        "Superseded provisional note"
+      );
+      const parsed = validateSynthesisSourceNote(supersededArtifact.value);
+      if (!parsed.ok) {
+        throw new Error(`Superseded note rejected: ${parsed.error}`);
+      }
+      supersededNote = parsed.value;
+    }
+
     const note = assembleSourceNote({
       admitted,
       commit: context.commit,
@@ -71,6 +86,7 @@ const main = async (): Promise<void> => {
       reviewPackage: reviewPackage.value,
       reviewRecord: reviewRecord.value,
       reviewRecordArtifact: recordArtifact.binding,
+      ...(supersededNote ? { supersededNote } : {}),
       requirements: context.requirements,
       policy: context.policy,
       assembledAt
@@ -82,7 +98,7 @@ const main = async (): Promise<void> => {
     const stageDir = stageDirectory(runRoot, runId, snapshotId);
     await ensureDirectory(stageDir);
     outputArtifactRef = await writeJsonOnce(
-      resolve(stageDir, "source-note.json"),
+      resolve(stageDir, `source-note-${note.value.reviewStatus}.json`),
       note.value
     );
 
@@ -103,6 +119,7 @@ const main = async (): Promise<void> => {
     console.log(`Run: ${runId}`);
     console.log(`Snapshot: ${snapshotId}`);
     console.log(`Note: ${note.value.id}`);
+    console.log(`Review status: ${note.value.reviewStatus}`);
     console.log(`In-scope observations: ${note.value.inScopeObservations.length}`);
     console.log(`Out-of-IR observations: ${note.value.outOfIrObservations.length}`);
     console.log(`Gaps: ${note.value.gaps.length}`);

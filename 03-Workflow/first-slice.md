@@ -1,6 +1,6 @@
 # Implemented Workflow Baseline
 
-Status: Panel 1 is complete and Panel 2 has a committed NV extraction plus checksum-bound review package. Human review was deliberately deferred on 2026-09-03, so no NV source note or assurance metrics exist and the extract cannot enter Panel 3.
+Status: Panel 1 is complete. Panel 2 exercised provisional review and then completed a human rows-only support pass: all 20 NV observations were supported, the reviewed note supersedes the provisional note, and reviewed metrics are recorded. A reviewed-only Build envelope exists but claim recording awaits a bounded key-claim selection rule.
 
 ## Product boundary
 
@@ -208,11 +208,39 @@ This keeps two different errors apart. A quote that does not support its text is
 
 The active contract version and the exact check definitions an attempt was judged under are recorded in the request, the commit, and the source note lineage.
 
-### Deferred human review boundary
+### Provisional human review boundary
 
-The reviewer elected to defer the reduced rows-only pass because its interaction cost was disproportionate at this POC stage. No review response, review record, source note, or metrics were created, and no tentative chat answer is reviewer authority. The immutable extract and review package remain available for a later versioned review, but worksheet exposure means that review cannot claim a blind omission pass.
+The reviewer elected to defer the reduced rows-only pass because its interaction cost was disproportionate at this POC stage. `supportPass: "not-performed"` now records that state without verdicts, dispositions, human observations, or assessment. Code derives `unreviewed` entries for all package observations, retains model dispositions with null human and final dispositions, and writes a provisional note with an explicit caveat.
 
-Development may proceed on the deterministic Panel 3 Build envelope with synthetic source notes. A live NV Build remains blocked until `record:assurance-review` and `assemble:assurance` produce a valid checksum-bound source note. Build must reject the extract commit and review package as inputs.
+The NV provisional note contains 19 in-scope observations and one out-of-IR observation. Its five human-review measurements are null with unmeasured warnings. The Build envelope accepts provisional notes, propagates their caveats, marks downstream claims provisional, and derives `limitedEvidence`; deterministic publication verification rejects provisional lineage. A later reviewed note supersedes rather than edits the provisional note, and rebuilt downstream artifacts carry `supersedesNoteId`.
+
+### Completed human support pass
+
+Reviewer `FDIHR` later marked all 20 rows supported, removed no tags, approved covered/partial/silent dispositions for all six requirements, and supplied a source assessment with machine translation disclosed. The reviewed note records direct access, established track record, mixed New York Times/WSJ dependency, and supersedes the provisional note. Reviewed metrics are support failure `0`, chrome `0`, tag precision `1`, and disposition mismatches `0`; omission and underclaims remain null in rows-only mode.
+
+The first reviewed-only Build preparation correctly removed synthetic lineage and retained `limitedEvidence: true` for one-source evidence and silent `ir-06`. Its exploratory model invocation proposed all 20 observations as separate claims. That response was not recorded because no active policy bounds key-claim count or selection; committing it would make the short writer contract impossible. Add that deterministic bound before the next reviewed Build invocation.
+
+Synthetic notes now use a distinct non-upgradable `synthetic` status. Any chain consuming one is synthetic, every supported claim is marked synthetic and provisional, and publication fails with `SYNTHETIC_SOURCE_LINEAGE`. The human review policy remains the four human verdicts; `unreviewed` is a separately enumerated controller state.
+
+The first live Build request used 21 note-qualified aliases. Attempt 1 failed exact response-schema validation. Diagnosis of attempt 2 found no table bug: its reported-fact claims used permitted direct-event observations, while claim 4 omitted `attributedTo` for relayed statements and claim 6 upgraded attributed statements to `analytic-assessment` without `analyticRationale`. Stored-proposal revalidation was forbidden.
+
+Human-authorized request v2 rendered each alias's permitted kinds and single-support confidence ceilings, exact response-shape text, and a content-free structural example. Attempt 3 respected kind and confidence allowances but still renamed `statement` and `supportAliases` and omitted required arrays, so it failed `INVALID_BUILD_RESPONSE`. All three responses and two diagnoses remain immutable ignored artifacts; content-free events bind the failures and diagnoses, and no Build record or claim was committed.
+
+Diagnosis showed attempts 1 and 3 shared the clerical `text` and `support` field pattern. Request v3 moved that work into a strict enumerated alias parser, allowed only known single-key wrappers or a bare array, removed assumptions and alternatives from Build, and generated its structural example from the accepted parser shape. Unknown fields, alias collisions, and semantic substitutions still fail.
+
+Human-authorized attempt 4 committed four Build claims. Every claim is provisional and capped at low confidence. None uses the synthetic note as support, but consuming that note keeps the overall chain `reviewStatus: "synthetic"`; `limitedEvidence` is true. Diagnosis 003 records the resolved clerical failure class. Build claims remain proposals for Challenge and human Adjudicate, not sealed facts.
+
+One Challenge invocation then applied six checks independently to all four claims. The response contained all 24 answers but represented verdicts as `challenge: null|object`; the original parser rejected it. Diagnosis and human authorization permitted only that enumerated clerical normalization, after which the unchanged response committed. Seven challenges were raised: four hidden single-source-dependence findings and three plausible alternatives. Every claim is contested, all seven challenges remain open, adjudication status is `not-performed`, upheld-over-raised is null, review status is synthetic, and `limitedEvidence` remains true.
+
+The constrained writer then consumed only the checksum-bound Build, Challenge, provisional adjudication, approved question, and handwritten `memo-standard-v0`. The model supplied one BLUF placement and four claim-linked key-judgment texts. Code produced the final BLUF counts, citations, contested/open status, low confidence, three hypothesis alternatives, three gaps including silent `ir-06`, sourcing summary, limitations, and information cutoff.
+
+Final-Markdown verification exposed and corrected a deterministic length defect without changing the stored writer response. The first 391-word rendering is retained and explicitly invalidated; the superseding memo is 342 words and records `supersedesMemoId`. Content checks pass, but publication is blocked by synthetic lineage, provisional evidence, the v0 standard, and unavailable approved-scope lineage. This blocked gate is the intended end state of the provisional POC.
+
+### First observed lineage-enforcement proof
+
+During the provisional run, an edit to the checksum-bound v2 profile policy caused `record:assurance-review` to reject the run before assembly. Restoring the exact v2 bytes restored its committed checksum, while future policy behavior moved to v3. This demonstrated on a real artifact chain that policy lineage prevents governing rules from changing mid-run.
+
+Panel 3 also required publisher identity for derivative reporting. Rather than introduce a new manual field, the note now projects the already validated `source.publisherHost` from evidence admission.
 
 ### Open Panel 1 finding
 

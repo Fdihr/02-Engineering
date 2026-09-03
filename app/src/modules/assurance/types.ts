@@ -17,10 +17,10 @@ export const REVIEW_PACKAGE_SCHEMA_VERSION =
 export const REVIEW_RESPONSE_SCHEMA_VERSION =
   "source-assurance-review-response-v1" as const;
 export const REVIEW_RECORD_SCHEMA_VERSION =
-  "source-assurance-review-record-v1" as const;
-export const SOURCE_NOTE_SCHEMA_VERSION = "source-intelligence-note-v1" as const;
+  "source-assurance-review-record-v2" as const;
+export const SOURCE_NOTE_SCHEMA_VERSION = "source-intelligence-note-v2" as const;
 export const ASSURANCE_METRICS_SCHEMA_VERSION =
-  "source-assurance-metrics-v1" as const;
+  "source-assurance-metrics-v2" as const;
 export const ATTEMPT_AUTHORISATION_SCHEMA_VERSION =
   "source-assurance-attempt-authorisation-v1" as const;
 
@@ -37,6 +37,8 @@ export type DateRole =
   | "unknown";
 export type Disposition = "covered" | "partial" | "silent" | "contradicted";
 export type ReviewVerdict = "supported" | "unsupported" | "duplicate" | "chrome";
+export type ControllerReviewState = "unreviewed";
+export type ObservationReviewVerdict = ReviewVerdict | ControllerReviewState;
 
 /** Closed set of transformations permitted when locating a proposed quote. */
 export type QuoteMatchRule =
@@ -56,6 +58,19 @@ export type ProfilePolicyLimits = {
   maxAttempts: number;
 };
 
+export type AdmissionPolicy = {
+  policyId: string;
+  version: number;
+  mode: "human" | "controller";
+  autoAdmit: {
+    relevance: "relevant";
+    requireCodeValidatedAnchors: true;
+    readiness: Array<"ready" | "qualified">;
+    rejectSynthetic: true;
+    requireWithinBudget: true;
+  };
+};
+
 export type ProfilePolicy = {
   policyId: string;
   claimKinds: ClaimKind[];
@@ -64,6 +79,7 @@ export type ProfilePolicy = {
   dispositions: Disposition[];
   reviewVerdicts: ReviewVerdict[];
   quoteMatchRules: QuoteMatchRule[];
+  admissionPolicy: AdmissionPolicy;
   limits: ProfilePolicyLimits;
 };
 
@@ -110,6 +126,9 @@ export type AdmittedSource = {
   snapshot: ArtifactBinding;
   evidenceDecision: ArtifactBinding;
   sourceDocumentArtifact: ArtifactBinding;
+  sourceIdentity:
+    | { kind: "publisher"; publisherHost: string }
+    | { kind: "unknown" };
   researchQuestion: ApprovedResearchQuestion;
   sourceDocument: SourceDocument;
   sourceLimitations: string[];
@@ -198,6 +217,9 @@ export type Assessment = {
   };
   limitations: string[];
 };
+
+export type NotAssessed = { status: "not-assessed" };
+export type ReviewAssessment = Assessment | NotAssessed;
 
 export type AssuranceLineage = {
   snapshot: ArtifactBinding;
@@ -296,7 +318,7 @@ export type ReviewPackage = {
 
 export type ReviewVerdictEntry = {
   observationId: string;
-  verdict: ReviewVerdict;
+  verdict: ObservationReviewVerdict;
   note?: string;
   duplicateOf?: string;
   /** Supported observations only: the proposed tags minus those the observation does not answer. */
@@ -311,19 +333,21 @@ export type IRReviewEntry = {
 
 /** `not-performed` keeps an unmeasured omission count out of the metrics as null, never zero. */
 export type OmissionPass = "performed" | "not-performed";
+export type SupportPass = "performed" | "not-performed";
 
 /** Rows-only dispositions cannot detect an under-claim, because nobody read the source. */
-export type IRReviewBasis = "rows-only" | "full-source";
+export type IRReviewBasis = "not-performed" | "rows-only" | "full-source";
 
 export type ReviewResponse = {
   packageSha256: string;
   reviewerId: string;
   reviewedAt: string;
+  supportPass: SupportPass;
   omissionPass: OmissionPass;
   verdicts: ReviewVerdictEntry[];
   humanObservations: ExtractObservation[];
   irReview: IRReviewEntry[];
-  assessment: Assessment;
+  assessment?: ReviewAssessment;
 };
 
 export type ReviewRecord = {
@@ -335,6 +359,7 @@ export type ReviewRecord = {
   policyId: string;
   reviewerId: string;
   reviewedAt: string;
+  supportPass: SupportPass;
   omissionPass: OmissionPass;
   irReviewBasis: IRReviewBasis;
   reviewPackage: ArtifactBinding;
@@ -342,23 +367,27 @@ export type ReviewRecord = {
   verdicts: ReviewVerdictEntry[];
   humanObservations: Observation[];
   irReview: IRReviewEntry[];
-  assessment: Assessment;
+  assessment: ReviewAssessment;
 };
 
 export type NoteIRDisposition = {
   irId: string;
   modelDisposition: Disposition;
-  humanDisposition: Disposition;
-  finalDisposition: Disposition;
+  humanDisposition: Disposition | null;
+  finalDisposition: Disposition | null;
   observationIds: string[];
   note?: string;
 };
 
 export type RejectedObservation = {
   observationId: string;
-  verdict: Exclude<ReviewVerdict, "supported">;
+  verdict: Exclude<ReviewVerdict, "supported" | "unreviewed">;
   note?: string;
   duplicateOf?: string;
+};
+
+export type NoteObservation = Observation & {
+  reviewVerdict: "supported" | ControllerReviewState;
 };
 
 export type AttributionSummaryEntry = {
@@ -383,6 +412,9 @@ export type SourceNote = {
   candidateId: string;
   researchQuestionId: string;
   sourceDocumentId: string;
+  sourceIdentity: AdmittedSource["sourceIdentity"];
+  reviewStatus: "provisional" | "reviewed" | "synthetic";
+  supersedesNoteId?: string;
   lineage: AssuranceLineage & {
     contract: ExtractContract;
     extractCommit: ArtifactBinding;
@@ -391,11 +423,11 @@ export type SourceNote = {
     reviewRecord: ArtifactBinding;
     invocation: ExtractInvocation;
   };
-  inScopeObservations: Observation[];
-  outOfIrObservations: Observation[];
+  inScopeObservations: NoteObservation[];
+  outOfIrObservations: NoteObservation[];
   rejectedObservations: RejectedObservation[];
   irDispositions: NoteIRDisposition[];
-  assessment: Assessment;
+  assessment: ReviewAssessment;
   attributionSummary: AttributionSummaryEntry[];
   caveats: string[];
   gaps: NoteGap[];
@@ -429,14 +461,15 @@ export type AssuranceMetrics = {
   measuredAt: string;
   runId: string;
   snapshotId: string;
-  reviewedModelObservations: number;
+  reviewStatus: "provisional" | "reviewed";
+  reviewedModelObservations: number | null;
   supportFailureRate: number | null;
   chromeRate: number | null;
   omissionCount: number | null;
   irReviewBasis: IRReviewBasis;
   dispositionMismatches: {
-    total: number;
-    overclaims: number;
+    total: number | null;
+    overclaims: number | null;
     underclaims: number | null;
   };
   quoteFidelityFailures: number;
@@ -446,8 +479,8 @@ export type AssuranceMetrics = {
     ruleCounts: Record<string, number>;
   };
   tagPrecision: {
-    tagsProposed: number;
-    tagsRemoved: number;
+    tagsProposed: number | null;
+    tagsRemoved: number | null;
     precision: number | null;
   };
   recommendations: string[];

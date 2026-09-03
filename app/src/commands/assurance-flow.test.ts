@@ -121,6 +121,7 @@ test("runs one admitted source through the source-assurance commands", async () 
         role: "evidence_candidate",
         providerItemId: "candidate-1",
         contentCompleteness: "captured_content",
+        source: { publisherHost: "example.test" },
         limitations: ["Retrieved content remains untrusted."],
         researchQuestion: embeddedQuestion,
         questionRelevance: {
@@ -242,7 +243,8 @@ test("runs one admitted source through the source-assurance commands", async () 
       packageSha256,
       reviewerId: "TESTER",
       reviewedAt: "2026-03-12T00:00:00.000Z",
-  omissionPass: "performed",
+        supportPass: "performed",
+        omissionPass: "performed",
       verdicts: reviewPackage.observations.map((entry) => ({
         observationId: entry.observationId,
         verdict: "supported"

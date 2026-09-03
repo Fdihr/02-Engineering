@@ -1,6 +1,7 @@
 import { err, ok, type Result } from "../../core/result.js";
 import type {
   AttributionKind,
+  AdmissionPolicy,
   ClaimKind,
   DateRole,
   Disposition,
@@ -57,12 +58,79 @@ const POLICY_KEYS = [
   "dispositions",
   "reviewVerdicts",
   "quoteMatchRules",
+  "admissionPolicy",
   "limits"
 ];
 
 const REQUIRED_POLICY_KEYS = POLICY_KEYS.filter(
-  (key) => key !== "quoteMatchRules"
+  (key) => key !== "quoteMatchRules" && key !== "admissionPolicy"
 );
+
+const defaultHumanAdmissionPolicy = (policyId: string): AdmissionPolicy => ({
+  policyId: `${policyId}-admission-human-v1`,
+  version: 1,
+  mode: "human",
+  autoAdmit: {
+    relevance: "relevant",
+    requireCodeValidatedAnchors: true,
+    readiness: ["ready", "qualified"],
+    rejectSynthetic: true,
+    requireWithinBudget: true
+  }
+});
+
+const readAdmissionPolicy = (
+  value: unknown,
+  profilePolicyId: string
+): AdmissionPolicy | undefined => {
+  if (value === undefined) {
+    return defaultHumanAdmissionPolicy(profilePolicyId);
+  }
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ["policyId", "version", "mode", "autoAdmit"]) ||
+    !isRecord(value.autoAdmit) ||
+    !hasOnlyKeys(value.autoAdmit, [
+      "relevance",
+      "requireCodeValidatedAnchors",
+      "readiness",
+      "rejectSynthetic",
+      "requireWithinBudget"
+    ])
+  ) {
+    return undefined;
+  }
+  const policyId = boundedString(value.policyId, 120);
+  const version = positiveInteger(value.version);
+  const mode = value.mode === "human" || value.mode === "controller"
+    ? value.mode
+    : undefined;
+  const readiness = sameValues(value.autoAdmit.readiness, ["ready", "qualified"]);
+  if (
+    !policyId ||
+    !version ||
+    !mode ||
+    !readiness ||
+    value.autoAdmit.relevance !== "relevant" ||
+    value.autoAdmit.requireCodeValidatedAnchors !== true ||
+    value.autoAdmit.rejectSynthetic !== true ||
+    value.autoAdmit.requireWithinBudget !== true
+  ) {
+    return undefined;
+  }
+  return {
+    policyId,
+    version,
+    mode,
+    autoAdmit: {
+      relevance: "relevant",
+      requireCodeValidatedAnchors: true,
+      readiness,
+      rejectSynthetic: true,
+      requireWithinBudget: true
+    }
+  };
+};
 
 /** Absent rules mean exact-only matching; anything outside the closed set is rejected. */
 const readQuoteMatchRules = (value: unknown): QuoteMatchRule[] | undefined => {
@@ -106,6 +174,9 @@ export const validateProfilePolicy = (
   const dispositions = sameValues(value.dispositions, DISPOSITIONS);
   const reviewVerdicts = sameValues(value.reviewVerdicts, REVIEW_VERDICTS);
   const quoteMatchRules = readQuoteMatchRules(value.quoteMatchRules);
+  const admissionPolicy = policyId
+    ? readAdmissionPolicy(value.admissionPolicy, policyId)
+    : undefined;
   if (
     !policyId ||
     !claimKinds ||
@@ -113,7 +184,8 @@ export const validateProfilePolicy = (
     !dateRoles ||
     !dispositions ||
     !reviewVerdicts ||
-    !quoteMatchRules
+    !quoteMatchRules ||
+    !admissionPolicy
   ) {
     return err("INVALID_POLICY_VALUES");
   }
@@ -157,6 +229,7 @@ export const validateProfilePolicy = (
     dispositions,
     reviewVerdicts,
     quoteMatchRules,
+    admissionPolicy,
     limits: {
       quoteMinUtf8Bytes,
       quoteMaxUtf8Bytes,

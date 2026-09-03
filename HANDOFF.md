@@ -1,7 +1,7 @@
 # CTI Engineering Handoff
 
 Date: 2026-09-03
-Status: Panel 2 Extract committed for the NV snapshot under contract v2; human review deliberately deferred, Panel 3 contract corrected, and deterministic Build preparation is next
+Status: Human NV support review complete; reviewed note supersedes provisional note, reviewed metrics recorded, and reviewed-only Build awaits a bounded claim-selection rule
 Workspace root: `CTI/`
 Source domain: Agentic App Engineering
 Authority class: Current implementation direction and next-action handoff
@@ -11,6 +11,12 @@ Authority class: Current implementation direction and next-action handoff
 Open this folder as the VS Code workspace:
 
 `C:\Users\FDIHR\OneDrive - Vestas Wind Systems A S\Cyberstrategy, Risk and OT - General\Strategic Risk Management\CTI`
+
+At the start of every terminal session, recreate the short path before deep run access:
+
+```powershell
+subst R: /D 2>$null; subst R: "C:\Users\FDIHR\OneDrive - Vestas Wind Systems A S\Cyberstrategy, Risk and OT - General\Strategic Risk Management\CTI\02-Engineering"; Set-Location R:\
+```
 
 The new agent must read, in order:
 
@@ -33,19 +39,45 @@ Cyber terminology, CTI-specific quality policy, Vestas context, and organization
 
 The intended shape is:
 
-1. Define and approve research questions.
+1. Approve memo request, scope, organizational-relevance choice, research questions, and IRs at one memo-level intent gate.
 2. Collect question-bound material from Seerist.
 3. Losslessly canonicalize each captured source into stable, content-addressed segments.
 4. Use bounded AI reasoning to assess each canonical source against the approved question.
 5. Deterministically validate exact anchors and persist only proposed or pending candidates.
-6. Review and approve evidence with a human decision.
-7. Analyze each approved source through independent Find, blind Sweep, Judge, and Write.
+6. Admit relevant, ready, anchor-valid, non-synthetic evidence under an approved controller policy; push partial, uncertain, or failed work to the exception queue.
+7. Analyze each admitted source through independent Find, blind Sweep, Judge, and Write.
 8. Synthesize claims across sources.
 9. Write and verify a memo.
-10. Require human approval before publication.
+10. Require human publication approval with lineage drill-down and a policy-sized sampled observation audit.
 11. Maintain an event log throughout the run.
 
 This shape is provisional. Real provider behavior and working scripts should determine the final contracts.
+
+## Human operating model decision
+
+Human effort is per memo, not per source. Exactly four surfaces exist:
+
+1. **Intent gate:** memo request, scope purpose/audience/geography/time, organizational-relevance choice, questions, and IR decomposition. Nothing is collected before it.
+2. **Publication gate:** memo review, lineage drill-down, approve/reject/targeted revision, and a random observation sample (`N` from policy, default `5`) whose verdicts and drill-down clicks calibrate the automated support check.
+3. **Exception queue:** pushed, never polled; empty is normal. The four kinds are `uncertain-relevance`, `unresolved-reconciliation`, `key-judgement-contest`, and `bounded-failure`.
+4. **Governance:** organizational context, memo standards, profile policies, outlet identities, and reliability tables approved outside the per-memo loop; every run records versions and checksums.
+
+AI never admits evidence. Deterministic code may admit under an approved policy. The target auto-admit rule is: relevance exactly `relevant`, anchors code-validated, readiness passed, not synthetic, and within budget. The snapshot records `admittedBy: "controller:<policyId>"`. `partially-relevant` and `uncertain` route to the exception queue.
+
+The POC justifies this decision because downstream guards have fired on real NV material: immutable lineage rejected a changed policy, dependency collapse exposed shared origins, kind bounds rejected inflation, confidence ceilings held, Challenge kept alternatives visible, deterministic verification invalidated an overlong memo, and publication blocking prevented synthetic/provisional output. Code admission changes routine state authority; it does not give admission authority to AI.
+
+### Interim stand-ins
+
+| Current interim stand-in | Named replacement | Trigger or prerequisite |
+| --- | --- | --- |
+| Human source-support verdicts | Automated bounded support check | Publication calibration reaches approved sample/memo/disagreement thresholds |
+| Human omission pass | Blind `Sweep` | Complete canonical content, approved policy, and bounded model budget |
+| Human source assessment | `Assess` plus outlet reliability table | Approved outlet identity and reliability governance artifacts |
+| Human adjudication | `Adjudicate` plus key-judgment escalation | Deterministic change checks; only key-judgment-changing contests escalate |
+| Manual command choreography | `run:next` | Deterministic readiness and next-action status for each implemented stage |
+| Manual Copilot bridge | Foundry adapter | Approved endpoint, deployment, authentication, API version, region, and retention |
+
+Until calibration reaches the provisional, untested threshold of 30 sampled verdicts across 6 memos at no more than 5% disagreement, memo limitations state `support check: model-only, unvalidated`. The threshold and default sample size are governance policy, not runtime judgment.
 
 ## KISS decision
 
@@ -56,11 +88,11 @@ Build small scripts and grow the architecture only when working behavior require
 1. Seerist reality-check probe (complete).
 2. Explicit memo-scope and research-question approval plus bounded Seerist collection (complete).
 3. One-item evidence intake and provider-role classification (complete).
-4. Explicit human evidence admission (complete).
+4. Explicit human evidence admission compatibility baseline (complete; default remains human until a new policy version selects controller mode).
 5. One exact-URL source retrieval from an approved collection lead (implemented and checked live).
 6. One lossless canonical source document with exact anchor validation (implemented and checked on the retrieved NV source).
 7. One bounded AI source-to-question relevance assessment plus deterministic proposal validation (implemented as an interactive Copilot PoC).
-8. Convert one validated positive assessment into a pending candidate and exercise human evidence admission (complete; real NV snapshot approved).
+8. Convert one validated positive assessment into a pending candidate and exercise the compatibility human admission path (complete; real NV snapshot approved).
 9. One-source `Find -> Sweep -> Judge -> Write` from the approved NV snapshot.
 10. Sequential multi-source runner.
 11. Cross-source claim synthesis.
@@ -107,7 +139,7 @@ The active intake boundary is `02-Engineering/02-Contracts/provider-item-role-an
 
 ## Completed slice: approved research intent and bounded collection
 
-Memo scope and research questions now cross separate explicit human approval boundaries before production provider access. Each canonical artifact is immutable and human-attributed. Question approval verifies approved-scope lineage and bounded geography/time; collection and discovery reject unscoped questions before credential access. One Seerist operation must match the approved question ID and run ID and may target only the proven `GET /v1/wod` endpoint.
+Current commands persist scope and question approvals separately, but they are an interim command-level representation of one memo intent surface. Each canonical artifact is immutable and human-attributed. Question approval verifies approved-scope lineage and bounded geography/time; collection and discovery reject unscoped questions before credential access. One Seerist operation must match the approved question ID and run ID and may target only the proven `GET /v1/wod` endpoint.
 
 ```powershell
 npm run approve:scope -- <memo-scope-proposal.json> <reviewer-id>
@@ -117,9 +149,9 @@ npm run collect:seerist -- <provider-operation.json> <approved-research-question
 
 Validation occurs before credential lookup or `fetch`. The active boundary is `02-Engineering/02-Contracts/research-question-and-provider-operation.md`. Earlier smoke item `1030013` has no approved pre-collection question lineage and remains non-admissible.
 
-## Completed slice: explicit evidence admission
+## Completed compatibility slice: explicit evidence admission
 
-The human-review command accepts one eligible relevance-assessed intake result, `approve`, `reject`, or `revise`, reviewer ID, reason, and an optional decision ID. It confines and validates the intake and raw artifact, hashes the raw response, writes a canonical decision and read-only Markdown receipt, and appends a human-attributed event. Initial native Seerist intake is explicitly ineligible; approval alone creates a non-overwritable approved evidence snapshot.
+The existing human-review command remains the default `human` admission-policy mode so current behavior and NV artifacts are unchanged. It accepts one eligible relevance-assessed intake result, `approve`, `reject`, or `revise`, reviewer ID, reason, and an optional decision ID. This per-source action is a compatibility baseline and interim stand-in, not a fifth target human surface. Controller mode is introduced only through a new policy version and uses the same snapshot shape.
 
 ```powershell
 npm run review:evidence -- <intake-result.json> <approve|reject|revise> <reviewer-id> <reason> [decision-id]
@@ -201,7 +233,7 @@ npm run build
 npm run start
 ```
 
-The modules implement explicit memo-scope and research-question approval, bounded question-linked collection and discovery, one-item intake, one-hop source retrieval, lossless source canonicalization, Copilot PoC question relevance, positive-assessment candidate conversion, and human evidence admission, not the full memo workflow. Discovery may run multiple explicit query pages under a hard budget but cannot advance candidates into intake. Retrieval handles one exact URL and cannot create an evidence candidate. Canonicalization creates stable provider-neutral source documents and anchors but makes no semantic judgment. The relevance boundary produces only a proposed assessment and controller-derived route. Re-intake reconstructs only validated positive assessments, verifies complete retrieval and model artifact lineage, and creates a pending candidate. Only the review command can create an approved snapshot, and only with explicit reviewer metadata.
+The modules implement explicit memo-scope and research-question approval, bounded question-linked collection and discovery, one-item intake, one-hop source retrieval, lossless source canonicalization, Copilot PoC question relevance, positive-assessment candidate conversion, and the compatibility human admission mode, not the full target workflow. Discovery may run multiple explicit query pages under a hard budget but cannot advance candidates into intake. Retrieval handles one exact URL and cannot create an evidence candidate. Canonicalization creates stable provider-neutral source documents and anchors but makes no semantic judgment. The relevance boundary produces only a proposed assessment and controller-derived route. Re-intake reconstructs only validated positive assessments, verifies complete retrieval and model artifact lineage, and creates a pending candidate. Current policy defaults to `human`; a new policy version may select controller admission without altering existing NV artifacts.
 
 The accepted path now creates a lossless provider-neutral source document, a bounded AI question-relevance artifact grounded in exact `SourceAnchor` references, and a checksum-bound pending candidate only for positive validated assessments. The evidence gate preserves assessment, model, and retrieval lineage in an approved snapshot. The verified real NV snapshot is ready for one-source `Find -> Sweep -> Judge -> Write`.
 
@@ -226,8 +258,8 @@ The workflow and SVG currently describe:
 
 - Provider-neutral query intent with deterministic adapters.
 - Seerist-first collection and optional Firecrawl fallback.
-- AI question-relevance proposals before human evidence admission.
-- Human evidence approval.
+- AI question-relevance proposals before policy admission or exception routing.
+- Controller admission under approved policy, with the current human command retained as compatibility mode.
 - Per-source Find, blind Sweep, Judge, and Write stages.
 - Builder, challenger, and adjudicator synthesis.
 - Claim-level memo citations and AI verification.
@@ -282,27 +314,74 @@ At this handoff:
 
 ## Suggested opening prompt
 
-> Read `HANDOFF.md` and the implemented baseline in `03-Workflow/first-slice.md`. Panel 2 Extract is committed for the NV snapshot, but human review is deliberately deferred and no source note exists. Implement the deterministic Panel 3 Build envelope and synthetic tests against the corrected contract in `03-Workflow/memo-workflow.md`. Do not pass the NV extract commit or review package off as a source note.
+> Read `HANDOFF.md`, `03-Workflow/first-slice.md`, and `02-Contracts/synthesis-build.md`. Human reviewer `FDIHR` completed the NV rows-only support pass; the reviewed note supersedes the provisional note and reviewed metrics are recorded. A reviewed-only Build envelope/request exists with no synthetic input and `limitedEvidence: true`, but its exploratory model output proposed 20 claims and was not recorded. Add a versioned key-claim count/selection bound with tests before a fresh reviewed Build invocation. Do not weaken the historical provisional chain's publication blockers.
 
-## Deferred Panel 2 review
+## Completed Panel 2 human review
 
-On 2026-09-03, the human reviewer deliberately deferred the reduced review because the interaction remained too costly for this POC stage. No review response, review record, source note, or assurance metrics were created. Tentative chat answers were not persisted as reviewer judgment.
+On 2026-09-03, reviewer `FDIHR` completed the reduced rows-only support pass after first exercising the provisional path. All 20 observations were marked supported, no requirement tags were removed, `ir-01`, `ir-03`, and `ir-05` were covered, `ir-02` and `ir-04` were partial, and `ir-06` was silent. The reviewer assessed direct access, established track record, mixed dependency on New York Times and WSJ reporting, and recorded that machine translation was used.
 
 The committed extraction and checksum-bound package remain valid immutable artifacts. A later versioned rows-only review may still supply the 20 support verdicts, corrected IR tags, six requirement dispositions, and source assessment without overwriting them. Because the worksheet has been read, that later pass cannot be represented as a blind omission measurement; `omissionPass` remains `not-performed`, omission count remains `null`, and disposition underclaims remain unmeasured.
 
-An extract commit or review package is not a source note and cannot enter Panel 3. The live NV synthesis exercise waits for a completed checksum-bound note.
+`review-response-2.json` produced `review-record-reviewed.json` and reviewed source note `source-note-74bb02e2b47fb9306fd3db1c9be271cb`, which records `supersedesNoteId: source-note-4b98483a7e4dca7d2f30bfc081109a04`. Support failure rate, chrome rate, disposition mismatches, and tag precision are now measured as `0`, `0`, `0`, and `1`; omission count and disposition underclaims remain null because no omission pass was performed.
 
-## Immediate next action: Panel 3 Build preparation
+## Completed provisional artifacts
 
-The target contract in `03-Workflow/memo-workflow.md` now matches the structured note Panel 2 emits and records the agreed tradecraft boundaries. Implement the smallest deterministic Build slice:
+The following ignored run artifacts now exist:
 
-1. Validate completed source notes and reject extract commits, review packages, or incomplete lineage.
-2. Assign short aliases to source notes and observations and map model references back to canonical IDs.
-3. Derive source relationships from attribution and source identity, IR coverage and gaps from note dispositions, claim-kind bounds from supporting observations, and confidence ceilings from a versioned policy.
-4. Prepare and validate atomic claim proposals without giving the model authority over dependency, coverage, gaps, IDs, or ceilings.
-5. Test with synthetic notes, including two notes that relay the same upstream reporting, until the real NV note exists.
+1. `review/review-response-1.json`: support and omission passes not performed; judgment arrays empty; assessment not assessed.
+2. `review/review-record-provisional.json`: 20 `unreviewed` verdicts, zero human observations.
+3. `source-note-provisional.json`: `source-note-4b98483a7e4dca7d2f30bfc081109a04`, `reviewStatus: "provisional"`, 19 in-scope and one out-of-IR observation.
+4. `metrics-provisional.json`: `reviewStatus: "provisional"`; support failure, chrome, omission, tag precision, and disposition-comparison metrics are all null.
+5. `synthesis-inputs/source-note-synthetic-nyt-relay-001.json`: historical synthetic provisional input, retained unchanged because the first envelope checksum-binds it.
+6. `synthesis/build-envelope-e766393e34e0489aa1ddadcceb24389b.json`: historical two-note envelope, `reviewStatus: "provisional"`, `limitedEvidence: true`, and no model-authored claims.
+7. `synthesis-inputs/source-note-synthetic-nyt-relay-002.json`: successor with non-upgradable `reviewStatus: "synthetic"`.
+8. `synthesis/build-envelope-5208b9dc0b37690286a40c0c76f8dabe.json`: attempt 1/2 envelope, `reviewStatus: "synthetic"`, `limitedEvidence: true`.
+9. `synthesis/requests/synthesis-build-request-c35ffa85748748b0e6a16502f37ce01b/build-request.json`: model-ready request with 21 qualified aliases.
+10. `copilot-response-1.json`: rejected as `INVALID_BUILD_RESPONSE` because the model changed the required schema.
+11. `copilot-response-2.json`: rejected as `CLAIM_KIND_EXCEEDS_SUPPORT`.
+12. `synthesis/diagnoses/build-diagnosis-001.json`: table-bug discriminator; classifies the failure as prompt-side and forbids stored-proposal revalidation.
+13. `synthesis/authorisations/synthesis-build-attempt-authorisation-001.json`: human authorization for a fresh request v2.
+14. `synthesis/requests/synthesis-build-request-6db19b40af7face0376c39c4f23b52d5/build-request.json`: v2 request with `authorisation: null`; never executed.
+15. `synthesis/build-envelope-d1606fe7ec29ede2f8cad2808bd5be46.json`: authorization-bound attempt 3 envelope, `reviewStatus: "synthetic"`, `limitedEvidence: true`.
+16. `synthesis/requests/synthesis-build-request-62da8060c65fc5de8db08fde3b24a56f/build-request.json`: authorization-bound request v2 with per-alias kinds, single-support ceilings, response-shape text, and structural example.
+17. `copilot-response-3.json`: respected kind and confidence allowances but renamed required fields and omitted arrays; rejected as `INVALID_BUILD_RESPONSE`.
+18. `synthesis/diagnoses/build-diagnosis-002.json`: records the attempt 3 transport/schema failure.
+19. `synthesis/authorisations/synthesis-build-attempt-authorisation-002.json`: authorizes fresh request v3; stored response 3 remains non-revalidatable.
+20. `synthesis/build-envelope-826885ec9c56edb1dd55e46a6e6ab999.json`: attempt 4 envelope, `reviewStatus: "synthetic"`, `limitedEvidence: true`.
+21. `synthesis/requests/synthesis-build-request-9ecd7b7bb1b2611b9ab83e27d8611cb8/build-request.json`: request v3 generated from the strict parser shape.
+22. `copilot-response-4.json`: bare-array response using canonical and enumerated alias fields.
+23. `synthesis/records/synthesis-build-record-3178655ad59cef55b5d356074c629018/synthesis-build-record.json`: committed Build record with four claims; every claim is provisional, no claim uses synthetic support, all confidence levels and ceilings are low, chain status is synthetic, and `limitedEvidence` is true.
+24. `synthesis/diagnoses/build-diagnosis-003.json`: records the clerical failure-class resolution.
+25. `synthesis/challenge/requests/synthesis-challenge-request-96c5317148ce49bdf97f230a7e8ceaf6/challenge-request.json`: one request containing four claims and 24 required checklist answers, blind to Build rationale.
+26. `copilot-response-1.json`: all 24 answers; initially rejected because it used the clerical `results` plus `challenge: null|object` form.
+27. `synthesis/challenge/diagnoses/challenge-diagnosis-001.json`: records complete judgment coverage and the clerical-only mismatch.
+28. `synthesis/challenge/authorisations/challenge-revalidation-authorisation-001.json`: authorizes revalidation of that exact stored response under enumerated normalization only.
+29. `synthesis/challenge/records/synthesis-challenge-record-18a697c120d7b6a21a772facc12312cd/challenge-record.json`: committed record with 7 challenges from 24 items, `reviewStatus: "synthetic"`, and `limitedEvidence: true`.
+30. Sibling `challenge-metrics.json`: challenge rate 7/24; hidden single-source dependence 4, plausible alternatives 3, all other checks 0, upheld-over-raised null.
+31. Sibling `provisional-adjudication.json`: `adjudicationStatus: "not-performed"`, seven open challenges, all four claims contested.
+32. `src/modules/memo/standards/memo-standard-v0.json`: handwritten provisional eight-section standard with a 350-word final-Markdown limit.
+33. `memo/requests/memo-writer-request-cc8e5a4f0fd2f93f5c88aaf35eb74b27/writer-request.json`: writer judgment surface limited to section, text, and claim aliases; approved scope is explicitly null.
+34. `copilot-response-1.json`: one BLUF placement and four key-judgment texts; reused unchanged for deterministic rerender corrections.
+35. `memo/memo-b79dba75552f68ed7464f8cff937e183/`: retained first rendering, invalidated after final Markdown measured 391 words.
+36. `memo/diagnoses/memo-diagnosis-001.json` through `003.json` and matching authorizations: record final-length, duplicate-BLUF, and deterministic-presentation corrections.
+37. `memo/memo-3618e06cbddf26e4ed78db6c7b2b95a1/memo.md`: superseding 342-word memo with four contested low-confidence judgments, three hypotheses, and three gaps including silent `ir-06`.
+38. Sibling `memo.json`: records `supersedesMemoId`, exact citations/open challenge IDs, synthetic status, limited evidence, source limitations, and cutoff.
+39. Sibling `verification.json`: content pass and publication block.
+40. Sibling `publication-gate.json`: blocked with human approval unavailable because of synthetic lineage, provisional evidence, provisional v0 standard, and missing approved-scope lineage.
+41. `review/review-response-2.json`: completed human support review, no tag corrections, machine translation recorded.
+42. `review/review-record-reviewed.json`: 20 supported verdicts, six reviewed requirement dispositions, and human source assessment.
+43. `source-note-reviewed.json`: `reviewStatus: "reviewed"`, 19 in-scope and one out-of-IR observation, and supersession of the provisional note.
+44. `metrics-reviewed.json`: support failure `0`, chrome `0`, tag precision `1`, disposition mismatches `0`; omission and underclaims null.
+45. `synthesis/build-envelope-5807f521b2bbf4c73a23a54e3d9cbdc9.json`: reviewed-only, one-source envelope with `reviewStatus: "reviewed"`, `limitedEvidence: true`, and no synthetic input.
+46. `synthesis/requests/synthesis-build-request-0efa5a8aa3ebebc8a8ba5ed74138275e/build-request.json`: reviewed-only model request. An exploratory invocation returned 20 one-observation proposals; it was not recorded because the active contract has no bounded key-claim selection rule.
 
-Do not implement Challenge, Adjudicate, writer, relevance, semantic verification, or a general orchestrator in this slice. The first live Build remains the reviewed NV note plus one clearly labelled synthetic note that relays the same NYT reporting.
+Interpret the four uniform hidden-single-source challenges as checklist calibration data, not four proven claim defects: dependency is already derived and appears once in sourcing. The three alternative hypotheses are the substantive Challenge yield preserved in the memo.
+
+## Immediate next action
+
+Before recording a reviewed Build response, add a versioned maximum/key-claim selection rule and focused tests. Do not commit an unbounded 20-claim graph that makes the short memo contract impossible. After that bound exists, run a fresh reviewed Build invocation, Challenge, real or explicitly deferred Adjudicate, and writer. Approved scope lineage and an approved memo standard remain separate publication prerequisites.
+
+Organizational relevance, semantic verification, and general orchestration remain deferred.
 
 ## Human input still required
 

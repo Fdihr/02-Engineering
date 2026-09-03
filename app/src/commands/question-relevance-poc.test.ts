@@ -207,12 +207,56 @@ test("prepares and records one bounded Copilot relevance proposal", async () => 
     const assessment = JSON.parse(await readFile(assessmentPath, "utf8"));
     assert.equal(assessment.status, "proposed");
     assert.equal(assessment.modelInvocation.model, "not-exposed-by-host");
+
+    const uncertainResponse = {
+      ...response,
+      invocationId: "copilot-session-uncertain",
+      startedAt: new Date(Date.parse(request.preparedAt) + 3).toISOString(),
+      completedAt: new Date(Date.parse(request.preparedAt) + 4).toISOString(),
+      proposal: {
+        verdict: "uncertain",
+        rationale: "The source relation cannot be determined confidently.",
+        support: [],
+        limitations: ["The available source relation is ambiguous."]
+      }
+    };
+    const uncertainResponsePath = resolve(
+      requestPath,
+      "..",
+      "copilot-response-uncertain.json"
+    );
+    await writeFile(
+      uncertainResponsePath,
+      JSON.stringify(uncertainResponse, null, 2)
+    );
+    const uncertainRecord = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        resolve("src/commands/record-question-relevance.ts"),
+        requestPath,
+        uncertainResponsePath
+      ],
+      { cwd: process.cwd(), encoding: "utf8", env }
+    );
+    assert.equal(uncertainRecord.status, 0, uncertainRecord.stderr);
+    assert.match(uncertainRecord.stdout, /Destination: human_exception_triage/);
+    const exceptionPath = resolve(
+      uncertainRecord.stdout.match(/Exception: (.+exception-item\.json)/)?.[1] ??
+        "missing"
+    );
+    const exception = JSON.parse(await readFile(exceptionPath, "utf8"));
+    assert.equal(exception.kind, "uncertain-relevance");
+    assert.equal(exception.status, "open");
+
     const events = await readFile(
       resolve(runRoot, "question-relevance-events.jsonl"),
       "utf8"
     );
     assert.match(events, /"actorType":"model"/);
     assert.match(events, /"actorType":"controller"/);
+    assert.match(events, /exception\.uncertain-relevance\.raised/);
     assert.doesNotMatch(events, /Unit 7|Ignore the research question/);
 
     const repeated = spawnSync(process.execPath, recordArgs, {

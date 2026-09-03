@@ -3,6 +3,8 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { assessCopilotPocResponse } from "../modules/relevance/copilot-poc.js";
 import { validateQuestionRelevanceRequest } from "../modules/relevance/question-relevance.js";
+import { createOpenExceptionItem } from "../modules/exceptions/exception-item.js";
+import { persistExceptionItem } from "./exception-io.js";
 
 const usage =
   "Usage: npm run record:question-relevance -- <question-relevance-request.json> <copilot-response.json>";
@@ -39,6 +41,7 @@ const main = async (): Promise<void> => {
   let assessmentId: string | undefined;
   let invocationId: string | undefined;
   let outputArtifactRef: string | undefined;
+  let exceptionArtifactRef: string | undefined;
 
   try {
     const [requestPathValue, responsePathValue, ...extra] = process.argv.slice(2);
@@ -133,16 +136,38 @@ const main = async (): Promise<void> => {
     );
     const decisionPath = resolve(outputDirectory, "question-relevance-decision.json");
     outputArtifactRef = artifactRef(assessmentPath);
-    await writeFile(
-      assessmentPath,
+    const assessmentBytes = Buffer.from(
       JSON.stringify(result.value.assessment, null, 2),
       "utf8"
     );
-    await writeFile(
-      decisionPath,
+    const decisionBytes = Buffer.from(
       JSON.stringify(result.value.decision, null, 2),
       "utf8"
     );
+    await writeFile(assessmentPath, assessmentBytes);
+    await writeFile(decisionPath, decisionBytes);
+    if (result.value.decision.destination === "human_exception_triage") {
+      const exception = createOpenExceptionItem({
+        kind: "uncertain-relevance",
+        runId,
+        refs: [
+          {
+            artifactRef: artifactRef(assessmentPath),
+            artifactSha256: sha256(assessmentBytes)
+          },
+          {
+            artifactRef: artifactRef(decisionPath),
+            artifactSha256: sha256(decisionBytes)
+          }
+        ],
+        raisedAt: recordedAt
+      });
+      if (!exception.ok) {
+        throw new Error(`Exception item rejected: ${exception.error}`);
+      }
+      const persisted = await persistExceptionItem(runRoot, exception.value);
+      exceptionArtifactRef = persisted.binding.artifactRef;
+    }
     await appendFile(
       eventLogPath,
       `${JSON.stringify({
@@ -170,6 +195,23 @@ const main = async (): Promise<void> => {
       })}\n`,
       "utf8"
     );
+    if (exceptionArtifactRef) {
+      await appendFile(
+        eventLogPath,
+        `${JSON.stringify({
+          runId,
+          sourceItemId,
+          assessmentId,
+          occurredAt: recordedAt,
+          actorType: "controller",
+          stage: "question_relevance",
+          eventType: "exception.uncertain-relevance.raised",
+          status: "completed",
+          artifactRef: exceptionArtifactRef
+        })}\n`,
+        "utf8"
+      );
+    }
 
     console.log(`Run: ${runId}`);
     console.log(`Source: ${sourceItemId}`);
@@ -177,6 +219,9 @@ const main = async (): Promise<void> => {
     console.log(`Verdict: ${result.value.assessment.verdict}`);
     console.log(`Destination: ${result.value.decision.destination}`);
     console.log(`Approval: ${result.value.decision.approvalStatus}`);
+    if (exceptionArtifactRef) {
+      console.log(`Exception: ${exceptionArtifactRef}`);
+    }
     console.log(`Output: ${outputArtifactRef}`);
   } catch (error) {
     const message = commandError(error);

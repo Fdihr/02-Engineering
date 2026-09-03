@@ -85,8 +85,10 @@ const main = async (): Promise<void> => {
 
     const reviewDir = resolve(stageDirectory(runRoot, runId, snapshotId), "review");
     await ensureDirectory(reviewDir);
+    const reviewStatus =
+      record.value.supportPass === "not-performed" ? "provisional" : "reviewed";
     outputArtifactRef = await writeJsonOnce(
-      resolve(reviewDir, "review-record.json"),
+      resolve(reviewDir, `review-record-${reviewStatus}.json`),
       record.value
     );
 
@@ -96,8 +98,8 @@ const main = async (): Promise<void> => {
         runId,
         snapshotId,
         occurredAt: recordedAt,
-        actorType: "human",
-        actorId: reviewerId,
+        actorType: reviewStatus === "provisional" ? "controller" : "human",
+        ...(reviewStatus === "reviewed" ? { actorId: reviewerId } : {}),
         step: "review_record",
         eventType: "assurance.review.recorded",
         status: "completed",
@@ -107,6 +109,7 @@ const main = async (): Promise<void> => {
 
     console.log(`Run: ${runId}`);
     console.log(`Snapshot: ${snapshotId}`);
+    console.log(`Review status: ${reviewStatus}`);
     console.log(`Reviewer: ${reviewerId}`);
     console.log(`Verdicts: ${record.value.verdicts.length}`);
     console.log(`Human observations: ${record.value.humanObservations.length}`);
@@ -121,8 +124,7 @@ const main = async (): Promise<void> => {
           runId,
           snapshotId,
           occurredAt: new Date().toISOString(),
-          actorType: "human",
-          actorId: reviewerId,
+          actorType: "controller",
           step: "review_record",
           eventType: "assurance.review.failed",
           status: "failed",

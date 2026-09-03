@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "memo-standard-pack-v0",
+  "id": "memo-standard-v0",
+  "version": 0,
+  "status": "provisional-standard",
+  "authoredAt": "2026-09-03T00:00:00.000Z",
+  "sourceMemoRefs": [],
+  "requiredSections": [
+    "bluf",
+    "key-judgments",
+    "analysis",
+    "uncertainties",
+    "competing-explanations",
+    "gaps",
+    "sourcing-summary",
+    "indicators"
+  ],
+  "confidenceLexicon": {
+    "low": "Low confidence: limited, provisional, single-source, or weakly corroborated evidence.",
+    "moderate": "Moderate confidence: credible evidence with material limitations or incomplete corroboration.",
+    "high": "High confidence: multiple independent credible sources with no material unresolved contradiction."
+  },
+  "citationRule": "Render every claim-bearing statement with inline [claim:<claim-id>] citations.",
+  "prohibitedPatterns": [
+    "high confidence",
+    "independently confirmed",
+    "conclusive evidence",
+    "verified beyond doubt"
+  ],
+  "limits": {
+    "maxWords": 350,
+    "blufStatements": 1,
+    "keyJudgmentsPerClaim": 1,
+    "maxAnalysisStatements": 2,
+    "maxUncertaintyStatements": 2,
+    "maxIndicatorStatements": 4
+  }
+}

@@ -122,7 +122,7 @@ const main = async (): Promise<void> => {
     const stageDir = stageDirectory(runRoot, runId, snapshotId);
     await ensureDirectory(stageDir);
     outputArtifactRef = await writeJsonOnce(
-      resolve(stageDir, "metrics.json"),
+      resolve(stageDir, `metrics-${metrics.value.reviewStatus}.json`),
       metrics.value
     );
 
@@ -142,6 +142,7 @@ const main = async (): Promise<void> => {
 
     console.log(`Run: ${runId}`);
     console.log(`Snapshot: ${snapshotId}`);
+    console.log(`Review status: ${metrics.value.reviewStatus}`);
     console.log(`Support failure rate: ${metrics.value.supportFailureRate ?? "n/a"}`);
     console.log(`Chrome rate: ${metrics.value.chromeRate ?? "n/a"}`);
     console.log(`Omissions: ${metrics.value.omissionCount}`);

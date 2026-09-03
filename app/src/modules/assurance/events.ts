@@ -5,7 +5,8 @@ export type AssuranceEventStep =
   | "review_package"
   | "review_record"
   | "note_assembly"
-  | "measurement";
+  | "measurement"
+  | "exception";
 
 /** Event fields are deliberately content-free: no prompts, quotes, or observation text. */
 export type AssuranceEvent = {
