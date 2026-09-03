@@ -44,6 +44,7 @@ export type ReviewRecordError =
   | "DUPLICATE_HUMAN_OBSERVATION"
   | "INVALID_IR_REVIEW"
   | "MISSING_IR_REVIEW_NOTE"
+  | "INVALID_OMISSION_PASS"
   | "INVALID_ASSESSMENT"
   | "INVALID_RECORD_TIME"
   | "INVALID_ARTIFACT_BINDING";
@@ -145,6 +146,7 @@ export const recordReview = (
       "packageSha256",
       "reviewerId",
       "reviewedAt",
+      "omissionPass",
       "verdicts",
       "humanObservations",
       "irReview",
@@ -165,6 +167,17 @@ export const recordReview = (
   }
   if (packageSha256 !== packageArtifact.artifactSha256) {
     return err("RESPONSE_NOT_BOUND_TO_PACKAGE");
+  }
+
+  const omissionPass =
+    value.omissionPass === "performed" || value.omissionPass === "not-performed"
+      ? value.omissionPass
+      : undefined;
+  if (
+    !omissionPass ||
+    (omissionPass === "not-performed" && value.humanObservations.length > 0)
+  ) {
+    return err("INVALID_OMISSION_PASS");
   }
 
   const packageOrder = new Map(
@@ -376,6 +389,8 @@ export const recordReview = (
     policyId: input.policy.policyId,
     reviewerId,
     reviewedAt,
+    omissionPass,
+    irReviewBasis: omissionPass === "performed" ? "full-source" : "rows-only",
     reviewPackage: packageArtifact,
     reviewResponse: responseArtifact,
     verdicts,
@@ -400,6 +415,8 @@ export const validateReviewRecord = (
       "policyId",
       "reviewerId",
       "reviewedAt",
+      "omissionPass",
+      "irReviewBasis",
       "reviewPackage",
       "reviewResponse",
       "verdicts",
@@ -425,6 +442,10 @@ export const validateReviewRecord = (
   const reviewPackage = readArtifactBinding(value.reviewPackage);
   const reviewResponse = readArtifactBinding(value.reviewResponse);
   const assessment = readAssessment(value.assessment);
+  const omissionPass =
+    value.omissionPass === "performed" || value.omissionPass === "not-performed"
+      ? value.omissionPass
+      : undefined;
   if (
     !id ||
     !recordedAt ||
@@ -435,6 +456,9 @@ export const validateReviewRecord = (
     !reviewedAt ||
     !reviewPackage ||
     !reviewResponse ||
+    !omissionPass ||
+    value.irReviewBasis !==
+      (omissionPass === "performed" ? "full-source" : "rows-only") ||
     policyId !== policy.policyId
   ) {
     return err("INVALID_REVIEW_RESPONSE");
@@ -544,6 +568,8 @@ export const validateReviewRecord = (
     policyId,
     reviewerId,
     reviewedAt,
+    omissionPass,
+    irReviewBasis: omissionPass === "performed" ? "full-source" : "rows-only",
     reviewPackage,
     reviewResponse,
     verdicts,

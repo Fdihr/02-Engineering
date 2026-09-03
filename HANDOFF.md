@@ -1,7 +1,7 @@
 # CTI Engineering Handoff
 
 Date: 2026-09-03
-Status: Panel 2 Extract committed for the NV snapshot under contract v2; blocked on the human review pass that produces the source note and metrics
+Status: Panel 2 Extract committed for the NV snapshot under contract v2; human review deliberately deferred, Panel 3 contract corrected, and deterministic Build preparation is next
 Workspace root: `CTI/`
 Source domain: Agentic App Engineering
 Authority class: Current implementation direction and next-action handoff
@@ -282,21 +282,27 @@ At this handoff:
 
 ## Suggested opening prompt
 
-> Read `HANDOFF.md`, the implemented baseline in `03-Workflow/first-slice.md`, and the plan in `03-Workflow/source-assurance-poc-v1.md`. Panel 2 Extract is committed at `app/runs/research-cia-russia-20260828/assurance/snapshot-nv-evidence-review-001/extract-3/extract-commit.json` and the review package is built. The next action is the human review pass; do not start it for the reviewer and do not show them model observations before their blind sweep is recorded.
+> Read `HANDOFF.md` and the implemented baseline in `03-Workflow/first-slice.md`. Panel 2 Extract is committed for the NV snapshot, but human review is deliberately deferred and no source note exists. Implement the deterministic Panel 3 Build envelope and synthetic tests against the corrected contract in `03-Workflow/memo-workflow.md`. Do not pass the NV extract commit or review package off as a source note.
 
-## Immediate next action: human review pass
+## Deferred Panel 2 review
 
-Extract is committed with 20 observations. The review package is written and checksum-bound. Everything downstream waits on one human pass, in this order:
+On 2026-09-03, the human reviewer deliberately deferred the reduced review because the interaction remained too costly for this POC stage. No review response, review record, source note, or assurance metrics were created. Tentative chat answers were not persisted as reviewer judgment.
 
-1. Blind sweep. Read the whole admitted source once from `review/source-with-aliases.txt` and note, per approved requirement, the passages worth extracting, plus a disposition and any date roles. This must be produced before looking at the package, because it is the only honest baseline for the omission count and therefore for the decision on whether to build Sweep.
-2. Support pass. Judge each package row on its quote alone, at the stated claim kind and attribution. A statement written as an event is `unsupported`, and so is `direct` attribution on text the source ascribes to someone else.
-3. Tag correction. A supported observation attached to a requirement it does not answer is a tagging error, not a support failure: keep the verdict `supported` and remove the tag through `correctedIrIds`.
-4. Omissions. Diff the blind list against the accepted set; what remains becomes `humanObservations`.
-5. Requirement dispositions, then the source assessment. `dependency` must agree with the commit's attribution summary.
+The committed extraction and checksum-bound package remain valid immutable artifacts. A later versioned rows-only review may still supply the 20 support verdicts, corrected IR tags, six requirement dispositions, and source assessment without overwriting them. Because the worksheet has been read, that later pass cannot be represented as a blind omission measurement; `omissionPass` remains `not-performed`, omission count remains `null`, and disposition underclaims remain unmeasured.
 
-Then run `record:assurance-review`, `assemble:assurance`, and `measure:assurance`. The five metric families decide the next slice.
+An extract commit or review package is not a source note and cannot enter Panel 3. The live NV synthesis exercise waits for a completed checksum-bound note.
 
-Two places deserve attention during the pass. The `ir-02` observations concern the date, where reporting date and event date are easily confused, which is what `date.role` exists to catch. And `ir-06`, cyber implications, has stayed `silent` through every attempt; that is the honest-negative rule working, and it should surface as a gap rather than be stretched.
+## Immediate next action: Panel 3 Build preparation
+
+The target contract in `03-Workflow/memo-workflow.md` now matches the structured note Panel 2 emits and records the agreed tradecraft boundaries. Implement the smallest deterministic Build slice:
+
+1. Validate completed source notes and reject extract commits, review packages, or incomplete lineage.
+2. Assign short aliases to source notes and observations and map model references back to canonical IDs.
+3. Derive source relationships from attribution and source identity, IR coverage and gaps from note dispositions, claim-kind bounds from supporting observations, and confidence ceilings from a versioned policy.
+4. Prepare and validate atomic claim proposals without giving the model authority over dependency, coverage, gaps, IDs, or ceilings.
+5. Test with synthetic notes, including two notes that relay the same upstream reporting, until the real NV note exists.
+
+Do not implement Challenge, Adjudicate, writer, relevance, semantic verification, or a general orchestrator in this slice. The first live Build remains the reviewed NV note plus one clearly labelled synthetic note that relays the same NYT reporting.
 
 ## Human input still required
 

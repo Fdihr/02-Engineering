@@ -309,10 +309,17 @@ export type IRReviewEntry = {
   note?: string;
 };
 
+/** `not-performed` keeps an unmeasured omission count out of the metrics as null, never zero. */
+export type OmissionPass = "performed" | "not-performed";
+
+/** Rows-only dispositions cannot detect an under-claim, because nobody read the source. */
+export type IRReviewBasis = "rows-only" | "full-source";
+
 export type ReviewResponse = {
   packageSha256: string;
   reviewerId: string;
   reviewedAt: string;
+  omissionPass: OmissionPass;
   verdicts: ReviewVerdictEntry[];
   humanObservations: ExtractObservation[];
   irReview: IRReviewEntry[];
@@ -328,6 +335,8 @@ export type ReviewRecord = {
   policyId: string;
   reviewerId: string;
   reviewedAt: string;
+  omissionPass: OmissionPass;
+  irReviewBasis: IRReviewBasis;
   reviewPackage: ArtifactBinding;
   reviewResponse: ArtifactBinding;
   verdicts: ReviewVerdictEntry[];
@@ -423,11 +432,12 @@ export type AssuranceMetrics = {
   reviewedModelObservations: number;
   supportFailureRate: number | null;
   chromeRate: number | null;
-  omissionCount: number;
+  omissionCount: number | null;
+  irReviewBasis: IRReviewBasis;
   dispositionMismatches: {
     total: number;
     overclaims: number;
-    underclaims: number;
+    underclaims: number | null;
   };
   quoteFidelityFailures: number;
   transcriptionFidelity: {

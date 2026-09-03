@@ -1,6 +1,6 @@
 # Implemented Workflow Baseline
 
-Status: Panel 1 is complete for the current one-source baseline: memo-scope and research-question approval, bounded Seerist collection, checksum-bound one-item intake, secure one-source retrieval, native and retrieved-source canonicalization, bounded Copilot PoC question relevance, positive-assessment candidate conversion, and evidence admission. Human reviewer `FDIHR` approved the real NV candidate as `nv-evidence-review-001`; its immutable snapshot is ready for Panel 2 source assurance.
+Status: Panel 1 is complete and Panel 2 has a committed NV extraction plus checksum-bound review package. Human review was deliberately deferred on 2026-09-03, so no NV source note or assurance metrics exist and the extract cannot enter Panel 3.
 
 ## Product boundary
 
@@ -207,6 +207,12 @@ This keeps two different errors apart. A quote that does not support its text is
 6. Events record ids, checksums, and typed errors, never prompts, quotes, or observation text.
 
 The active contract version and the exact check definitions an attempt was judged under are recorded in the request, the commit, and the source note lineage.
+
+### Deferred human review boundary
+
+The reviewer elected to defer the reduced rows-only pass because its interaction cost was disproportionate at this POC stage. No review response, review record, source note, or metrics were created, and no tentative chat answer is reviewer authority. The immutable extract and review package remain available for a later versioned review, but worksheet exposure means that review cannot claim a blind omission pass.
+
+Development may proceed on the deterministic Panel 3 Build envelope with synthetic source notes. A live NV Build remains blocked until `record:assurance-review` and `assemble:assurance` produce a valid checksum-bound source note. Build must reject the extract commit and review package as inputs.
 
 ### Open Panel 1 finding
 

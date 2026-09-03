@@ -127,8 +127,12 @@ export const measureAssurance = (
     supportDenominator > 0 ? counts.unsupported / supportDenominator : null;
   const chromeRate =
     reviewedModelObservations > 0 ? counts.chrome / reviewedModelObservations : null;
-  const omissionCount = input.reviewRecord.humanObservations.length;
+  const omissionCount =
+    input.reviewRecord.omissionPass === "performed"
+      ? input.reviewRecord.humanObservations.length
+      : null;
 
+  const rowsOnly = input.reviewRecord.irReviewBasis === "rows-only";
   let total = 0;
   let overclaims = 0;
   let underclaims = 0;
@@ -188,18 +192,29 @@ export const measureAssurance = (
     }
   }
 
+  const measuredUnderclaims = rowsOnly ? null : underclaims;
+
   const recommendations: string[] = [];
   if (supportFailureRate !== null && supportFailureRate > 0.1) {
     recommendations.push(
       "Build the bounded semantic support check: the support failure rate exceeds 0.10."
     );
   }
-  if (overclaims > 0 || underclaims > 0) {
+  if (overclaims > 0 || (measuredUnderclaims ?? 0) > 0) {
     recommendations.push(
       "Improve or independently check requirement tagging and coverage: model and human dispositions disagree."
     );
   }
-  if (omissionCount >= 2) {
+  if (rowsOnly) {
+    recommendations.push(
+      "Under-claims are unmeasured: requirement dispositions were judged from the extracted rows alone, so a requirement the model wrongly called silent cannot be detected."
+    );
+  }
+  if (omissionCount === null) {
+    recommendations.push(
+      "The Sweep decision remains unmeasured: no omission pass was performed for this run."
+    );
+  } else if (omissionCount >= 2) {
     recommendations.push(
       "Build the blind requirement-driven Sweep stage: the human omission pass found two or more missed observations."
     );
@@ -233,7 +248,12 @@ export const measureAssurance = (
     supportFailureRate,
     chromeRate,
     omissionCount,
-    dispositionMismatches: { total, overclaims, underclaims },
+    irReviewBasis: input.reviewRecord.irReviewBasis,
+    dispositionMismatches: {
+      total,
+      overclaims,
+      underclaims: measuredUnderclaims
+    },
     quoteFidelityFailures,
     transcriptionFidelity: { exact, normalised, ruleCounts },
     tagPrecision: {

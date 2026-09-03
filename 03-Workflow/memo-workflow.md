@@ -745,7 +745,11 @@ type ExtractedObservation = {
   id: string;
   researchQuestionIds: string[];
   statement: string;
-  kind: "reported-fact" | "source-allegation" | "provider-assessment" | "forecast";
+  kind: "event" | "statement" | "assessment" | "forecast";
+  attribution: {
+    kind: "direct" | "attributed" | "relayed";
+    attributedTo?: string;
+  };
   sourceAnchor: SourceAnchor;
   originalLanguage: string;
   originalSupportExcerpt: string;
@@ -802,7 +806,6 @@ type AnalyticConfidence = QualitativeAssessment & {
     alternativeExplanations: string;
     materialGaps: string;
   };
-  changeIndicators: string[];
 };
 
 type AdjudicatedSourceBrief = {
@@ -852,7 +855,7 @@ The observer requires:
 3. Every analytic judgment references accepted observations and distinguishes inference from source reporting.
 4. Material disagreement between `Find` and `Sweep` is preserved or explicitly resolved with source-based rationale.
 5. Source reliability, information credibility, and analytic confidence are all present and not collapsed into one score.
-6. All confidence factors, assumptions, alternatives, change indicators, contradictions, caveats, and gaps required by the schema are populated.
+6. All confidence factors, assumptions, alternatives, contradictions, caveats, and gaps required by the schema are populated.
 
 If a retry is required, `Judge` receives the original source, both committed extractions, and typed unmet-condition results. It never receives hidden reasoning from the previous attempt.
 
@@ -862,39 +865,59 @@ If a retry is required, `Judge` receives the original source, both committed ext
 type SourceIntelligenceNote = {
   id: string;
   runId: string;
-  evidenceCandidateId: string;
-  adjudicatedBriefId: string;
-  questionCoverage: Array<{
-    researchQuestionId: string;
-    coverage: "answered" | "partial" | "gap";
-    acceptedObservationIds: string[];
+  snapshotId: string;
+  sourceDecisionId: string;
+  candidateId: string;
+  researchQuestionId: string;
+  sourceDocumentId: string;
+  lineage: {
+    sourceDocument: ArtifactBinding;
+    extractCommit: ArtifactBinding;
+    reviewPackage: ArtifactBinding;
+    reviewResponse: ArtifactBinding;
+    reviewRecord: ArtifactBinding;
+  };
+  inScopeObservations: Observation[];
+  outOfIrObservations: Observation[];
+  rejectedObservations: Array<{
+    observationId: string;
+    verdict: "unsupported" | "duplicate" | "chrome";
+    duplicateOf?: string;
+    note?: string;
   }>;
-  synopsis: string;
-  keyFindings: Array<{
-    id: string;
-    statement: string;
-    acceptedObservationIds: string[];
-    analyticJudgmentIds: string[];
+  irDispositions: Array<{
+    irId: string;
+    modelDisposition: "covered" | "partial" | "silent" | "contradicted";
+    humanDisposition: "covered" | "partial" | "silent" | "contradicted";
+    finalDisposition: "covered" | "partial" | "silent" | "contradicted";
+    observationIds: string[];
+    note?: string;
   }>;
-  narrative: string;
-  contradictions: string[];
+  assessment: Assessment;
+  attributionSummary: Array<{
+    kind: "direct" | "attributed" | "relayed";
+    attributedTo?: string;
+    count: number;
+  }>;
   caveats: string[];
-  intelligenceGaps: string[];
+  gaps: Array<{
+    irId: string;
+    disposition: "partial" | "silent";
+    note?: string;
+  }>;
 };
 ```
 
-Write may improve ordering and clarity. It cannot add factual content, raise confidence, remove caveats, or resolve contradictions.
+This is the structured note Panel 2 currently emits; the field-level implementation contract is `app/src/modules/assurance/types.ts`. Panel 3 consumes these fields directly. A future prose rendering may improve ordering and clarity, but it cannot replace observation-level lineage, add factual content, raise confidence, remove caveats, or resolve contradictions.
 
 ### Write goal checks
 
 The observer requires:
 
-1. Every key finding resolves to accepted observations or analytic judgments in the committed `AdjudicatedSourceBrief`.
-2. An independent semantic conformance check finds no proposition beyond the adjudicated brief.
-3. Question coverage exactly matches resolvable accepted observations and declared gaps.
-4. Source reliability, information credibility, and confidence are not strengthened.
-5. Contradictions, caveats, and intelligence gaps are preserved without material dilution.
-6. The note contains no Vestas-specific conclusion and no factual material from the memo standard or historical memos.
+1. Every accepted observation resolves to its exact source anchor and committed review verdict.
+2. IR dispositions resolve to the accepted, corrected observation tags and declared gaps.
+3. Source assessment, attribution summary, caveats, and gaps remain present without material dilution.
+4. The note contains no organizational conclusion and no factual material from the memo standard or historical memos.
 
 Only a goal-met `SourceIntelligenceNote` enters external synthesis. A failed `Write` stage is recorded as a failed approved source and remains an explicit intelligence gap.
 
@@ -902,9 +925,9 @@ Only a goal-met `SourceIntelligenceNote` enters external synthesis. A failed `Wr
 
 ## Assurance goals
 
-Synthesis operates only on completed source notes and their underlying adjudicated briefs.
+Synthesis operates only on completed, checksum-bound source notes. An extract commit or deferred review package is not a source note and cannot enter Panel 3.
 
-1. `Build`: propose atomic claims, support links, conflicts, source relationships, and question coverage.
+1. `Build`: propose atomic claims, support links, conflicts, assumptions, and alternatives inside code-derived relationship, coverage, and confidence bounds.
 2. `Challenge`: independently test false corroboration, reporting dependency, unsupported inference, missing alternatives, hidden contradictions, and confidence inflation.
 3. `Adjudicate`: resolve every challenge against source notes and admitted evidence, then seal the external intelligence picture.
 
@@ -919,43 +942,139 @@ type ReportingRelationship =
   | "shared-origin"
   | "unknown";
 
+type SourceRelationship = {
+  leftSourceNoteId: string;
+  rightSourceNoteId: string;
+  relationship: ReportingRelationship;
+  rationale: string;
+  authority: "controller-derived" | "model-assessed-unknown";
+  upstreamSources: string[];
+};
+
+type ClaimConfidence = AnalyticConfidence & {
+  ceiling: "unknown" | "low" | "moderate" | "high";
+  ceilingRuleIds: string[];
+  evidenceBasis: {
+    supportingSourceCount: number;
+    independentSourceCount: number;
+    supportingObservationKinds: Array<"event" | "statement" | "assessment" | "forecast">;
+    reliability: string;
+    corroboration: string;
+  };
+};
+
 type ExternalClaim = {
   id: string;
   runId: string;
   statement: string;
-  kind: "reported-fact" | "assessment" | "forecast";
+  kind: "event" | "statement" | "assessment" | "forecast";
+  attributedTo?: string;
+  actor?: string;
+  action?: string;
+  target?: string;
+  consequence?: string;
+  dates: Array<{
+    text: string;
+    role: "event" | "reporting" | "publication" | "reference" | "unknown";
+    supportingObservationIds: string[];
+  }>;
   researchQuestionIds: string[];
   supportingObservationIds: string[];
   supportingSourceNoteIds: string[];
   contradictingObservationIds: string[];
-  sourceRelationships: Array<{
-    leftEvidenceCandidateId: string;
-    rightEvidenceCandidateId: string;
-    relationship: ReportingRelationship;
-    rationale: string;
-  }>;
+  sourceRelationships: SourceRelationship[];
   assumptions: string[];
   alternativeExplanations: string[];
   caveats: string[];
-  analyticConfidence: AnalyticConfidence;
+  analyticConfidence: ClaimConfidence;
   singleSourceDependent: boolean;
   status: "accepted" | "contested" | "rejected";
+};
+
+type SynthesisQuestionCoverage = {
+  irId: string;
+  disposition: "covered" | "partial" | "silent" | "contradicted";
+  sourceNoteIds: string[];
+  observationIds: string[];
+};
+
+type ClaimDelta = {
+  status: "new" | "changed" | "unchanged" | "retired";
+  currentClaimId?: string;
+  priorClaimId?: string;
+};
+
+type NextCycleRequirement = {
+  id: string;
+  kind: "watch-indicator" | "change-indicator";
+  question: string;
+  linkedClaimIds: string[];
+  trigger: string;
+  rationale: string;
+  status: "proposed";
 };
 
 type ExternalSynthesis = {
   id: string;
   runId: string;
+  priorSynthesisId?: string;
   sourceNoteIds: string[];
   failedEvidenceCandidateIds: string[];
   claims: ExternalClaim[];
   keyJudgmentClaimIds: string[];
+  questionCoverage: SynthesisQuestionCoverage[];
+  claimDelta: ClaimDelta[];
+  nextCycleRequirements: NextCycleRequirement[];
   unresolvedContradictions: string[];
   intelligenceGaps: string[];
   limitedEvidence: boolean;
 };
 ```
 
-Atomic claims separate actor, action, target, timing, attribution, and consequence when those elements rely on different support or confidence. Single-source claims are permitted only when dependence and limitations remain explicit.
+Atomic claims separate actor, action, target, timing, attribution, and consequence when those elements rely on different support or confidence. Every date retains its evidence role so reporting, publication, and reference dates cannot silently become event dates. A `statement` claim must name `attributedTo`; code rejects an event claim supported only by statement observations. For every proposed claim, the controller intersects the claim kinds permitted by all supporting observations. The model may choose only from that set, so a claim can never be stronger than its weakest support.
+
+Before `Build`, code derives relationships from each note's attribution summary and checksum-bound source identity. Matching relayed upstream sources produce `shared-origin`; a held source that another note relays produces `derivative`. The model receives these results as fixed input and assesses only pairs still marked `unknown`. Source count never substitutes for independence.
+
+The profile policy owns versioned confidence-ceiling rules. After dependency collapse, one independent source caps an event claim at `moderate`; statement-only support can establish only that the statement was made. Unknown dependency, material contradictions, weak reliability, and unresolved gaps may lower the ceiling. Code computes the ceiling and evidence basis; the model must provide a rationale and may lower confidence but never raise it above the ceiling.
+
+Question coverage is a deterministic rollup of final Panel 2 IR dispositions and accepted observation tags. `intelligenceGaps` derives from partial and silent coverage plus failed sources; neither field is proposed by `Build`. The request aliases source notes, observations, and claims with short ordinals, and code maps aliases back to canonical IDs before validation.
+
+`priorSynthesisId` is comparison context, never evidence. Code compares sealed graphs and records claims as new, changed, unchanged, or retired. Watch and change indicators are proposed information requirements for the next collection cycle and must name the claims they could move.
+
+Single-source claims are permitted only when dependence and limitations remain explicit. With one usable source, the synthesis must set `limitedEvidence: true`; confidence ceilings and single-source flags remain visible even when the source is assessed as reliable.
+
+## Challenge contract
+
+Each accepted or contested Build claim receives the same bounded checklist in a fresh invocation that does not include Build's rationale:
+
+```ts
+type ChallengeCheck =
+  | "circular-reporting"
+  | "single-source-dependence"
+  | "inference-beyond-sources"
+  | "missing-alternative"
+  | "hidden-contradiction"
+  | "confidence-inflation";
+
+type ClaimChallenge = {
+  id: string;
+  claimId: string;
+  check: ChallengeCheck;
+  issue: string;
+  proposedAction: "change-status" | "lower-confidence" | "add-caveat" | "change-relationship";
+};
+
+type ChallengeOutput = {
+  claimId: string;
+  challenges: ClaimChallenge[];
+};
+```
+
+An empty `challenges` array is a valid honest negative and is not retried merely for being empty. The controller measures challenges raised and, after adjudication, the proportion upheld.
+
+## Adjudication contract
+
+Every challenge is explicitly upheld, rejected, or left unresolved against the source notes and accepted observations. An upheld challenge must change claim status, confidence, caveats, or a source relationship; code rejects an upheld challenge with no resulting change. Contested claims remain in the sealed graph as contested rather than being dropped. For the first POC, a human is the adjudicator.
 
 # Part 7: Optional Organizational Relevance Without Evidence Contamination
 
@@ -968,6 +1087,11 @@ Provider context may accompany this stage as attributed orientation. It cannot b
 ## Organizational context pack
 
 ```ts
+type ContextKey = {
+  kind: "country" | "entity" | "technology";
+  value: string;
+};
+
 type OrganizationalContextRecord = {
   id: string;
   contextKind:
@@ -981,6 +1105,7 @@ type OrganizationalContextRecord = {
     | "business-activity"
     | "ownership";
   statement: string;
+  keys: ContextKey[];
   validityFrom?: string;
   validityTo?: string;
   classification: string;
@@ -1005,6 +1130,15 @@ Only records valid for the memo time boundary and authorized for the output clas
 ## Relevance assessment
 
 ```ts
+type RelevancePathway = {
+  kind: "exposure" | "consequence";
+  externalClaimId: string;
+  contextRecordId: string;
+  mechanism: string;
+  touchpoint: string;
+  horizon: "current" | "near-term" | "longer-term";
+};
+
 type OrganizationalRelevanceAssessment = {
   id: string;
   runId: string;
@@ -1012,18 +1146,20 @@ type OrganizationalRelevanceAssessment = {
   contextRecordIds: string[];
   providerContextItemIds: string[];
   relevance: "direct" | "indirect" | "watch" | "none" | "unknown";
-  exposurePathways: string[];
-  consequencePathways: string[];
+  exposurePathways: RelevancePathway[];
+  consequencePathways: RelevancePathway[];
   timeHorizon: "current" | "near-term" | "longer-term";
   assessment: string;
   assumptions: string[];
   unknowns: string[];
-  changeIndicators: string[];
+  changeRequirementIds: string[];
   confidence: AnalyticConfidence;
 };
 ```
 
-Every organization-specific implication must resolve to at least one accepted external claim and one governed context record. When either side is absent, the output is an explicit information gap rather than a relevance judgment. The Vestas memo profile is the first planned implementation of this generic contract.
+Code pre-selects claim and context-record pairs through exact normalized overlap between claim fields and typed country, entity, or technology keys. The model assesses only those bounded pairs; it cannot browse the complete context pack. Every pathway must name its external claim, governed context record, mechanism, touchpoint, and horizon, so dual lineage is checked per pathway rather than only at assessment level.
+
+Every organization-specific implication must resolve to at least one accepted external claim and one governed context record. When either side is absent, the output is an explicit information gap rather than a relevance judgment. `none` and `unknown` are valid assessed outcomes and are not retried merely for being negative. The Vestas memo profile is the first planned implementation of this generic contract.
 
 # Part 8: Memo Standard From Historical Memos
 
@@ -1094,7 +1230,7 @@ It does not receive raw historical memos or unresolved collection leads.
 type MemoStatement = {
   id: string;
   text: string;
-  statementKind: "external-fact" | "analytic-judgment" | "organizational-implication" | "context";
+  statementKind: "external-claim" | "analytic-judgment" | "organizational-implication" | "context";
   externalClaimIds: string[];
   relevanceAssessmentIds: string[];
   providerContextItemIds: string[];
@@ -1106,11 +1242,25 @@ type MemoSection = {
   statements: MemoStatement[];
 };
 
+type MemoSourceSummary = {
+  sourceNoteId: string;
+  candidateId: string;
+  reliability: Assessment["reliability"];
+  dependency: Assessment["dependency"];
+  limitations: string[];
+};
+
+type KeyJudgmentConfidence = QualitativeAssessment & {
+  ceiling: "unknown" | "low" | "moderate" | "high";
+  boundedByClaimIds: string[];
+};
+
 type MemoDocument = {
   id: string;
   runId: string;
   version: number;
   status: "draft" | "approved" | "rejected";
+  informationCutoffAt: string;
   memoStandardPackId: string;
   memoStandardVersion: number;
   scopeId: string;
@@ -1118,7 +1268,7 @@ type MemoDocument = {
   bluf: MemoStatement[];
   keyJudgments: Array<{
     statement: MemoStatement;
-    confidence: QualitativeAssessment;
+    confidence: KeyJudgmentConfidence;
   }>;
   analysis: MemoSection[];
   organizationalRelevance: MemoSection[];
@@ -1126,7 +1276,8 @@ type MemoDocument = {
   competingExplanations: MemoStatement[];
   intelligenceGaps: string[];
   outlook: MemoStatement[];
-  watchIndicators: MemoStatement[];
+  nextCycleRequirements: NextCycleRequirement[];
+  sourceSummary: MemoSourceSummary[];
   sourceEvidenceCandidateIds: string[];
   contextRecordIds: string[];
   createdAt: string;
@@ -1135,11 +1286,13 @@ type MemoDocument = {
 
 Statement rules:
 
-1. `external-fact` and `analytic-judgment` require accepted external claim IDs.
+1. `external-claim` and `analytic-judgment` require accepted external claim IDs and preserve each claim's event, statement, assessment, or forecast kind.
 2. `organizational-implication` requires both external claim IDs and relevance-assessment IDs.
 3. `context` requires provider-context or governed organizational-context lineage and explicit attribution.
 4. A statement cannot cite a collection lead.
-5. Markdown and other presentation formats are deterministic renderings of the canonical JSON.
+5. Every key-judgment confidence is capped at the lowest code-computed ceiling among its supporting claims and names those claims in `boundedByClaimIds`.
+6. `informationCutoffAt` is explicit, and the required source summary is derived from Panel 2 assessments rather than written from model memory.
+7. Markdown and other presentation formats are deterministic renderings of the canonical JSON.
 
 # Part 10: Quality Assurance and Publication
 
@@ -1157,6 +1310,8 @@ Before semantic verification, code checks:
 8. Presence of declared limitations, single-source dependence, and unresolved contradictions.
 9. Absence of unresolved lead IDs from memo statements.
 10. Output classification compatibility with context records.
+11. Presence and lineage of the information cutoff, source summary, and typed next-cycle requirements.
+12. Every key-judgment confidence is at or below the minimum ceiling of its supporting claims.
 
 Any deterministic failure blocks human publication review.
 
@@ -1173,7 +1328,7 @@ type QualityDimension =
   | "confidence-calibration"
   | "alternative-analysis"
   | "question-coverage"
-  | "vestas-relevance"
+  | "organizational-relevance"
   | "decision-utility"
   | "memo-standard-adherence";
 
@@ -1201,13 +1356,15 @@ type MemoVerification = {
 
 There is no weighted composite quality score. A strength in presentation cannot offset a failure in evidence fidelity.
 
+Each quality dimension runs as a separate bounded invocation and produces its own typed verdict and findings. A fresh session prevents direct reasoning carry-over, but when writer and verifier use the same model and provider this is role separation rather than strong independence; the limitation remains explicit until a second approved provider is available.
+
 ## Blocking quality policy
 
 The memo cannot pass when any of the following exists:
 
 1. An unsupported factual assertion or analytical judgment.
 2. A citation that does not support its statement.
-3. A Vestas implication without external and internal lineage.
+3. An organizational implication without external and internal lineage.
 4. Hidden single-source or shared-origin dependence.
 5. Confidence stronger than the underlying adjudicated claim.
 6. A material contradiction, caveat, or alternative removed during writing.
@@ -1233,7 +1390,7 @@ type MemoPublicationDecision = {
     | "editorial"
     | "external-judgment"
     | "source-analysis"
-    | "vestas-relevance"
+    | "organizational-relevance"
     | "evidence-gap"
     | "standard-policy";
   feedback?: string;
@@ -1300,17 +1457,17 @@ The workflow separates source-item state from memo-run state. Each source has it
 | `source_assurance_running` | Controller aggregating source states | `external_synthesis_ready`, `source_assurance_partial`, `no_usable_sources`, `run_failed` |
 | `source_assurance_partial` | Human or policy exception gate | `external_synthesis_ready`, `collection_planned`, `run_cancelled` |
 | `external_synthesis_ready` | Controller | `external_synthesis_running` |
-| `external_synthesis_running` | Controller after typed model output | `vestas_relevance_ready`, `synthesis_revision`, `run_failed` |
+| `external_synthesis_running` | Controller after typed model output | `organizational_relevance_ready`, `synthesis_revision`, `run_failed` |
 | `synthesis_revision` | Controller under frozen retry policy | `external_synthesis_ready`, `source_assurance_running`, `run_failed` |
-| `vestas_relevance_ready` | Controller | `vestas_relevance_running`, `memo_drafting` |
-| `vestas_relevance_running` | Controller after typed model output | `memo_drafting`, `vestas_relevance_revision`, `run_failed` |
-| `vestas_relevance_revision` | Controller under frozen retry policy | `vestas_relevance_ready`, `external_synthesis_ready`, `run_failed` |
+| `organizational_relevance_ready` | Controller | `organizational_relevance_running`, `memo_drafting` |
+| `organizational_relevance_running` | Controller after typed model output | `memo_drafting`, `organizational_relevance_revision`, `run_failed` |
+| `organizational_relevance_revision` | Controller under frozen retry policy | `organizational_relevance_ready`, `external_synthesis_ready`, `run_failed` |
 | `memo_drafting` | Controller after typed model output | `memo_verifying`, `run_failed` |
 | `memo_verifying` | Controller after deterministic and typed semantic checks | `publication_review`, `memo_revision`, `verification_escalated`, `run_failed` |
-| `memo_revision` | Controller routed by typed finding ownership | `memo_drafting`, `vestas_relevance_ready`, `external_synthesis_ready`, `run_failed` |
+| `memo_revision` | Controller routed by typed finding ownership | `memo_drafting`, `organizational_relevance_ready`, `external_synthesis_ready`, `run_failed` |
 | `verification_escalated` | Human exception gate | `publication_review`, `memo_revision`, `run_rejected` |
 | `publication_review` | Human publication gate | `run_published`, `publication_revision`, `run_rejected` |
-| `publication_revision` | Controller following human issue type | `memo_drafting`, `vestas_relevance_ready`, `external_synthesis_ready`, `collection_planned`, `run_rejected` |
+| `publication_revision` | Controller following human issue type | `memo_drafting`, `organizational_relevance_ready`, `external_synthesis_ready`, `collection_planned`, `run_rejected` |
 | `no_admissible_evidence` | Human or policy exception gate | `collection_planned`, `run_cancelled` |
 | `no_usable_sources` | Human or policy exception gate | `collection_planned`, `run_cancelled` |
 | `run_published` | Human publication gate | Terminal |
@@ -1404,6 +1561,22 @@ The architecture is implemented through narrow, testable slices:
 11. Bounded concurrency, audit hardening, recovery, and sealed manifests only after sequential behavior works.
 
 Each slice reuses plain functions and the dependency boundaries in `script-architecture.md`. Provider frameworks, plugin registries, dependency-injection containers, event buses, generic repositories, and parallel orchestration remain deferred until repeated working code demonstrates the need.
+
+## Panel 3 POC order
+
+The first synthesis POC narrows the broader sequence:
+
+1. Align `Build` input to the structured source note Panel 2 actually emits; do not recreate retired synopsis, key-finding, narrative, or adjudicated-brief fields.
+2. Implement deterministic source-note validation, alias mapping, dependency derivation, IR coverage rollup, claim-kind bounds, and confidence ceilings before invoking a model.
+3. Exercise `Build` with the reviewed NV note plus one clearly labelled synthetic note deliberately relaying the same NYT reporting. The synthetic note tests circular-reporting detection only; because it is constructed to fit the note contract, it is not evidence that the real note contract is usable.
+4. Run the fixed Challenge checklist independently for each claim and record empty challenge sets as valid outcomes.
+5. Use a human adjudicator for the POC; require every upheld challenge to produce a typed claim change and keep contested claims visible.
+6. Exercise the writer with deterministic verification and use the human publication gate in place of semantic verification for this POC.
+7. Implement organizational relevance last, after a small governed context pack has been separately approved.
+
+The NV review may be deferred while controller code and synthetic tests are developed, but its extract commit or review package cannot enter a live Build. The live two-note exercise waits for a completed, checksum-bound NV source note. With only one independent evidence origin after dependency collapse, the sealed result must remain single-source dependent and `limitedEvidence: true`; the first POC succeeds by preserving that limitation rather than inflating confidence.
+
+The manual Copilot bridge makes each semantic stage a separate human-mediated invocation. Keep the first POC to Build, per-claim Challenge, human Adjudicate, and writer; do not add Relevance or a ten-call semantic verifier until the earlier contracts work. A resumable sequential runner becomes the smallest justified orchestration step once repeated manual stage wiring is demonstrated.
 
 ## Open decisions
 

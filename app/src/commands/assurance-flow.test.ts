@@ -242,6 +242,7 @@ test("runs one admitted source through the source-assurance commands", async () 
       packageSha256,
       reviewerId: "TESTER",
       reviewedAt: "2026-03-12T00:00:00.000Z",
+  omissionPass: "performed",
       verdicts: reviewPackage.observations.map((entry) => ({
         observationId: entry.observationId,
         verdict: "supported"

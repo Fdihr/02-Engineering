@@ -303,6 +303,7 @@ const baseResponse = {
   packageSha256: packageArtifact.artifactSha256,
   reviewerId: "TESTER",
   reviewedAt: "2026-03-12T00:00:00.000Z",
+  omissionPass: "performed",
   verdicts: reviewPackage.observations.map((entry) => ({
     observationId: entry.observationId,
     verdict: "supported"
@@ -621,6 +622,72 @@ test("rejects corrected tags that are not a proper subset of the proposal", () =
       ]
     }),
     { ok: false, error: "INVALID_CORRECTED_TAGS" }
+  );
+});
+
+test("records an unperformed omission pass as unmeasured, never as zero", () => {
+  const response = {
+    ...baseResponse,
+    omissionPass: "not-performed",
+    humanObservations: [],
+    irReview: [
+      { irId: "ir-01", disposition: "covered" },
+      { irId: "ir-02", disposition: "silent", note: "No supporting observation." }
+    ]
+  };
+  const record = buildRecord(response);
+  assert.equal(record.ok, true);
+  if (!record.ok) {
+    return;
+  }
+
+  const note = assembleSourceNote({
+    admitted,
+    commit,
+    commitArtifact,
+    reviewPackage,
+    reviewRecord: record.value,
+    reviewRecordArtifact: recordArtifact,
+    requirements,
+    policy,
+    assembledAt: "2026-03-14T00:00:00.000Z"
+  });
+  assert.equal(note.ok, true);
+  if (!note.ok) {
+    return;
+  }
+  assert.ok(
+    note.value.caveats.some((entry) => entry.includes("No omission pass was performed"))
+  );
+
+  const metrics = measureAssurance({
+    note: {
+      runId: note.value.runId,
+      snapshotId: note.value.snapshotId,
+      irDispositions: note.value.irDispositions,
+      matchedVia: ["exact"]
+    },
+    reviewPackage,
+    reviewRecord: record.value,
+    attemptFailures: [[]],
+    measuredAt: "2026-03-15T00:00:00.000Z"
+  });
+  assert.equal(metrics.ok, true);
+  if (!metrics.ok) {
+    return;
+  }
+  assert.equal(metrics.value.omissionCount, null);
+  assert.ok(
+    metrics.value.recommendations.some((entry) =>
+      entry.includes("Sweep decision remains unmeasured")
+    )
+  );
+});
+
+test("rejects human observations when no omission pass was performed", () => {
+  assert.deepEqual(
+    buildRecord({ ...baseResponse, omissionPass: "not-performed" }),
+    { ok: false, error: "INVALID_OMISSION_PASS" }
   );
 });
 

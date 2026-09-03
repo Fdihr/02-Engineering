@@ -227,6 +227,16 @@ export const assembleSourceNote = (
       `${normalisedMatches} accepted observations were located under policy ${policy.policyId} quote-match rules; every stored anchor remains byte-exact against the canonical segment.`
     );
   }
+  if (reviewRecord.omissionPass === "not-performed") {
+    caveats.push(
+      "No omission pass was performed: the coverage picture is the model's alone and may miss source material relevant to an approved requirement."
+    );
+  }
+  if (reviewRecord.irReviewBasis === "rows-only") {
+    caveats.push(
+      "Requirement dispositions were judged from the extracted observations alone, not from a fresh reading of the source, so a requirement wrongly recorded as silent would not have been detected."
+    );
+  }
   if (reviewRecord.assessment.dependency.kind !== "original") {
     caveats.push(
       `Reporting dependency is ${
