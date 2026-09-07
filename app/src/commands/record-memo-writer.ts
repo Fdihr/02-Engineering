@@ -5,14 +5,29 @@ import {
   validateChallengeRecord,
   validateProvisionalAdjudication
 } from "../modules/synthesis/challenge.js";
+import {
+  validateKeyJudgementRecord,
+  validatePerformedAdjudication,
+  type KeyJudgementRecord,
+  type PerformedAdjudication
+} from "../modules/synthesis/key-judgement-stage.js";
 import { validateSynthesisBuildRecord } from "../modules/synthesis/response.js";
 import {
+  createBoundedWriterRequest,
   createWriterRequest,
   recordWriterResponse,
   renderMemoMarkdown,
+  validateBoundedWriterRequest,
   validateMemoStandardV0,
-  validateWriterRequest
+  validateWriterRequest,
+  type AnyWriterRequest,
+  type MemoStandardV0
 } from "../modules/memo/writer.js";
+import {
+  validateMemoStandardV1,
+  type MemoStandardV1
+} from "../modules/memo/standard-v1.js";
+import type { ProvisionalAdjudication } from "../modules/synthesis/challenge.js";
 import { canonicalJson } from "../modules/assurance/validators.js";
 import {
   assuranceRunRoot,
@@ -38,37 +53,86 @@ const main = async (): Promise<void> => {
     const [requestPath, responsePath, authorisationPath, ...extra] = process.argv.slice(2);
     if (!requestPath || !responsePath || extra.length > 0) throw new Error(usage);
     const requestArtifact = await loadRunArtifact(runRoot, requestPath, "Writer request");
-    const request = validateWriterRequest(requestArtifact.value);
-    if (!request.ok) throw new Error(`Writer request rejected: ${request.error}`);
-    runId = request.value.runId;
+    const boundedRequest = validateBoundedWriterRequest(requestArtifact.value);
+    const legacyRequest = validateWriterRequest(requestArtifact.value);
+    const request: AnyWriterRequest | undefined = boundedRequest.ok
+      ? boundedRequest.value
+      : legacyRequest.ok
+        ? legacyRequest.value
+        : undefined;
+    if (!request) throw new Error("Writer request rejected: INVALID_WRITER_REQUEST");
+    const isBounded = boundedRequest.ok;
+    runId = request.runId;
     const buildArtifact = requireChecksum(
-      await loadRunArtifact(runRoot, request.value.buildRecord.artifactRef, "Build record"),
-      request.value.buildRecord.artifactSha256,
+      await loadRunArtifact(runRoot, request.buildRecord.artifactRef, "Build record"),
+      request.buildRecord.artifactSha256,
       "Build record"
     );
     const build = validateSynthesisBuildRecord(buildArtifact.value);
     if (!build.ok) throw new Error(`Build record rejected: ${build.error}`);
     const challengeArtifact = requireChecksum(
-      await loadRunArtifact(runRoot, request.value.challengeRecord.artifactRef, "Challenge record"),
-      request.value.challengeRecord.artifactSha256,
+      await loadRunArtifact(runRoot, request.challengeRecord.artifactRef, "Challenge record"),
+      request.challengeRecord.artifactSha256,
       "Challenge record"
     );
     const challenge = validateChallengeRecord(challengeArtifact.value);
     if (!challenge.ok) throw new Error(`Challenge record rejected: ${challenge.error}`);
+    const adjudicationBinding = isBounded
+      ? boundedRequest.value.adjudication
+      : legacyRequest.ok
+        ? legacyRequest.value.provisionalAdjudication
+        : undefined;
+    if (!adjudicationBinding) {
+      throw new Error("Writer request has no valid adjudication binding.");
+    }
     const adjudicationArtifact = requireChecksum(
       await loadRunArtifact(
         runRoot,
-        request.value.provisionalAdjudication.artifactRef,
-        "Provisional adjudication"
+        adjudicationBinding.artifactRef,
+        isBounded ? "Performed adjudication" : "Provisional adjudication"
       ),
-      request.value.provisionalAdjudication.artifactSha256,
-      "Provisional adjudication"
+      adjudicationBinding.artifactSha256,
+      isBounded ? "Performed adjudication" : "Provisional adjudication"
     );
-    const adjudication = validateProvisionalAdjudication(adjudicationArtifact.value);
-    if (!adjudication.ok) throw new Error(`Adjudication rejected: ${adjudication.error}`);
+    let adjudication: PerformedAdjudication | ProvisionalAdjudication;
+    if (isBounded) {
+      const validated = validatePerformedAdjudication(adjudicationArtifact.value);
+      if (!validated.ok) {
+        throw new Error(`Adjudication rejected: ${JSON.stringify(validated.error)}`);
+      }
+      adjudication = validated.value;
+    } else {
+      const validated = validateProvisionalAdjudication(adjudicationArtifact.value);
+      if (!validated.ok) {
+        throw new Error(`Adjudication rejected: ${validated.error}`);
+      }
+      adjudication = validated.value;
+    }
+    let keyJudgementArtifact:
+      | Awaited<ReturnType<typeof loadRunArtifact>>
+      | undefined;
+    let keyJudgement: KeyJudgementRecord | undefined;
+    if (isBounded) {
+      keyJudgementArtifact = requireChecksum(
+        await loadRunArtifact(
+          runRoot,
+          boundedRequest.value.keyJudgementRecord.artifactRef,
+          "Key-judgement record"
+        ),
+        boundedRequest.value.keyJudgementRecord.artifactSha256,
+        "Key-judgement record"
+      );
+      const validated = validateKeyJudgementRecord(keyJudgementArtifact.value);
+      if (!validated.ok) {
+        throw new Error(
+          `Key-judgement record rejected: ${JSON.stringify(validated.error)}`
+        );
+      }
+      keyJudgement = validated.value;
+    }
     const questionArtifact = requireChecksum(
-      await loadRunArtifact(runRoot, request.value.approvedQuestion.artifactRef, "Approved question"),
-      request.value.approvedQuestion.artifactSha256,
+      await loadRunArtifact(runRoot, request.approvedQuestion.artifactRef, "Approved question"),
+      request.approvedQuestion.artifactSha256,
       "Approved question"
     );
     const question = validateApprovedResearchQuestion(
@@ -81,26 +145,54 @@ const main = async (): Promise<void> => {
     );
     if (!question.ok) throw new Error(`Approved question rejected: ${question.error}`);
     const standardArtifact = requireChecksum(
-      await loadJsonArtifact(resolve(request.value.memoStandard.artifactRef)),
-      request.value.memoStandard.artifactSha256,
+      await loadJsonArtifact(resolve(request.memoStandard.artifactRef)),
+      request.memoStandard.artifactSha256,
       "Memo standard"
     );
-    const standard = validateMemoStandardV0(standardArtifact.value);
-    if (!standard.ok) throw new Error(`Memo standard rejected: ${standard.error}`);
-    const recomputed = createWriterRequest({
-      buildRecord: build.value,
-      buildRecordArtifact: buildArtifact.binding,
-      challengeRecord: challenge.value,
-      challengeRecordArtifact: challengeArtifact.binding,
-      adjudication: adjudication.value,
-      adjudicationArtifact: adjudicationArtifact.binding,
-      question: question.value,
-      questionArtifact: questionArtifact.binding,
-      standard: standard.value,
-      standardArtifact: standardArtifact.binding,
-      preparedAt: request.value.preparedAt
-    });
-    if (!recomputed.ok || canonicalJson(recomputed.value) !== canonicalJson(request.value)) {
+    let standard: MemoStandardV0 | MemoStandardV1;
+    if (isBounded) {
+      const validated = validateMemoStandardV1(standardArtifact.value);
+      if (!validated.ok) {
+        throw new Error(`Memo standard rejected: ${validated.error}`);
+      }
+      standard = validated.value;
+    } else {
+      const validated = validateMemoStandardV0(standardArtifact.value);
+      if (!validated.ok) {
+        throw new Error(`Memo standard rejected: ${validated.error}`);
+      }
+      standard = validated.value;
+    }
+    const recomputed = isBounded
+      ? createBoundedWriterRequest({
+          buildRecord: build.value,
+          buildRecordArtifact: buildArtifact.binding,
+          challengeRecord: challenge.value,
+          challengeRecordArtifact: challengeArtifact.binding,
+          adjudication: adjudication as PerformedAdjudication,
+          adjudicationArtifact: adjudicationArtifact.binding,
+          keyJudgementRecord: keyJudgement!,
+          keyJudgementRecordArtifact: keyJudgementArtifact!.binding,
+          question: question.value,
+          questionArtifact: questionArtifact.binding,
+          standard: standard as MemoStandardV1,
+          standardArtifact: standardArtifact.binding,
+          preparedAt: request.preparedAt
+        })
+      : createWriterRequest({
+          buildRecord: build.value,
+          buildRecordArtifact: buildArtifact.binding,
+          challengeRecord: challenge.value,
+          challengeRecordArtifact: challengeArtifact.binding,
+          adjudication: adjudication as ProvisionalAdjudication,
+          adjudicationArtifact: adjudicationArtifact.binding,
+          question: question.value,
+          questionArtifact: questionArtifact.binding,
+          standard: standard as MemoStandardV0,
+          standardArtifact: standardArtifact.binding,
+          preparedAt: request.preparedAt
+        });
+    if (!recomputed.ok || canonicalJson(recomputed.value) !== canonicalJson(request)) {
       throw new Error("Writer request no longer matches its deterministic inputs.");
     }
     const responseArtifact = await loadRunArtifact(runRoot, responsePath, "Writer response");
@@ -130,15 +222,16 @@ const main = async (): Promise<void> => {
       supersedesMemoId = value.supersedesMemoId;
     }
     const record = recordWriterResponse({
-      request: request.value,
+      request,
       requestArtifact: requestArtifact.binding,
       responseValue: responseArtifact.value,
       responseArtifact: responseArtifact.binding,
       buildRecord: build.value,
       challengeRecord: challenge.value,
-      adjudication: adjudication.value,
+      adjudication,
+      ...(keyJudgement ? { keyJudgementRecord: keyJudgement } : {}),
       question: question.value,
-      standard: standard.value,
+      standard,
       ...(authorisationArtifact
         ? { revalidationAuthorisation: authorisationArtifact.binding }
         : {}),

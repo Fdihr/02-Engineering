@@ -1,15 +1,14 @@
 import { appendFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { validateApprovedResearchQuestion } from "../modules/research/research-question.js";
+import { validateChallengeRecord } from "../modules/synthesis/challenge.js";
 import {
-  validateChallengeRecord,
-  validateProvisionalAdjudication
-} from "../modules/synthesis/challenge.js";
+  validateKeyJudgementRecord,
+  validatePerformedAdjudication
+} from "../modules/synthesis/key-judgement-stage.js";
 import { validateSynthesisBuildRecord } from "../modules/synthesis/response.js";
-import {
-  createWriterRequest,
-  validateMemoStandardV0
-} from "../modules/memo/writer.js";
+import { createBoundedWriterRequest } from "../modules/memo/writer.js";
+import { validateMemoStandardV1 } from "../modules/memo/standard-v1.js";
 import {
   assuranceRunRoot,
   commandError,
@@ -23,15 +22,33 @@ import {
 } from "./assurance-io.js";
 
 const usage =
-  "Usage: npm run prepare:memo-writer -- <build-record.json> <challenge-record.json> <provisional-adjudication.json> <approved-question.json> <memo-standard-v0.json>";
+  "Usage: npm run prepare:memo-writer -- <build-record.json> <challenge-record.json> <performed-adjudication.json> <key-judgement-record.json> <approved-question.json> <memo-standard-v1.json>";
+
+const describe = (value: unknown): string =>
+  typeof value === "string" ? value : JSON.stringify(value);
 
 const main = async (): Promise<void> => {
   const preparedAt = new Date().toISOString();
   const runRoot = assuranceRunRoot();
   try {
-    const [buildPath, challengePath, adjudicationPath, questionPath, standardPath, ...extra] =
-      process.argv.slice(2);
-    if (!buildPath || !challengePath || !adjudicationPath || !questionPath || !standardPath || extra.length > 0) {
+    const [
+      buildPath,
+      challengePath,
+      adjudicationPath,
+      keyJudgementPath,
+      questionPath,
+      standardPath,
+      ...extra
+    ] = process.argv.slice(2);
+    if (
+      !buildPath ||
+      !challengePath ||
+      !adjudicationPath ||
+      !keyJudgementPath ||
+      !questionPath ||
+      !standardPath ||
+      extra.length > 0
+    ) {
       throw new Error(usage);
     }
     const buildArtifact = await loadRunArtifact(runRoot, buildPath, "Build record");
@@ -43,10 +60,12 @@ const main = async (): Promise<void> => {
     const adjudicationArtifact = await loadRunArtifact(
       runRoot,
       adjudicationPath,
-      "Provisional adjudication"
+      "Performed adjudication"
     );
-    const adjudication = validateProvisionalAdjudication(adjudicationArtifact.value);
-    if (!adjudication.ok) throw new Error(`Adjudication rejected: ${adjudication.error}`);
+    const adjudication = validatePerformedAdjudication(adjudicationArtifact.value);
+    if (!adjudication.ok) {
+      throw new Error(`Adjudication rejected: ${describe(adjudication.error)}`);
+    }
     requireChecksum(
       buildArtifact,
       adjudication.value.buildRecord.artifactSha256,
@@ -57,6 +76,17 @@ const main = async (): Promise<void> => {
       adjudication.value.challengeRecord.artifactSha256,
       "Adjudication Challenge record"
     );
+    const keyJudgementArtifact = await loadRunArtifact(
+      runRoot,
+      keyJudgementPath,
+      "Key-judgement record"
+    );
+    const keyJudgement = validateKeyJudgementRecord(keyJudgementArtifact.value);
+    if (!keyJudgement.ok) {
+      throw new Error(
+        `Key-judgement record rejected: ${describe(keyJudgement.error)}`
+      );
+    }
     const questionArtifact = await loadRunArtifact(runRoot, questionPath, "Approved question");
     const question = validateApprovedResearchQuestion(
       {
@@ -68,15 +98,17 @@ const main = async (): Promise<void> => {
     );
     if (!question.ok) throw new Error(`Approved question rejected: ${question.error}`);
     const standardArtifact = await loadJsonArtifact(resolve(standardPath));
-    const standard = validateMemoStandardV0(standardArtifact.value);
+    const standard = validateMemoStandardV1(standardArtifact.value);
     if (!standard.ok) throw new Error(`Memo standard rejected: ${standard.error}`);
-    const request = createWriterRequest({
+    const request = createBoundedWriterRequest({
       buildRecord: build.value,
       buildRecordArtifact: buildArtifact.binding,
       challengeRecord: challenge.value,
       challengeRecordArtifact: challengeArtifact.binding,
       adjudication: adjudication.value,
       adjudicationArtifact: adjudicationArtifact.binding,
+      keyJudgementRecord: keyJudgement.value,
+      keyJudgementRecordArtifact: keyJudgementArtifact.binding,
       question: question.value,
       questionArtifact: questionArtifact.binding,
       standard: standard.value,
@@ -115,7 +147,9 @@ const main = async (): Promise<void> => {
     console.log(`Writer request: ${request.value.id}`);
     console.log(`Review status: ${request.value.reviewStatus}`);
     console.log(`Limited evidence: ${request.value.limitedEvidence}`);
-    console.log(`Claims: ${request.value.claims.length}`);
+    console.log(`Selected claims: ${request.value.claims.length}`);
+    console.log(`Key judgements: ${request.value.keyJudgements.length}`);
+    console.log(`Explicit omissions: ${request.value.requiredOmissions.length}`);
     console.log(`Required alternatives: ${request.value.requiredAlternativeCount}`);
     console.log(`Required gaps: ${request.value.requiredGaps.length}`);
     console.log(`Output: ${output}`);

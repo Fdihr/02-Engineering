@@ -201,7 +201,7 @@
   <!-- Approved evidence enters source assurance. -->
   <path class="primary-line" d="M 592 948 L 628 948 L 628 256 L 662 256" />
 
-  <!-- Out-of-IR observations return as proposals to the human question gate. -->
+  <!-- Out-of-IR observations remain machine-generated question-scope proposals. -->
   <path class="feedback-line" d="M 664 1282 L 620 1282 L 620 280 L 594 280" />
 
   <!-- PANEL 3: SYNTHESIS, CONTEXT, STANDARD, OUTPUT -->
@@ -229,8 +229,8 @@
   <path class="primary-line" d="M 1960 280 L 1982 280" />
 
   <rect class="artifact-card" x="1392" y="360" width="920" height="72" />
-  <text class="card-title" x="1416" y="388">Adjudicated external claim graph</text>
-  <text class="caption" x="1416" y="412">Claim-to-observation lineage | source relationships | confidence | contradictions | gaps</text>
+  <text class="card-title" x="1416" y="388">Adjudicated graph -> bounded key-judgement selection</text>
+  <text class="caption" x="1416" y="412">Per-IR eligibility | Challenge aliases | KJ1-KJ8 | policy cap 3 | omissions | gaps</text>
   <path class="primary-line" d="M 2148 336 L 2148 358" />
 
   <rect class="context-card" x="1392" y="464" width="280" height="112" />

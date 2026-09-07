@@ -39,6 +39,8 @@ const requestCommand = (path: string): DeterministicRunStep["command"] | undefin
       return "record:synthesis-build";
     case "challenge-request.json":
       return "record:synthesis-challenge";
+    case "key-judgement-request.json":
+      return "record:key-judgements";
     case "writer-request.json":
       return "record:memo-writer";
     default:
@@ -49,6 +51,7 @@ const requestCommand = (path: string): DeterministicRunStep["command"] | undefin
 const commandFile: Record<DeterministicRunStep["command"], string> = {
   "record:synthesis-build": "src/commands/record-synthesis-build.ts",
   "record:synthesis-challenge": "src/commands/record-synthesis-challenge.ts",
+  "record:key-judgements": "src/commands/record-key-judgements.ts",
   "record:memo-writer": "src/commands/record-memo-writer.ts"
 };
 
@@ -108,13 +111,27 @@ const inspectRun = async (runRoot: string, runId: string): Promise<RunNextFacts>
       });
     }
   }
-  const pendingModelRequestPaths: string[] = [];
+  const pendingModelRequests: Array<{ path: string; preparedAt: number }> = [];
   for (const requestPath of files.filter((path) => requestCommand(path))) {
     const directoryPath = resolve(requestPath, "..");
     if (!responseFiles.some((path) => resolve(path, "..") === directoryPath)) {
-      pendingModelRequestPaths.push(artifactRef(requestPath));
+      const value = await readJson(requestPath);
+      const preparedAt =
+        typeof value === "object" &&
+        value !== null &&
+        !Array.isArray(value) &&
+        typeof (value as { preparedAt?: unknown }).preparedAt === "string"
+          ? Date.parse((value as { preparedAt: string }).preparedAt)
+          : 0;
+      pendingModelRequests.push({
+        path: artifactRef(requestPath),
+        preparedAt: Number.isNaN(preparedAt) ? 0 : preparedAt
+      });
     }
   }
+  const newestPendingModelRequest = pendingModelRequests.sort(
+    (left, right) => right.preparedAt - left.preparedAt
+  )[0];
   const gates = files.filter((path) => basename(path) === "publication-gate.json");
   const latestGate = gates.sort().at(-1);
   const gate = latestGate ? await readJson(latestGate) : undefined;
@@ -134,7 +151,9 @@ const inspectRun = async (runRoot: string, runId: string): Promise<RunNextFacts>
     hasIntentApproval,
     openExceptionPaths,
     deterministicSteps,
-    pendingModelRequestPaths,
+    pendingModelRequestPaths: newestPendingModelRequest
+      ? [newestPendingModelRequest.path]
+      : [],
     ...(latestGate ? { publicationGatePath: artifactRef(latestGate) } : {}),
     publicationApprovalAvailable: gateRecord?.humanApprovalAvailable === true,
     governanceBlockerPaths

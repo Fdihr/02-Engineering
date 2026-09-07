@@ -1,6 +1,8 @@
 # Implemented Workflow Baseline
 
-Status: Panel 1 is complete. Panel 2 exercised provisional review and then completed a human rows-only support pass: all 20 NV observations were supported, the reviewed note supersedes the provisional note, and reviewed metrics are recorded. A reviewed-only Build envelope exists but claim recording awaits a bounded key-claim selection rule.
+Status: Panel 1 is complete. Panel 2 exercised provisional review and then completed a human rows-only support pass. Panel 3 now has a bounded key-judgement selection contract and writer v2 path; the reviewed Build request still needs a fresh response, Challenge, and performed adjudication before selection can run.
+
+Human references below are either one of the four target surfaces (intent, publication, pushed exceptions, governance), compatibility history, or an interim stand-in named in `memo-workflow.md`. Per-source review and manual model transport are not additional permanent human surfaces.
 
 ## Product boundary
 
@@ -125,7 +127,7 @@ The real NV source completed this path as `partially-relevant` with three exact 
 
 ## Completed slice: positive-assessment candidate conversion
 
-One resolved retrieval result + its verified source-lead lineage + one validated positive question-relevance assessment -> one new evidence candidate routed to pending human review.
+One resolved retrieval result + its verified source-lead lineage + one validated positive question-relevance assessment -> one new evidence candidate routed to pending policy admission or compatibility review.
 
 Run from `app/`:
 
@@ -133,7 +135,7 @@ Run from `app/`:
 npm run reintake:source -- <source-retrieval-result.json> <question-relevance-assessment.json> [candidate-id]
 ```
 
-The command confines every referenced artifact to the run root; verifies source-intake, retrieval-request, raw-response, retrieval-result, canonical-document, assessment, decision, model-request, and model-response checksums; reconstructs the assessment and exact anchors; and writes a non-overwritable canonical intake plus a body-free receipt. `not-relevant` and `uncertain` assessments cannot become candidates. It cannot approve itself; `npm run review:evidence` remains a separate explicit human decision.
+The command confines every referenced artifact to the run root; verifies source-intake, retrieval-request, raw-response, retrieval-result, canonical-document, assessment, decision, model-request, and model-response checksums; reconstructs the assessment and exact anchors; and writes a non-overwritable canonical intake plus a body-free receipt. `not-relevant` and `uncertain` assessments cannot become candidates. It cannot approve itself; in compatibility `human` mode, `npm run review:evidence` remains a separate explicit decision and interim stand-in, not a fifth target human surface.
 
 The evidence gate validates the exact positive-assessment shape, reopens and hashes the persisted assessment and decision, preserves assessment and retrieval lineage in an approved snapshot, and rejects artifact drift or altered relevance routing. Candidate creation events are controller-attributed; evidence decisions remain human-attributed.
 
@@ -292,7 +294,7 @@ Do not add:
 6. The active cross-module baseline is `../02-Contracts/provider-item-role-and-provenance.md`.
 7. Evidence admission reconstructs persisted JSON, requires reviewer identity and reason, binds approval to the raw artifact SHA-256, and records a human-attributed event.
 8. A rejected decision creates no source-assurance input.
-9. The active human-gate contract is `../02-Contracts/evidence-admission.md`.
+9. The active compatibility evidence-gate contract is `../02-Contracts/evidence-admission.md`.
 10. Research-question approval is a separate explicit human transition that precedes provider access.
 11. Approved artifacts are grouped by research run and bound by external SHA-256 when consumed.
 12. The earlier `intake-smoke-analysis-003` artifact is non-admissible because it predates mandatory research-question lineage.
@@ -300,7 +302,7 @@ Do not add:
 14. Supported-API candidates provided close title-level counterparts for all eight human-supplied AskAnna citations, without depending on AskAnna's unsupported retrieval API.
 15. One-source retrieval preserves Firecrawl and publisher identity separately, records explicit redirect and target-status evidence, and cannot approve or intake its own output.
 16. Retrieved-source candidate conversion accepts only a validated positive assessment and verifies complete retrieval, canonical-document, model-request, model-response, assessment, and decision lineage.
-17. AI remains responsible only for a typed, source-grounded relevance proposal; deterministic code creates the pending route and humans retain evidence-admission authority.
+17. AI remains responsible only for a typed, source-grounded relevance proposal; deterministic code creates the pending route and admits only under an approved controller policy, while existing policies retain the compatibility human path.
 18. Scalability must preserve the complete source and mandatory `Find -> Sweep -> Judge -> Write`; reuse, per-source isolation, checksum deduplication, and bounded scheduling provide throughput without lowering the final intelligence standard.
 19. Canonical source documents give retrieved and provider-captured content one downstream shape; a new source mechanism needs only a narrow adapter when the common contract remains satisfied.
 20. Human reviewer `FDIHR` approved real NV candidate `nv-candidate-question-relevance-001` in decision `nv-evidence-review-001`; snapshot `snapshot-nv-evidence-review-001` is the first real input ready for source assurance.

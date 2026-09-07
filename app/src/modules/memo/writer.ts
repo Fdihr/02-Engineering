@@ -17,13 +17,29 @@ import type {
   ProvisionalAdjudication
 } from "../synthesis/challenge.js";
 import {
+  claimAliasesFromChallenge,
+  projectClaimsForKeyJudgementSelection,
+  type KeyJudgementRecord,
+  type PerformedAdjudication
+} from "../synthesis/key-judgement-stage.js";
+import {
+  computeKeyJudgementEligibility,
+  validateKeyJudgementProposal
+} from "../synthesis/key-judgements.js";
+import {
   readStrictAliasedValue,
   unwrapStrictArray
 } from "../synthesis/proposal.js";
 import type { BuiltClaim, SynthesisBuildRecord } from "../synthesis/types.js";
+import {
+  keyJudgementPolicyFromStandard,
+  type MemoStandardV1
+} from "./standard-v1.js";
 
 export const MEMO_STANDARD_SCHEMA_VERSION = "memo-standard-pack-v0" as const;
 export const WRITER_REQUEST_SCHEMA_VERSION = "memo-writer-request-v1" as const;
+export const BOUNDED_WRITER_REQUEST_SCHEMA_VERSION =
+  "memo-writer-request-v2" as const;
 export const WRITER_RESPONSE_SCHEMA_VERSION = "memo-writer-copilot-response-v1" as const;
 export const MEMO_DOCUMENT_SCHEMA_VERSION = "intelligence-memo-v1" as const;
 export const MEMO_VERIFICATION_SCHEMA_VERSION = "memo-deterministic-verification-v1" as const;
@@ -107,13 +123,70 @@ export type WriterRequest = {
   prompt: { system: string; user: string };
 };
 
+export type BoundedWriterRequest = {
+  schemaVersion: typeof BOUNDED_WRITER_REQUEST_SCHEMA_VERSION;
+  id: string;
+  preparedAt: string;
+  runId: string;
+  stage: "memo-writer";
+  provider: typeof WRITER_PROVIDER;
+  model: typeof WRITER_MODEL;
+  reviewStatus: SynthesisBuildRecord["reviewStatus"];
+  limitedEvidence: boolean;
+  informationCutoffAt: string;
+  buildRecord: ArtifactBinding;
+  challengeRecord: ArtifactBinding;
+  adjudication: ArtifactBinding;
+  keyJudgementRecord: ArtifactBinding;
+  approvedQuestion: ArtifactBinding;
+  approvedScope: null;
+  memoStandard: ArtifactBinding;
+  claims: Array<{
+    alias: string;
+    claimId: string;
+    statement: string;
+    kind: BuiltClaim["kind"];
+    attributedTo?: string;
+    status: "accepted" | "contested";
+    openChallenges: Array<{
+      id: string;
+      check: string;
+      rationale: string;
+    }>;
+    confidenceLevel: BuiltClaim["confidence"]["level"];
+    confidenceCeiling: BuiltClaim["confidenceCeiling"];
+  }>;
+  keyJudgements: Array<{
+    requirementId: string;
+    claimAlias: string;
+    judgementText: string;
+    confidence: "low" | "moderate" | "high";
+    ceiling: "low" | "moderate" | "high";
+    status: "accepted" | "contested";
+    provisional: boolean;
+    openChallengeIds: string[];
+  }>;
+  requiredAlternativeCount: number;
+  requiredGaps: Array<{
+    irId: string;
+    disposition: "covered" | "partial" | "silent" | "contradicted";
+  }>;
+  requiredOmissions: Array<{ requirementId: string; reason: string }>;
+  derivedSourcingSummary: string;
+  derivedLimitations: string[];
+  standard: MemoStandardV1;
+  prompt: { system: string; user: string };
+};
+
+export type AnyWriterRequest = WriterRequest | BoundedWriterRequest;
+
 export type MemoStatement = {
   id: string;
   section: WriterSection;
   text: string;
   claimIds: string[];
   claimCitations: string[];
-  status: "proposed" | "contested";
+  status: "accepted" | "proposed" | "contested";
   openChallengeIds: string[];
   openChallengeChecks: string[];
 };
@@ -132,13 +205,15 @@ export type MemoDocument = {
   notForPublication: true;
   publicationBlockers: string[];
   memoStandardId: string;
-  memoStandardVersion: 0;
+  memoStandardVersion: 0 | 1;
   approvedQuestionId: string;
   approvedScope: null;
   lineage: {
     buildRecord: ArtifactBinding;
     challengeRecord: ArtifactBinding;
-    provisionalAdjudication: ArtifactBinding;
+    provisionalAdjudication?: ArtifactBinding;
+    adjudication?: ArtifactBinding;
+    keyJudgementRecord?: ArtifactBinding;
     approvedQuestion: ArtifactBinding;
     memoStandard: ArtifactBinding;
   };
@@ -162,7 +237,10 @@ export type MemoDocument = {
     text: string;
     claimCitation: string;
   }>;
-  gaps: Array<{ irId: string; disposition: "partial" | "silent" }>;
+  gaps: Array<{
+    irId: string;
+    disposition: "covered" | "partial" | "silent" | "contradicted";
+  }>;
   sourcingSummary: {
     claimBearingSourceCount: number;
     singleSourceDependent: boolean;
@@ -219,6 +297,9 @@ export type WriterError =
   | "INVALID_INVOCATION_CHRONOLOGY"
   | "FRESH_SESSION_NOT_ATTESTED"
   | "INVALID_ARTIFACT_BINDING";
+
+type WriterStandard = MemoStandardV0 | MemoStandardV1;
+type WriterAdjudication = ProvisionalAdjudication | PerformedAdjudication;
 
 const confidenceRank = { unknown: 0, low: 1, moderate: 2, high: 3 } as const;
 const countWord = (value: number): string =>
@@ -407,6 +488,313 @@ export const createWriterRequest = (input: {
   });
 };
 
+const boundedWriterPrompt = (
+  request: Omit<
+    BoundedWriterRequest,
+    "schemaVersion" | "id" | "prompt"
+  >
+): BoundedWriterRequest["prompt"] => ({
+  system: [
+    "Write optional supporting sections for a very short threat-intelligence memo.",
+    "The BLUF and key judgements are fixed controller outputs; do not return or rewrite them.",
+    "Return only analysis, uncertainties, or indicators with existing claim aliases.",
+    "Do not set confidence, status, challenges, alternatives, gaps, sourcing, limitations, cutoff, citations, or publication state; code derives them.",
+    "Do not introduce facts beyond the supplied selected claims.",
+    "Return a bare statements array or one object under statements, output, or result. An empty statements array is valid. Unknown fields are rejected."
+  ].join("\n"),
+  user: JSON.stringify(
+    {
+      task: "Add optional analysis, uncertainty, or indicator statements only when useful.",
+      selectedClaims: request.claims.map((claim) => ({
+        alias: claim.alias,
+        statement: claim.statement,
+        kind: claim.kind,
+        ...(claim.attributedTo ? { attributedTo: claim.attributedTo } : {}),
+        status: claim.status,
+        openChallenges: claim.openChallenges.map((challenge) => ({
+          check: challenge.check,
+          rationale: challenge.rationale
+        })),
+        confidenceLevel: claim.confidenceLevel,
+        confidenceCeiling: claim.confidenceCeiling
+      })),
+      fixedKeyJudgements: request.keyJudgements.map((judgement) => ({
+        requirementId: judgement.requirementId,
+        claimAlias: judgement.claimAlias,
+        judgementText: judgement.judgementText
+      })),
+      requiredAlternativeCount: request.requiredAlternativeCount,
+      requiredGaps: request.requiredGaps,
+      requiredOmissions: request.requiredOmissions,
+      derivedSourcingSummary: request.derivedSourcingSummary,
+      derivedLimitations: request.derivedLimitations,
+      standard: request.standard,
+      responseShape: {
+        statements: [
+          {
+            section: "analysis | uncertainties | indicators",
+            text: "<concise statement>",
+            claims: ["c01"]
+          }
+        ]
+      }
+    },
+    null,
+    2
+  )
+});
+
+export const createBoundedWriterRequest = (input: {
+  buildRecord: SynthesisBuildRecord;
+  buildRecordArtifact: ArtifactBinding;
+  challengeRecord: ChallengeRecord;
+  challengeRecordArtifact: ArtifactBinding;
+  adjudication: PerformedAdjudication;
+  adjudicationArtifact: ArtifactBinding;
+  keyJudgementRecord: KeyJudgementRecord;
+  keyJudgementRecordArtifact: ArtifactBinding;
+  question: ApprovedResearchQuestion;
+  questionArtifact: ArtifactBinding;
+  standard: MemoStandardV1;
+  standardArtifact: ArtifactBinding;
+  preparedAt: string;
+}): Result<BoundedWriterRequest, WriterError> => {
+  const preparedAt = validTime(input.preparedAt);
+  const bindings = [
+    input.buildRecordArtifact,
+    input.challengeRecordArtifact,
+    input.adjudicationArtifact,
+    input.keyJudgementRecordArtifact,
+    input.questionArtifact,
+    input.standardArtifact
+  ].map(readArtifactBinding);
+  if (!preparedAt || bindings.some((binding) => !binding)) {
+    return err("INVALID_ARTIFACT_BINDING");
+  }
+  if (
+    input.buildRecord.runId !== input.challengeRecord.runId ||
+    input.buildRecord.runId !== input.adjudication.runId ||
+    input.buildRecord.runId !== input.keyJudgementRecord.runId ||
+    input.buildRecord.runId !== input.question.runId ||
+    input.adjudication.adjudicationStatus !== "performed" ||
+    input.keyJudgementRecord.selection.policyId !==
+      input.standard.keyJudgementPolicy.policyId ||
+    input.keyJudgementRecord.buildRecord.artifactSha256 !==
+      bindings[0]!.artifactSha256 ||
+    input.keyJudgementRecord.challengeRecord.artifactSha256 !==
+      bindings[1]!.artifactSha256 ||
+    input.keyJudgementRecord.adjudication.artifactSha256 !==
+      bindings[2]!.artifactSha256 ||
+    input.keyJudgementRecord.memoStandard.artifactSha256 !==
+      bindings[5]!.artifactSha256
+  ) {
+    return err("WRITER_INPUT_MISMATCH");
+  }
+  const aliases = claimAliasesFromChallenge(
+    input.buildRecord,
+    input.challengeRecord
+  );
+  if (!aliases.ok) return err("WRITER_INPUT_MISMATCH");
+  const projected = projectClaimsForKeyJudgementSelection(
+    input.buildRecord,
+    input.adjudication
+  );
+  if (!projected.ok) return err("WRITER_INPUT_MISMATCH");
+  const policy = keyJudgementPolicyFromStandard(input.standard);
+  const eligibility = computeKeyJudgementEligibility(
+    projected.value,
+    input.buildRecord.synthesis.questionCoverage.map((entry) => entry.irId),
+    policy
+  );
+  if (!eligibility.ok) return err("WRITER_INPUT_MISMATCH");
+  const revalidatedSelection = validateKeyJudgementProposal(
+    {
+      selections: input.keyJudgementRecord.selection.selections.map(
+        (selection) => {
+          const alias = Object.entries(aliases.value).find(
+            ([, claimId]) => claimId === selection.claimId
+          )?.[0];
+          return {
+            requirementId: selection.requirementId,
+            claim: alias ?? "",
+            judgementText: selection.judgementText
+          };
+        }
+      ),
+      omissions: input.keyJudgementRecord.selection.omissions.map(
+        (omission) => ({ ...omission })
+      )
+    },
+    aliases.value,
+    projected.value,
+    eligibility.value,
+    policy
+  );
+  if (
+    !revalidatedSelection.ok ||
+    canonicalJson(revalidatedSelection.value) !==
+      canonicalJson(input.keyJudgementRecord.selection)
+  ) {
+    return err("WRITER_INPUT_MISMATCH");
+  }
+  const aliasesByClaimId = new Map(
+    Object.entries(aliases.value).map(([alias, claimId]) => [claimId, alias])
+  );
+  const buildByClaim = new Map(
+    input.buildRecord.synthesis.claims.map((claim) => [claim.id, claim])
+  );
+  const adjudicationByClaim = new Map(
+    input.adjudication.claims.map((claim) => [claim.claimId, claim])
+  );
+  const challengeById = new Map(
+    input.challengeRecord.results.map((result) => [result.id, result])
+  );
+  const selectedClaimIds = [
+    ...new Set(
+      input.keyJudgementRecord.selection.selections.map(
+        (selection) => selection.claimId
+      )
+    )
+  ];
+  const claims = selectedClaimIds.map((claimId) => {
+    const claim = buildByClaim.get(claimId);
+    const decided = adjudicationByClaim.get(claimId);
+    const alias = aliasesByClaimId.get(claimId);
+    if (
+      !claim ||
+      !decided ||
+      !alias ||
+      decided.status === "rejected" ||
+      claim.confidence.level === "unknown" ||
+      claim.confidenceCeiling === "unknown"
+    ) {
+      return undefined;
+    }
+    return {
+      alias,
+      claimId,
+      statement: claim.statement,
+      kind: claim.kind,
+      ...(claim.attributedTo ? { attributedTo: claim.attributedTo } : {}),
+      status: decided.status,
+      openChallenges: decided.openChallengeIds
+        .map((id) => {
+          const challenge = challengeById.get(id);
+          return challenge
+            ? {
+                id,
+                check: challenge.check,
+                rationale: challenge.rationale ?? ""
+              }
+            : undefined;
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
+      confidenceLevel: claim.confidence.level,
+      confidenceCeiling: claim.confidenceCeiling
+    };
+  });
+  if (claims.some((claim) => !claim)) return err("WRITER_INPUT_MISMATCH");
+  const resolvedClaims = claims.filter(
+    (claim): claim is NonNullable<typeof claim> => Boolean(claim)
+  );
+  const keyJudgements = input.keyJudgementRecord.selection.selections.map(
+    (selection) => {
+      const alias = aliasesByClaimId.get(selection.claimId);
+      const claim = buildByClaim.get(selection.claimId);
+      const decided = adjudicationByClaim.get(selection.claimId);
+      if (
+        !alias ||
+        !claim ||
+        !decided ||
+        decided.status === "rejected" ||
+        selection.confidence !== claim.confidence.level ||
+        selection.ceiling !== claim.confidenceCeiling ||
+        selection.status !== decided.status ||
+        canonicalJson(selection.openChallengeIds) !==
+          canonicalJson(decided.openChallengeIds)
+      ) {
+        return undefined;
+      }
+      return {
+        requirementId: selection.requirementId,
+        claimAlias: alias,
+        judgementText: selection.judgementText,
+        confidence: selection.confidence,
+        ceiling: selection.ceiling,
+        status: selection.status,
+        provisional: selection.provisional,
+        openChallengeIds: [...selection.openChallengeIds]
+      };
+    }
+  );
+  if (keyJudgements.some((judgement) => !judgement)) {
+    return err("WRITER_INPUT_MISMATCH");
+  }
+  const coverageByRequirement = new Map(
+    input.buildRecord.synthesis.questionCoverage.map((coverage) => [
+      coverage.irId,
+      coverage
+    ])
+  );
+  const requiredGaps =
+    input.keyJudgementRecord.selection.requirementsWithoutEligibleClaim.map(
+      (requirementId) => {
+        const coverage = coverageByRequirement.get(requirementId);
+        return coverage
+          ? { irId: requirementId, disposition: coverage.disposition }
+          : undefined;
+      }
+    );
+  if (requiredGaps.some((gap) => !gap)) return err("WRITER_INPUT_MISMATCH");
+  const alternatives = input.challengeRecord.results.filter(
+    (result) => result.alternativeHypothesis?.status === "hypothesis"
+  );
+  const body = {
+    preparedAt,
+    runId: input.buildRecord.runId,
+    stage: "memo-writer" as const,
+    provider: WRITER_PROVIDER,
+    model: WRITER_MODEL,
+    reviewStatus: input.buildRecord.reviewStatus,
+    limitedEvidence: input.buildRecord.limitedEvidence,
+    informationCutoffAt: input.question.timeWindow.to,
+    buildRecord: bindings[0]!,
+    challengeRecord: bindings[1]!,
+    adjudication: bindings[2]!,
+    keyJudgementRecord: bindings[3]!,
+    approvedQuestion: bindings[4]!,
+    approvedScope: null,
+    memoStandard: bindings[5]!,
+    claims: resolvedClaims,
+    keyJudgements: keyJudgements.filter(
+      (judgement): judgement is NonNullable<typeof judgement> =>
+        Boolean(judgement)
+    ),
+    requiredAlternativeCount: alternatives.length,
+    requiredGaps: requiredGaps.filter(
+      (gap): gap is NonNullable<typeof gap> => Boolean(gap)
+    ),
+    requiredOmissions: input.keyJudgementRecord.selection.omissions.map(
+      (omission) => ({ ...omission })
+    ),
+    derivedSourcingSummary: sourceSummary(input.buildRecord),
+    derivedLimitations: [
+      ...derivedLimitations(input.buildRecord),
+      ...input.keyJudgementRecord.selection.omissions.map(
+        (omission) =>
+          `Key judgement omitted for ${omission.requirementId}: ${omission.reason}`
+      )
+    ],
+    standard: input.standard
+  };
+  return ok({
+    schemaVersion: BOUNDED_WRITER_REQUEST_SCHEMA_VERSION,
+    id: `memo-writer-request-${sha256Text(canonicalJson(body)).slice(0, 32)}`,
+    ...body,
+    prompt: boundedWriterPrompt(body)
+  });
+};
+
 export const validateWriterRequest = (value: unknown): Result<WriterRequest, WriterError> => {
   if (
     !isRecord(value) ||
@@ -430,6 +818,38 @@ export const validateWriterRequest = (value: unknown): Result<WriterRequest, Wri
     !isRecord(value.prompt)
   ) return err("INVALID_WRITER_REQUEST");
   return ok(value as WriterRequest);
+};
+
+export const validateBoundedWriterRequest = (
+  value: unknown
+): Result<BoundedWriterRequest, WriterError> => {
+  if (
+    !isRecord(value) ||
+    value.schemaVersion !== BOUNDED_WRITER_REQUEST_SCHEMA_VERSION ||
+    !nonEmptyString(value.id) ||
+    !validTime(value.preparedAt) ||
+    !nonEmptyString(value.runId) ||
+    value.stage !== "memo-writer" ||
+    value.provider !== WRITER_PROVIDER ||
+    value.model !== WRITER_MODEL ||
+    !readArtifactBinding(value.buildRecord) ||
+    !readArtifactBinding(value.challengeRecord) ||
+    !readArtifactBinding(value.adjudication) ||
+    !readArtifactBinding(value.keyJudgementRecord) ||
+    !readArtifactBinding(value.approvedQuestion) ||
+    !readArtifactBinding(value.memoStandard) ||
+    value.approvedScope !== null ||
+    !Array.isArray(value.claims) ||
+    !Array.isArray(value.keyJudgements) ||
+    !Array.isArray(value.requiredGaps) ||
+    !Array.isArray(value.requiredOmissions) ||
+    !Array.isArray(value.derivedLimitations) ||
+    !isRecord(value.standard) ||
+    !isRecord(value.prompt)
+  ) {
+    return err("INVALID_WRITER_REQUEST");
+  }
+  return ok(value as BoundedWriterRequest);
 };
 
 const parseWriterProposal = (value: unknown): Result<WriterStatementProposal[], WriterError> => {
@@ -470,19 +890,29 @@ const minimumConfidence = (claims: BuiltClaim[]): "unknown" | "low" | "moderate"
     .sort((left, right) => confidenceRank[left] - confidenceRank[right])[0] ?? "unknown";
 
 export const recordWriterResponse = (input: {
-  request: WriterRequest;
+  request: AnyWriterRequest;
   requestArtifact: ArtifactBinding;
   responseValue: unknown;
   responseArtifact: ArtifactBinding;
   buildRecord: SynthesisBuildRecord;
   challengeRecord: ChallengeRecord;
-  adjudication: ProvisionalAdjudication;
+  adjudication: WriterAdjudication;
+  keyJudgementRecord?: KeyJudgementRecord;
   question: ApprovedResearchQuestion;
-  standard: MemoStandardV0;
+  standard: WriterStandard;
   revalidationAuthorisation?: ArtifactBinding;
   supersedesMemoId?: string;
   recordedAt: string;
 }): Result<WriterRecord, WriterError> => {
+  const boundedRequest =
+    input.request.schemaVersion === BOUNDED_WRITER_REQUEST_SCHEMA_VERSION
+      ? input.request
+      : undefined;
+  const legacyRequest =
+    input.request.schemaVersion === WRITER_REQUEST_SCHEMA_VERSION
+      ? input.request
+      : undefined;
+  const bounded = boundedRequest !== undefined;
   const recordedAt = validTime(input.recordedAt);
   const requestArtifact = readArtifactBinding(input.requestArtifact);
   const responseArtifact = readArtifactBinding(input.responseArtifact);
@@ -496,6 +926,13 @@ export const recordWriterResponse = (input: {
     (input.revalidationAuthorisation && !revalidationAuthorisation)
   ) {
     return err("INVALID_ARTIFACT_BINDING");
+  }
+  if (
+    boundedRequest &&
+    (!input.keyJudgementRecord ||
+      input.adjudication.adjudicationStatus !== "performed")
+  ) {
+    return err("WRITER_INPUT_MISMATCH");
   }
   if (
     !isRecord(input.responseValue) ||
@@ -530,11 +967,14 @@ export const recordWriterResponse = (input: {
   const judgments = proposal.value.filter((entry) => entry.section === "key-judgments");
   const allAliases = input.request.claims.map((claim) => claim.alias).sort();
   if (
-    bluf.length !== 1 ||
-    [...bluf[0]!.claimAliases].sort().join() !== allAliases.join() ||
-    judgments.length !== input.request.claims.length ||
-    judgments.some((entry) => entry.claimAliases.length !== 1) ||
-    [...judgments.map((entry) => entry.claimAliases[0])].sort().join() !== allAliases.join() ||
+    (bounded
+      ? bluf.length !== 0 || judgments.length !== 0
+      : bluf.length !== 1 ||
+        [...bluf[0]!.claimAliases].sort().join() !== allAliases.join() ||
+        judgments.length !== input.request.claims.length ||
+        judgments.some((entry) => entry.claimAliases.length !== 1) ||
+        [...judgments.map((entry) => entry.claimAliases[0])].sort().join() !==
+          allAliases.join()) ||
     proposal.value.filter((entry) => entry.section === "analysis").length > input.standard.limits.maxAnalysisStatements ||
     proposal.value.filter((entry) => entry.section === "uncertainties").length > input.standard.limits.maxUncertaintyStatements ||
     proposal.value.filter((entry) => entry.section === "indicators").length > input.standard.limits.maxIndicatorStatements
@@ -544,16 +984,29 @@ export const recordWriterResponse = (input: {
     .filter(Boolean).length;
   if (modelWords > input.standard.limits.maxWords) return err("MEMO_TOO_LONG");
   const prohibited = input.standard.prohibitedPatterns.map((pattern) => pattern.toLowerCase());
-  if (proposal.value.some((entry) => prohibited.some((pattern) => entry.text.toLowerCase().includes(pattern)))) {
+  const checkedText = [
+    ...proposal.value.map((entry) => entry.text),
+    ...(boundedRequest
+      ? boundedRequest.keyJudgements.map((entry) => entry.judgementText)
+      : [])
+  ];
+  if (
+    checkedText.some((text) =>
+      prohibited.some((pattern) => text.toLowerCase().includes(pattern))
+    )
+  ) {
     return err("PROHIBITED_MEMO_PATTERN");
   }
   const adjudicationByClaim = new Map(input.adjudication.claims.map((claim) => [claim.claimId, claim]));
   const claimSourceCount = new Set(
     input.buildRecord.synthesis.claims.flatMap((claim) => claim.supportingSourceNoteIds)
   ).size;
-  const contestedCount = input.adjudication.claims.filter(
-    (claim) => claim.status === "contested"
-  ).length;
+  const contestedCount = bounded
+    ? boundedRequest.keyJudgements.filter(
+        (judgement) => judgement.status === "contested"
+      ).length
+    : input.adjudication.claims.filter((claim) => claim.status === "contested")
+        .length;
   const alternativeCount = input.challengeRecord.results.filter(
     (result) => result.alternativeHypothesis?.status === "hypothesis"
   ).length;
@@ -566,12 +1019,20 @@ export const recordWriterResponse = (input: {
   )
     ? "provisional"
     : "reviewed";
-  const derivedBluf = [
-    `This not-for-publication picture rests on ${countWord(claimSourceCount)} ${evidenceStatus} claim-bearing source${claimSourceCount === 1 ? "" : "s"}${hasRelayedReporting ? " with relayed reporting" : ""}:`,
-    `${countWord(contestedCount)} contested low-confidence claims,`,
-    `${countWord(alternativeCount)} competing explanation${alternativeCount === 1 ? "" : "s"}, and`,
-    `${countWord(silentCount)} silent information requirement${silentCount === 1 ? "" : "s"}.`
-  ].join(" ");
+  const derivedBluf = bounded
+    ? [
+        `This not-for-publication picture rests on ${countWord(claimSourceCount)} ${evidenceStatus} claim-bearing source${claimSourceCount === 1 ? "" : "s"}${hasRelayedReporting ? " with relayed reporting" : ""}:`,
+        `${countWord(boundedRequest.keyJudgements.length)} bounded key judgement${boundedRequest.keyJudgements.length === 1 ? "" : "s"},`,
+        `${countWord(contestedCount)} contested,`,
+        `${countWord(alternativeCount)} competing explanation${alternativeCount === 1 ? "" : "s"}, and`,
+        `${countWord(silentCount)} silent information requirement${silentCount === 1 ? "" : "s"}.`
+      ].join(" ")
+    : [
+        `This not-for-publication picture rests on ${countWord(claimSourceCount)} ${evidenceStatus} claim-bearing source${claimSourceCount === 1 ? "" : "s"}${hasRelayedReporting ? " with relayed reporting" : ""}:`,
+        `${countWord(contestedCount)} contested low-confidence claims,`,
+        `${countWord(alternativeCount)} competing explanation${alternativeCount === 1 ? "" : "s"}, and`,
+        `${countWord(silentCount)} silent information requirement${silentCount === 1 ? "" : "s"}.`
+      ].join(" ");
   const makeStatement = (entry: WriterStatementProposal): MemoStatement => {
     const claims = entry.claimAliases.map((alias) => claimByAlias.get(alias)!).map((requestClaim) =>
       input.buildRecord.synthesis.claims.find((claim) => claim.id === requestClaim.claimId)!
@@ -594,32 +1055,76 @@ export const recordWriterResponse = (input: {
       text,
       claimIds,
       claimCitations: claimIds.map((id) => `[claim:${id}]`),
-      status: openChallengeIds.length > 0 ? "contested" : "proposed",
+      status:
+        openChallengeIds.length > 0
+          ? "contested"
+          : bounded
+            ? "accepted"
+            : "proposed",
       openChallengeIds: [...new Set(openChallengeIds)],
       openChallengeChecks
     };
   };
-  const statements = proposal.value.map(makeStatement);
-  const keyJudgments = statements
-    .filter((statement) => statement.section === "key-judgments")
-    .map((statement) => {
-      const claims = statement.claimIds.map((id) =>
-        input.buildRecord.synthesis.claims.find((claim) => claim.id === id)!
-      );
-      const level = minimumConfidence(claims);
-      const ceiling = claims
-        .map((claim) => claim.confidenceCeiling)
-        .sort((left, right) => confidenceRank[left] - confidenceRank[right])[0] ?? "unknown";
-      return {
-        statement,
+  const modelStatements = proposal.value.map(makeStatement);
+  const fixedBluf = bounded
+    ? makeStatement({
+        section: "bluf",
+        text: derivedBluf,
+        claimAliases: [...new Set(input.request.claims.map((claim) => claim.alias))]
+      })
+    : undefined;
+  const fixedKeyJudgementStatements = bounded
+    ? boundedRequest.keyJudgements.map((judgement) =>
+        makeStatement({
+          section: "key-judgments",
+          text: judgement.judgementText,
+          claimAliases: [judgement.claimAlias]
+        })
+      )
+    : [];
+  const statements = bounded
+    ? [fixedBluf!, ...fixedKeyJudgementStatements, ...modelStatements]
+    : modelStatements;
+  const keyJudgments = bounded
+    ? boundedRequest.keyJudgements.map((judgement, index) => ({
+        statement: fixedKeyJudgementStatements[index]!,
         confidence: {
-          level: confidenceRank[level] <= confidenceRank[ceiling] ? level : ceiling,
-          ceiling,
-          boundedByClaimIds: statement.claimIds,
-          rationale: input.standard.confidenceLexicon[ceiling === "unknown" ? "low" : ceiling]
+          level: judgement.confidence,
+          ceiling: judgement.ceiling,
+          boundedByClaimIds: fixedKeyJudgementStatements[index]!.claimIds,
+          rationale: input.standard.confidenceLexicon[judgement.ceiling]
         }
-      };
-    });
+      }))
+    : statements
+        .filter((statement) => statement.section === "key-judgments")
+        .map((statement) => {
+          const claims = statement.claimIds.map((id) =>
+            input.buildRecord.synthesis.claims.find((claim) => claim.id === id)!
+          );
+          const level = minimumConfidence(claims);
+          const ceiling =
+            claims
+              .map((claim) => claim.confidenceCeiling)
+              .sort(
+                (left, right) =>
+                  confidenceRank[left] - confidenceRank[right]
+              )[0] ?? "unknown";
+          return {
+            statement,
+            confidence: {
+              level:
+                confidenceRank[level] <= confidenceRank[ceiling]
+                  ? level
+                  : ceiling,
+              ceiling,
+              boundedByClaimIds: statement.claimIds,
+              rationale:
+                input.standard.confidenceLexicon[
+                  ceiling === "unknown" ? "low" : ceiling
+                ]
+            }
+          };
+        });
   const alternatives = input.challengeRecord.results
     .filter((result) => result.alternativeHypothesis?.status === "hypothesis")
     .map((result) => ({
@@ -630,12 +1135,17 @@ export const recordWriterResponse = (input: {
       text: result.alternativeHypothesis!.text,
       claimCitation: `[claim:${result.claimId}]`
     }));
-  const gaps = input.buildRecord.synthesis.questionCoverage
-    .filter((entry) => entry.disposition === "partial" || entry.disposition === "silent")
-    .map((entry) => ({
-      irId: entry.irId,
-      disposition: entry.disposition as "partial" | "silent"
-    }));
+  const gaps = bounded
+    ? boundedRequest.requiredGaps
+    : input.buildRecord.synthesis.questionCoverage
+        .filter(
+          (entry) =>
+            entry.disposition === "partial" || entry.disposition === "silent"
+        )
+        .map((entry) => ({
+          irId: entry.irId,
+          disposition: entry.disposition as "partial" | "silent"
+        }));
   const claimSourceIds = new Set(
     input.buildRecord.synthesis.claims.flatMap((claim) => claim.supportingSourceNoteIds)
   );
@@ -645,7 +1155,13 @@ export const recordWriterResponse = (input: {
     ...(input.buildRecord.synthesis.claims.some((claim) => claim.provisional)
       ? ["PROVISIONAL_SOURCE_LINEAGE"]
       : []),
-    "ADJUDICATION_NOT_PERFORMED",
+    ...(!bounded ? ["ADJUDICATION_NOT_PERFORMED"] : []),
+    ...(bounded &&
+    boundedRequest.keyJudgements.some(
+      (judgement) => judgement.status === "contested"
+    )
+      ? ["OPEN_KEY_JUDGEMENT_CONTEST"]
+      : []),
     "PROVISIONAL_MEMO_STANDARD",
     "LEGACY_SCOPE_LINEAGE_UNAVAILABLE"
   ];
@@ -661,16 +1177,25 @@ export const recordWriterResponse = (input: {
     notForPublication: true as const,
     publicationBlockers: blockers,
     memoStandardId: input.standard.id,
-    memoStandardVersion: 0 as const,
+    memoStandardVersion: input.standard.version,
     approvedQuestionId: input.question.id,
     approvedScope: null,
-    lineage: {
-      buildRecord: input.request.buildRecord,
-      challengeRecord: input.request.challengeRecord,
-      provisionalAdjudication: input.request.provisionalAdjudication,
-      approvedQuestion: input.request.approvedQuestion,
-      memoStandard: input.request.memoStandard
-    },
+    lineage: bounded
+      ? {
+          buildRecord: input.request.buildRecord,
+          challengeRecord: input.request.challengeRecord,
+          adjudication: boundedRequest.adjudication,
+          keyJudgementRecord: boundedRequest.keyJudgementRecord,
+          approvedQuestion: input.request.approvedQuestion,
+          memoStandard: input.request.memoStandard
+        }
+      : {
+          buildRecord: input.request.buildRecord,
+          challengeRecord: input.request.challengeRecord,
+          provisionalAdjudication: legacyRequest!.provisionalAdjudication,
+          approvedQuestion: input.request.approvedQuestion,
+          memoStandard: input.request.memoStandard
+        },
     bluf: statements.filter((statement) => statement.section === "bluf"),
     keyJudgments,
     analysis: statements.filter((statement) => statement.section === "analysis"),

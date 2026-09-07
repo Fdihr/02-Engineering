@@ -17,7 +17,7 @@ Scalability comes from explicit data and replaceable functions, not from framewo
 ```mermaid
 flowchart LR
     Command[Thin command] --> Workflow[Workflow function]
-    Question[Human question approval] --> Operation[Validate provider operation]
+    Question[Human intent surface] --> Operation[Validate provider operation]
     Operation --> Reader[API or artifact reader]
     Reader[API or artifact reader] --> Intake[Provider intake]
     Intake --> Workflow
@@ -27,12 +27,14 @@ flowchart LR
     Receipt --> Canonicalize[Lossless source document + stable anchors]
     Canonicalize --> Relevance[AI question-relevance proposal]
     Relevance --> Reintake[Validate pending source candidate]
-    Reintake --> Review
+    Reintake --> Admission[Controller policy admission]
+    Reintake --> Review[Compatibility human review]
     Workflow --> Validate[Validate]
     Workflow --> Classify[Classify role]
     Workflow --> Route[Route]
     Workflow --> Ledger[Create ledger event]
-    Review[Human review command] --> Approval[Validate evidence admission]
+    Admission --> Approval[Validate evidence admission]
+    Review --> Approval
     Approval --> Snapshot[Decision or approved snapshot]
     Command --> Persist[Persist artifacts and events]
     Review --> Persist
@@ -101,26 +103,28 @@ approved research question + bound provider operation
   -> assess one canonical source against the approved question with a bounded AI call
   -> validate assessment schema, exact anchors, model provenance, and source/question lineage
   -> re-intake relevant or partially relevant material as a pending proposal
-  -> route the new candidate to pending human review
+  -> route the new candidate to policy admission or compatibility review
   -> create ledger event data
   -> command persists output
 ```
 
-Provider credentials and HTTP remain inaccessible until the research-intent gate succeeds. No intake route may produce evidence status `approved`; evidence approval requires a later explicit human action and auditable transition.
+Provider credentials and HTTP remain inaccessible until the research-intent gate succeeds. No intake route may produce evidence status `approved`; admission requires either deterministic controller evaluation under an approved policy or the compatibility human action, with an auditable transition.
 
 Bounded discovery is sequential, capped by explicit query, page, call, and result limits, and preserves each raw page. It is not a general batch runner and does not automatically advance any candidate into intake.
 
 One-source retrieval validates the persisted intake result before reading `FIRECRAWL_API_KEY`. It sends one fixed, Markdown-only `/v2/scrape` request, preserves the bounded raw response, records publisher and access-provider provenance separately, and stops with `approvalStatus: "not_requested"`. Retrieved text is untrusted data.
 
-The implemented connection first creates the provider-neutral source document defined in `../02-Contracts/source-document-and-anchors.md`, then runs a bounded AI assessment against the exact approved research question. Deterministic code validates the typed assessment, exact anchors, model provenance, and complete artifact lineage before persisting a pending candidate. The AI cannot approve evidence or start `Find`; the existing human evidence gate remains required for both.
+The implemented connection first creates the provider-neutral source document defined in `../02-Contracts/source-document-and-anchors.md`, then runs a bounded AI assessment against the exact approved research question. Deterministic code validates the typed assessment, exact anchors, model provenance, and complete artifact lineage before persisting a pending candidate. The AI cannot approve evidence or start `Find`; controller mode applies the approved admission policy, while human mode retains the compatibility evidence gate as an interim stand-in rather than a fifth permanent surface.
 
 Canonicalization changes addressing, not evidence content or quality. Every admitted source still passes through independent `Find`, blind `Sweep`, `Judge`, and `Write` before cross-source synthesis. Scaling uses independent source state streams, reusable adapters, checksum deduplication, and bounded scheduling rather than skipped stages.
 
-Initial native Seerist evidence candidates cannot enter evidence admission. They route through the provider-neutral canonical document and relevance assessment first. The `reintake:source` command accepts a persisted question-relevance assessment, reconstructs its positive verdict and sibling decision, verifies retrieval, canonical-document, model-request, model-response, assessment, and decision checksums, and creates only a pending candidate. The real NV assessment completed this connection on 2026-09-01 and is awaiting a human evidence decision.
+Initial native Seerist evidence candidates cannot enter evidence admission. They route through the provider-neutral canonical document and relevance assessment first. The `reintake:source` command accepts a persisted question-relevance assessment, reconstructs its positive verdict and sibling decision, verifies retrieval, canonical-document, model-request, model-response, assessment, and decision checksums, and creates only a pending candidate. The real NV assessment completed the compatibility path on 2026-09-01 and was approved as decision `nv-evidence-review-001`.
 
 Until an approved Azure AI Foundry deployment exists, GitHub Copilot in VS Code is a manual PoC transport between those two commands. The adapter records that its underlying model is not exposed. It has no filesystem or transition authority through the application, and the deterministic validators and artifact contract remain the future Foundry boundary.
 
-## Current evidence-admission flow
+## Compatibility evidence-admission flow
+
+This remains the default for existing policies and artifacts. It is an interim stand-in for controller admission under an approved policy and is not a fifth target human surface.
 
 ```text
 persisted intake result + explicit reviewer decision

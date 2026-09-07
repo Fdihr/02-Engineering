@@ -1488,6 +1488,14 @@ The initial executable POC uses handwritten `memo-standard-v0` only to prove the
 
 # Part 9: Memo Composition
 
+## Bounded key-judgement selection
+
+Performed adjudication feeds a separate bounded selection stage before the writer. Code projects committed claims into per-IR eligibility from supporting observations and code-derived question coverage. Rejected claims are excluded; contested claims are included only when the versioned memo-standard policy permits them. Ordering is confidence descending, accepted before contested, then stable claim ID. IRs with no eligible claim become gaps.
+
+The model sees only stable Challenge aliases and eligible aliases per IR. It selects one eligible alias or records an explicit omission and supplies bounded judgement wording. Exact-shape parsing and KJ1-KJ8 validation enforce alias resolution, approved IRs, eligibility, one selection per IR, the overall cap, complete eligible-IR disposition, valid omissions, and text bounds. Code attaches confidence, ceiling, status, provisional state, and open challenge IDs from the claim.
+
+`memo-standard-v1` sets a provisional maximum of three key judgements. Writer v2 checksum-binds and recomputes the selection, carries judgement wording unchanged, and allows its model only optional analysis, uncertainty, and indicator statements. The previous v0 writer path remains compatibility history.
+
 ## Writer inputs
 
 The memo writer receives only:
@@ -1653,7 +1661,7 @@ The memo cannot pass when any of the following exists:
 9. A critical approved research question omitted without a visible gap.
 10. Output that violates its information classification boundary.
 
-The writer and verifier may complete at most two deterministic revision cycles. Remaining blocking findings escalate to a human.
+The writer and verifier may complete at most two deterministic revision cycles. Remaining blocking findings enter the pushed exception queue.
 
 ## Human publication gate
 
@@ -1729,13 +1737,13 @@ The workflow separates source-item state from memo-run state. Each source has it
 
 | State | Transition authority | Permitted next states |
 | --- | --- | --- |
-| `memo_requested` | Human | `scope_proposed`, `run_cancelled` |
+| `memo_requested` | Human intent surface | `scope_proposed`, `run_cancelled` |
 | `scope_proposed` | Controller after typed model output | `scope_review` |
-| `scope_review` | Human scope gate | `scope_approved`, `scope_revision`, `run_cancelled` |
+| `scope_review` | Human intent surface | `scope_approved`, `scope_revision`, `run_cancelled` |
 | `scope_revision` | Controller | `scope_proposed`, `run_cancelled` |
 | `scope_approved` | Controller | `questions_proposed` |
 | `questions_proposed` | Controller after typed model output | `questions_review` |
-| `questions_review` | Human question gate | `questions_approved`, `questions_revision`, `run_cancelled` |
+| `questions_review` | Human intent surface | `questions_approved`, `questions_revision`, `run_cancelled` |
 | `questions_revision` | Controller | `questions_proposed`, `run_cancelled` |
 | `questions_approved` | Controller | `collection_planned` |
 | `collection_planned` | Controller | `collecting`, `planning_revision`, `run_failed` |

@@ -30,6 +30,19 @@ test("run-next prioritizes pushed exceptions and deterministic work", () => {
     }).kind,
     "execute"
   );
+  assert.equal(
+    chooseRunNextAction({
+      ...base,
+      deterministicSteps: [
+        {
+          command: "record:key-judgements",
+          requestPath: "runs/run-1/key-judgement-request.json",
+          responsePath: "runs/run-1/copilot-response.json"
+        }
+      ]
+    }).kind,
+    "execute"
+  );
 });
 
 test("run-next reports only the four human surfaces and named machine wait", () => {

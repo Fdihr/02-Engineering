@@ -68,6 +68,21 @@ export const unwrapStrictArray = (
   return Array.isArray(nested) ? nested : unwrapStrictArray(nested, wrappers);
 };
 
+export const unwrapStrictObject = (
+  value: unknown,
+  wrappers: readonly string[]
+): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) return undefined;
+  const keys = Object.keys(value);
+  if (keys.includes("selections") || keys.includes("omissions")) {
+    return value;
+  }
+  if (keys.length !== 1) return undefined;
+  const key = keys[0];
+  if (!key || !wrappers.includes(key)) return undefined;
+  return unwrapStrictObject(value[key], wrappers);
+};
+
 const readClaim = (value: unknown): BuildClaimProposal | undefined => {
   if (!isRecord(value)) return undefined;
   const allowedKeys = new Set(Object.values(BUILD_CLAIM_FIELD_ALIASES).flat());

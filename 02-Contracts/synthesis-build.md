@@ -48,7 +48,7 @@ Request v3 aligns the repeated clerical pattern through a closed alias map: `tex
 
 Authorized attempt 4 returned a bare array and committed four claims. All are provisional with low confidence; no claim uses synthetic support. The complete chain remains synthetic and `limitedEvidence: true` because the synthetic note is a consumed Build input. Build remains a proposal stage pending Challenge and human Adjudicate.
 
-A later reviewed-only envelope removes synthetic and provisional note status but remains `limitedEvidence: true` because it contains one source and silent `ir-06`. Its first exploratory response proposed 20 claims, one per observation. It is intentionally unrecorded: the active synthesis policy has no maximum/key-claim selection rule, and accepting the response would make the short memo standard structurally unattainable. Claim-count and selection bounds require a new versioned contract and focused tests before a fresh invocation.
+A later reviewed-only envelope removes synthetic and provisional note status but remains `limitedEvidence: true` because it contains one source and silent `ir-06`. Its first exploratory response proposed 20 claims, one per observation, and was intentionally not recorded. The active path now permits a broad Build graph for Challenge and adjudication but requires the versioned bounded key-judgement stage before writer v2. At most three KJ1-KJ8-validated selections under `memo-standard-v1` can enter the memo; the exploratory response remains an unrecorded historical observation, and any live invocation must produce a fresh response artifact.
 
 ## Challenge and provisional adjudication
 
@@ -71,6 +71,8 @@ The writer model supplies only statement text, allowed section placement, and ex
 Deterministic Markdown starts with `NOT FOR PUBLICATION`. Verification checks the final rendered Markdown, not only model prose. The first rendering was invalidated after measuring 391 words against the 350-word standard. Two authorized presentation-only corrections removed duplicate BLUF authority, empty-section filler, and raw challenge IDs from Markdown while retaining exact IDs in JSON. The superseding memo is 342 words.
 
 The final publication gate is blocked by `SYNTHETIC_SOURCE_LINEAGE`, `PROVISIONAL_SOURCE_LINEAGE`, `PROVISIONAL_MEMO_STANDARD`, and `LEGACY_SCOPE_LINEAGE_UNAVAILABLE`. The last blocker is explicit because the approved legacy question has no checksum-bound approved scope artifact; no scope approval was reconstructed or fabricated.
+
+The current bounded path adds `memo-standard-v1`, performed-adjudication validation, immutable key-judgement request and record artifacts, and writer request v2. It reuses Challenge aliases, keeps claim IDs out of the selection prompt, aggregates KJ1-KJ8 failures without content, and recomputes the complete selection before writer preparation. Writer v2 inserts selected judgement wording unchanged and rejects model-authored BLUF or key-judgement rows. Legacy v0 standards and writer v1 artifacts remain readable and unchanged.
 
 ## Publication and supersession
 

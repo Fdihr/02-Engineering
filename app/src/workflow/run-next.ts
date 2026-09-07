@@ -1,5 +1,9 @@
 export type DeterministicRunStep = {
-  command: "record:synthesis-build" | "record:synthesis-challenge" | "record:memo-writer";
+  command:
+    | "record:synthesis-build"
+    | "record:synthesis-challenge"
+    | "record:key-judgements"
+    | "record:memo-writer";
   requestPath: string;
   responsePath: string;
 };

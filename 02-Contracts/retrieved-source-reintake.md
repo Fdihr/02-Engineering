@@ -1,6 +1,6 @@
 # Retrieved Source Relevance and Re-intake
 
-Status: AI assessment and positive evidence-candidate conversion implemented and validated; real NV candidate approved through the separate evidence-admission gate
+Status: AI assessment and positive evidence-candidate conversion implemented and validated; real NV candidate approved through the compatibility evidence-admission gate
 Validated: 2026-09-01
 Implementation: `../app/src/modules/relevance/question-relevance.ts`, `../app/src/modules/intake/retrieved-source-intake.ts`, `../app/src/commands/prepare-question-relevance.ts`, `../app/src/commands/record-question-relevance.ts`, `../app/src/commands/reintake-source.ts`
 
@@ -8,7 +8,7 @@ Implementation: `../app/src/modules/relevance/question-relevance.ts`, `../app/sr
 
 Assess one resolved source against the exact approved research question with a bounded AI call, then convert a validated positive assessment into one pending evidence candidate.
 
-Retrieval success does not establish relevance, credibility, factuality, or approval. Re-intake does not approve evidence; it creates input for the separate evidence-admission gate.
+Retrieval success does not establish relevance, credibility, factuality, or approval. Re-intake does not approve evidence; it creates input for controller policy admission or the compatibility human gate.
 
 This is question relevance, not Vestas relevance. The AI may propose whether and how the source addresses the approved question. It cannot admit evidence, expand scope, or infer organizational impact.
 
@@ -69,13 +69,13 @@ Fetched body text is not copied into the candidate or Markdown receipt. The cand
 
 ## State transition
 
-Successful positive re-intake deterministically produces:
+Successful positive re-intake currently preserves the compatibility route values:
 
 ```text
 evidence_candidate -> human_review -> pending_human_review
 ```
 
-It cannot produce `approved`. Only `npm run review:evidence` with a separate explicit human decision can create an approved snapshot. The human reviews the source and AI proposal; routine operation does not require the reviewer to author the initial relevance rationale.
+Re-intake cannot produce `approved`. Controller mode may create an approved snapshot only after the versioned policy checks pass. Existing policies default to `human` mode, where `npm run review:evidence` records the compatibility decision. That command is an interim stand-in, not a fifth target human surface.
 
 The evidence-admission validator reconstructs Seerist-native and retrieved-source candidates through separate branches. For a retrieved source, it validates the exact positive-assessment shape, reopens and hashes the persisted assessment and decision, compares their parsed values with the candidate, recomputes the referenced raw artifact hash, and requires equality with the re-intake lineage before a decision can succeed. Retrieved-source approval preserves the AI assessment, model invocation provenance, and retrieval lineage in the snapshot.
 
@@ -100,11 +100,11 @@ runs/<runId>/source-reintakes/<candidateId>/
   intake-summary.md
 ```
 
-The request includes the complete canonical source and is retained only in the ignored run folder. Console output and events omit source content. Proposal events are model-attributed, validation and persistence events are controller-attributed, and evidence decisions remain human-attributed.
+The request includes the complete canonical source and is retained only in the ignored run folder. Console output and events omit source content. Proposal events are model-attributed, validation and persistence events are controller-attributed, and compatibility evidence decisions remain human-attributed.
 
 ## Modularity boundary
 
-The model adapter owns one scoped semantic assessment and no workflow permissions. During the interactive PoC, Copilot produces the typed response but cannot write a validated assessment directly. The pure relevance module owns schema, lineage, anchor, and routing validation. Commands own arguments, time, identifiers, filesystem confinement, hashing, persistence, events, console output, and process exit. Evidence admission owns the later human approval decision.
+The model adapter owns one scoped semantic assessment and no workflow permissions. During the interactive PoC, Copilot produces the typed response but cannot write a validated assessment directly. The pure relevance module owns schema, lineage, anchor, and routing validation. Commands own arguments, time, identifiers, filesystem confinement, hashing, persistence, events, console output, and process exit. The admission workflow owns either controller evaluation under approved policy or the compatibility human decision.
 
 A future access provider can produce the canonical source-retrieval contract and add a narrow validated variant when demonstrated. This baseline does not add a provider plugin system or batch orchestrator.
 
@@ -112,4 +112,4 @@ A future access provider can produce the canonical source-retrieval contract and
 
 Tests cover request-policy tampering, question binding, exact source anchors, altered quotes, prompt-policy and model provenance, all four verdict routes, model-authored authority rejection, source-document drift, positive-only candidate conversion, full checksum lineage, path confinement, content-safe output, non-overwrite behavior, evidence-gate tampering, and assessment preservation in an approved snapshot.
 
-The real NV source completed one Copilot PoC assessment with verdict `partially-relevant`, three exact anchors, and destination `evidence_candidate_proposal`. On 2026-09-01, that assessment was converted into candidate `nv-candidate-question-relevance-001` with destination `human_review` and status `pending_human_review`. Human reviewer `FDIHR` then approved it through the separate evidence-admission gate as decision `nv-evidence-review-001`, creating snapshot `snapshot-nv-evidence-review-001`.
+The real NV source completed one Copilot PoC assessment with verdict `partially-relevant`, three exact anchors, and destination `evidence_candidate_proposal`. On 2026-09-01, that assessment was converted into candidate `nv-candidate-question-relevance-001` with compatibility destination `human_review` and status `pending_human_review`. Human reviewer `FDIHR` then approved it through the compatibility evidence-admission gate as decision `nv-evidence-review-001`, creating snapshot `snapshot-nv-evidence-review-001`.

@@ -6,7 +6,7 @@ Use this file as the index of active contracts.
 
 1. [Memo scope and research question approval](memo-scope-and-question-approval.md)
 2. [Provider item role and provenance](provider-item-role-and-provenance.md)
-3. [Evidence admission](evidence-admission.md)
+3. [Evidence admission compatibility baseline](evidence-admission.md)
 4. [Research question and provider operation](research-question-and-provider-operation.md)
 5. [Source content retrieval](source-content-retrieval.md)
 6. [Retrieved source relevance and re-intake](retrieved-source-reintake.md)
@@ -14,6 +14,7 @@ Use this file as the index of active contracts.
 8. [Seerist intake manifest](seerist-intake-manifest.md)
 9. [Provisional source review and synthesis Build](synthesis-build.md)
 10. [Human surfaces, policy admission, exceptions, and calibration](human-surfaces-and-calibration.md)
+11. [Bounded key-judgement selection](key-judgement-selection.md)
 
 ## Planned contracts
 

@@ -14,7 +14,7 @@ type CommandOptions = {
 };
 
 const usage =
-  "Usage: npm run review:evidence -- <intake-result.json> <approve|reject|revise> <reviewer-id> <reason> [decision-id]";
+  "Compatibility human-admission path. Usage: npm run review:evidence -- <intake-result.json> <approve|reject|revise> <reviewer-id> <reason> [decision-id]";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

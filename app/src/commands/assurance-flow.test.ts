@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { relative, resolve } from "node:path";
 import test from "node:test";
@@ -37,6 +37,23 @@ const outputPath = (stdout: string): string => {
   }
   return resolve(match[1].trim());
 };
+
+const extractResponse = (
+  request: { id: string; preparedAt: string },
+  invocationId: string,
+  proposal: unknown
+) => ({
+  schemaVersion: "source-assurance-copilot-poc-response-v2",
+  requestId: request.id,
+  invocationId,
+  provider: "github-copilot-vscode",
+  model: "not-exposed-by-host",
+  startedAt: new Date(Date.parse(request.preparedAt) + 1_000).toISOString(),
+  completedAt: new Date(Date.parse(request.preparedAt) + 2_000).toISOString(),
+  freshSession: true,
+  capturedBy: "TESTER",
+  proposal
+});
 
 test("runs one admitted source through the source-assurance commands", async () => {
   const runRoot = await mkdtemp(resolve(tmpdir(), "assurance-flow-"));
@@ -96,6 +113,21 @@ test("runs one admitted source through the source-assurance commands", async () 
       artifactRef: artifactRef(questionPath),
       artifactSha256: questionSha256
     };
+    const evidenceItem = (providerItemId: string) => ({
+      role: "evidence_candidate",
+      providerItemId,
+      contentCompleteness: "captured_content",
+      source: { publisherHost: "example.test" },
+      limitations: ["Retrieved content remains untrusted."],
+      researchQuestion: embeddedQuestion,
+      questionRelevance: {
+        assessment: {
+          researchQuestionId: "rq-test-001",
+          sourceDocumentArtifactRef: artifactRef(documentPath),
+          sourceDocumentArtifactSha256: documentSha256
+        }
+      }
+    });
     const snapshotPath = resolve(decisionDir, "approved-evidence-snapshot.json");
     await writeJson(resolve(decisionDir, "evidence-decision.json"), {
       id: decisionId,
@@ -117,21 +149,7 @@ test("runs one admitted source through the source-assurance commands", async () 
       intakeArtifactRef: `${artifactRef(runRoot)}/${runId}/intake-result.json`,
       rawArtifactRef: `${artifactRef(runRoot)}/${runId}/raw.json`,
       rawArtifactSha256: "b".repeat(64),
-      item: {
-        role: "evidence_candidate",
-        providerItemId: "candidate-1",
-        contentCompleteness: "captured_content",
-        source: { publisherHost: "example.test" },
-        limitations: ["Retrieved content remains untrusted."],
-        researchQuestion: embeddedQuestion,
-        questionRelevance: {
-          assessment: {
-            researchQuestionId: "rq-test-001",
-            sourceDocumentArtifactRef: artifactRef(documentPath),
-            sourceDocumentArtifactSha256: documentSha256
-          }
-        }
-      }
+      item: evidenceItem("candidate-1")
     });
 
     const proposalPath = resolve(requirementsDir, "req-proposal-1-proposal.json");
@@ -182,17 +200,9 @@ test("runs one admitted source through the source-assurance commands", async () 
     assert.match(secondPrepare.stderr, /has not been recorded/);
 
     const responsePath = resolve(requestPath, "..", "copilot-response.json");
-    await writeJson(responsePath, {
-      schemaVersion: "source-assurance-copilot-poc-response-v2",
-      requestId: request.id,
-      invocationId: "copilot-session-1",
-      provider: "github-copilot-vscode",
-      model: "not-exposed-by-host",
-      startedAt: new Date(Date.parse(request.preparedAt) + 1_000).toISOString(),
-      completedAt: new Date(Date.parse(request.preparedAt) + 2_000).toISOString(),
-      freshSession: true,
-      capturedBy: "TESTER",
-      proposal: {
+    await writeJson(
+      responsePath,
+      extractResponse(request, "copilot-session-1", {
         observations: [
           {
             segment: "01",
@@ -208,8 +218,8 @@ test("runs one admitted source through the source-assurance commands", async () 
           { irId: "ir-01", disposition: "covered" },
           { irId: "ir-02", disposition: "silent" }
         ]
-      }
-    });
+      })
+    );
 
     const record = run(
       "record-assurance-extract",
@@ -336,6 +346,126 @@ test("runs one admitted source through the source-assurance commands", async () 
     );
     assert.notEqual(repeatedAssemble.status, 0);
     assert.match(repeatedAssemble.stderr, /EEXIST|already/i);
+
+    const failureDecisionId = "decision-failure";
+    const failureDecisionDir = resolve(runRoot, failureDecisionId);
+    await mkdir(failureDecisionDir, { recursive: true });
+    const failureSnapshotPath = resolve(
+      failureDecisionDir,
+      "approved-evidence-snapshot.json"
+    );
+    await writeJson(resolve(failureDecisionDir, "evidence-decision.json"), {
+      id: failureDecisionId,
+      sourceRunId: runId,
+      providerItemId: "candidate-failure",
+      reviewerId: "TESTER",
+      decidedAt: "2026-03-07T00:00:00.000Z",
+      decision: "approved",
+      reason: "exercise the bounded failure path",
+      intakeArtifactRef: `${artifactRef(runRoot)}/${runId}/intake-result.json`
+    });
+    await writeJson(failureSnapshotPath, {
+      snapshotId: `snapshot-${failureDecisionId}`,
+      sourceDecisionId: failureDecisionId,
+      sourceRunId: runId,
+      providerItemId: "candidate-failure",
+      admittedBy: "TESTER",
+      admittedAt: "2026-03-07T00:00:00.000Z",
+      intakeArtifactRef: `${artifactRef(runRoot)}/${runId}/intake-result.json`,
+      rawArtifactRef: `${artifactRef(runRoot)}/${runId}/raw.json`,
+      rawArtifactSha256: "b".repeat(64),
+      item: evidenceItem("candidate-failure")
+    });
+
+    let failedRequestPath = "";
+    for (const invocationId of ["copilot-session-invalid-1", "copilot-session-invalid-2"]) {
+      const failedPrepare = run(
+        "prepare-assurance-extract",
+        [failureSnapshotPath, requirementsPath, policyPath],
+        runRoot
+      );
+      assert.equal(failedPrepare.status, 0, failedPrepare.stderr);
+      failedRequestPath = outputPath(failedPrepare.stdout);
+      const failedRequest = JSON.parse(
+        await readFile(failedRequestPath, "utf8")
+      ) as { id: string; preparedAt: string };
+      const failedResponsePath = resolve(
+        failedRequestPath,
+        "..",
+        "copilot-response.json"
+      );
+      await writeJson(
+        failedResponsePath,
+        extractResponse(failedRequest, invocationId, {})
+      );
+      const failedRecord = run(
+        "record-assurance-extract",
+        [failedRequestPath, failedResponsePath],
+        runRoot
+      );
+      assert.notEqual(failedRecord.status, 0);
+    }
+
+    const extractFailurePath = resolve(
+      failedRequestPath,
+      "..",
+      "..",
+      "extract-failed.json"
+    );
+    const extractFailure = JSON.parse(
+      await readFile(extractFailurePath, "utf8")
+    ) as { attempt: number; failures: unknown[] };
+    assert.equal(extractFailure.attempt, 2);
+    assert.ok(extractFailure.failures.length > 0);
+
+    const exceptionRoot = resolve(runRoot, runId, "exceptions");
+    const exceptionDirectories = await readdir(exceptionRoot);
+    assert.equal(exceptionDirectories.length, 1);
+    const exceptionPath = resolve(
+      exceptionRoot,
+      exceptionDirectories[0]!,
+      "exception-item.json"
+    );
+    const exception = JSON.parse(await readFile(exceptionPath, "utf8")) as {
+      kind: string;
+      status: string;
+      refs: Array<{ artifactRef: string }>;
+    };
+    assert.equal(exception.kind, "bounded-failure");
+    assert.equal(exception.status, "open");
+    assert.ok(
+      exception.refs.some(
+        (ref) => ref.artifactRef === artifactRef(extractFailurePath)
+      )
+    );
+
+    const failureEvents = await readFile(
+      resolve(
+        runRoot,
+        runId,
+        "assurance",
+        `snapshot-${failureDecisionId}`,
+        "events.jsonl"
+      ),
+      "utf8"
+    );
+    const exceptionEvent = failureEvents
+      .trim()
+      .split("\n")
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            eventType?: string;
+            artifactRef?: string;
+            artifactSha256?: string;
+          }
+      )
+      .find((event) => event.eventType === "exception.bounded-failure.raised");
+    assert.equal(exceptionEvent?.artifactRef, artifactRef(exceptionPath));
+    assert.equal(
+      exceptionEvent?.artifactSha256,
+      sha256(await readFile(exceptionPath))
+    );
 
     const events = await readFile(
       resolve(runRoot, runId, "assurance", `snapshot-${decisionId}`, "events.jsonl"),

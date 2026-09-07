@@ -1,7 +1,7 @@
 # CTI Engineering Handoff
 
 Date: 2026-09-03
-Status: Human NV support review complete; reviewed note supersedes provisional note, reviewed metrics recorded, and reviewed-only Build awaits a bounded claim-selection rule
+Status: Bounded key-judgement selection and writer v2 implemented; reviewed NV Build awaits a fresh response, Challenge, and performed adjudication
 Workspace root: `CTI/`
 Source domain: Agentic App Engineering
 Authority class: Current implementation direction and next-action handoff
@@ -93,12 +93,32 @@ Build small scripts and grow the architecture only when working behavior require
 6. One lossless canonical source document with exact anchor validation (implemented and checked on the retrieved NV source).
 7. One bounded AI source-to-question relevance assessment plus deterministic proposal validation (implemented as an interactive Copilot PoC).
 8. Convert one validated positive assessment into a pending candidate and exercise the compatibility human admission path (complete; real NV snapshot approved).
-9. One-source `Find -> Sweep -> Judge -> Write` from the approved NV snapshot.
-10. Sequential multi-source runner.
-11. Cross-source claim synthesis.
-12. Memo writer and verifier.
+9. One-source `Find -> Sweep -> Judge -> Write` from the approved NV snapshot (complete through reviewed note and metrics).
+10. Sequential multi-source runner (deferred).
+11. Cross-source Build and Challenge (implemented for the provisional POC chain; reviewed Build request remains unrecorded).
+12. Memo writer, deterministic verification, and publication blocking (implemented for the provisional POC chain).
+13. Controller admission, pushed exceptions, publication calibration, and run-to-next-gate classification (implemented as small typed boundaries with compatibility defaults).
+14. Per-IR key-judgement eligibility, three-judgement provisional cap, immutable selection record, and bounded writer v2 (implemented and synthetic command-tested).
 
 Avoid UI work, orchestration frameworks, databases, plugin systems, broader Firecrawl discovery, and Vestas-context integration until the earlier scripts work.
+
+## Implemented slice: four human surfaces
+
+The active target contract is `02-Engineering/02-Contracts/human-surfaces-and-calibration.md`. Human effort is represented only as intent, publication, pushed exceptions, and governance. Existing per-source evidence review remains the default compatibility path for policies without an admission field; it is explicitly labeled as an interim stand-in, not a fifth target surface.
+
+The implementation now includes a versioned admission policy with compatibility `human` mode and new `controller` mode, deterministic controller admission into the existing snapshot shape, a four-kind checksum-bound `ExceptionItem`, emitters for uncertain relevance and exhausted Extract attempts, write-once exception persistence, sampled publication and calibration records, and `npm run run:next -- <run-id>`.
+
+`run:next` executes only allowlisted deterministic recorders when a matching response exists. It otherwise reports one of the four human surfaces or reports `foundry-adapter` as machine work. Key-judgement recording is now an allowlisted deterministic step. Read-only inspection of `research-cia-russia-20260828` still reports the reviewed Build request at `synthesis-build-request-0efa5a8aa3ebebc8a8ba5ed74138275e/build-request.json` as machine work waiting. Its pathway is now bounded downstream, but the earlier exploratory output remains unrecorded and cannot substitute for a fresh response artifact.
+
+## Implemented slice: bounded key judgements
+
+The active contract is `02-Engineering/02-Contracts/key-judgement-selection.md`. `ClaimForSelection` is projected from committed claims, code-derived IR coverage, and performed adjudication. Rejected claims are excluded, contested claims follow policy, unknown confidence cannot enter, eligible claims are stably ordered, and IRs without eligible claims become gaps. Provisional adjudication is rejected rather than treating `proposed` as `accepted`.
+
+The model sees Challenge aliases, never real claim IDs. Exact-shape parsing and KJ1-KJ8 aggregate content-free failures. On success, code attaches confidence, ceiling, status, provisional state, and open challenges. `memo-standard-v1` owns a provisional maximum of three key judgements and leaves v0 bytes unchanged. Writer v2 recomputes the selection, carries its wording unchanged, and rejects model-authored BLUF or key-judgement rows.
+
+The synthetic command test covers `prepare:key-judgements -> record:key-judgements -> prepare:memo-writer -> record:memo-writer`, including checksums, write-once artifacts, hidden claim IDs, selected lineage, and persisted memo output. No model call was made and existing NV run artifacts were not changed.
+
+The initial publication calibration threshold remains `provisional-untested`: 30 sampled verdicts across 6 memos at no more than 5% disagreement, with 5 sampled observations per memo. Future memo assembly states `support check: model-only, unvalidated` until an approved threshold is reached. No model calls were made and all existing NV artifacts and checksum-bound policy bytes remain unchanged.
 
 ## Completed slice: Seerist reality-check probe
 
@@ -227,15 +247,20 @@ npm run prepare:question-relevance -- <source-document.json>
 npm run record:question-relevance -- <question-relevance-request.json> <copilot-response.json>
 npm run reintake:source -- <source-retrieval-result.json> <question-relevance-assessment.json> [candidate-id]
 npm run review:evidence -- <intake-result.json> <approve|reject|revise> <reviewer-id> <reason> [decision-id]
+npm run prepare:key-judgements -- <build-record.json> <challenge-record.json> <performed-adjudication.json> <memo-standard-v1.json>
+npm run record:key-judgements -- <key-judgement-request.json> <copilot-response.json>
+npm run prepare:memo-writer -- <build-record.json> <challenge-record.json> <performed-adjudication.json> <key-judgement-record.json> <approved-question.json> <memo-standard-v1.json>
+npm run record:memo-writer -- <writer-request.json> <copilot-response.json>
+npm run run:next -- <run-id>
 npm test
 npm run typecheck
 npm run build
 npm run start
 ```
 
-The modules implement explicit memo-scope and research-question approval, bounded question-linked collection and discovery, one-item intake, one-hop source retrieval, lossless source canonicalization, Copilot PoC question relevance, positive-assessment candidate conversion, and the compatibility human admission mode, not the full target workflow. Discovery may run multiple explicit query pages under a hard budget but cannot advance candidates into intake. Retrieval handles one exact URL and cannot create an evidence candidate. Canonicalization creates stable provider-neutral source documents and anchors but makes no semantic judgment. The relevance boundary produces only a proposed assessment and controller-derived route. Re-intake reconstructs only validated positive assessments, verifies complete retrieval and model artifact lineage, and creates a pending candidate. Current policy defaults to `human`; a new policy version may select controller admission without altering existing NV artifacts.
+The modules implement explicit research intent, bounded collection and discovery, one-item intake, one-hop source retrieval, lossless source canonicalization, question relevance, compatibility and controller admission, one-source assurance, provisional Build/Challenge/writer/verification, exceptions, and publication calibration. Discovery cannot advance candidates into intake; retrieval cannot create an evidence candidate; AI produces only typed proposals. Current policy defaults to `human`; a new policy version may select controller admission without altering existing NV artifacts.
 
-The accepted path now creates a lossless provider-neutral source document, a bounded AI question-relevance artifact grounded in exact `SourceAnchor` references, and a checksum-bound pending candidate only for positive validated assessments. The evidence gate preserves assessment, model, and retrieval lineage in an approved snapshot. The verified real NV snapshot is ready for one-source `Find -> Sweep -> Judge -> Write`.
+The accepted NV path now reaches a reviewed source note and reviewed metrics. A reviewed-only Build envelope and request exist with no synthetic input and `limitedEvidence: true`. The path can now retain a broad reviewed Build graph while limiting writer v2 to at most three validated key judgements; no reviewed Build record exists yet because no fresh response has been recorded.
 
 This change must not lower output quality. Every admitted source still receives independent `Find`, blind `Sweep`, `Judge`, and `Write`; cross-source challenge, Vestas dual-lineage relevance, independent verification, and human publication approval remain required. Similar cases scale through source adapters, immutable per-source state, checksum deduplication, sequential reuse, and later bounded concurrency, not reduced analysis depth.
 
@@ -272,7 +297,7 @@ These are design hypotheses. Keep what testing supports; simplify or revise what
 
 1. Which additional source types can become evidence candidates without external source-page retrieval?
 2. How should missing authorship, ambiguous timestamps, and provider references affect eligibility?
-3. What compact source support and explanation should the evidence gate show so humans can efficiently verify AI relevance proposals?
+3. What publication-sample and disagreement threshold should governance approve after enough calibration evidence exists?
 4. Do bounded pages remain stable across source types and repeated runs?
 5. Which Azure AI Foundry endpoint, model deployment, authentication mode, region, and retention policy will be approved for the live adapter?
 
@@ -284,7 +309,7 @@ These are design hypotheses. Keep what testing supports; simplify or revise what
 - Do not alter or recreate real decision `nv-evidence-review-001`; it records reviewer `FDIHR` and reason `it fits`.
 - Do not add a live model provider until an approved Foundry endpoint and authentication policy are known.
 - Preserve the complete source and mandatory `Find -> Sweep -> Judge -> Write`; do not trade intelligence depth for throughput.
-- Do not implement the full Find/Sweep/Judge/Write chain yet.
+- Do not generalize the implemented POC chain into a broad concurrent orchestrator yet.
 - Do not build the Vestas context database yet.
 - Do not treat TypeScript types in the workflow document as settled API contracts.
 - Do not import code from the legacy PoC without an accepted mapping note.
@@ -309,12 +334,18 @@ At this handoff:
 - Bounded relevance request and response validation is implemented with fixed untrusted-source policy, exact question and source lineage, all four verdict routes, model-authority rejection, and content-safe events. The real NV proposal validated as `partially-relevant` with three exact anchors.
 - Retrieved-source re-intake accepts only a validated positive assessment, verifies retrieval, canonical-document, model-request, model-response, assessment, and decision checksums, creates only a pending candidate, and preserves assessment and retrieval lineage through the evidence gate.
 - The real NV candidate was approved as `nv-evidence-review-001`; `snapshot-nv-evidence-review-001` preserves its raw, retrieval, model, assessment, and question lineage.
-- TypeScript typecheck and build pass.
+- The four human surfaces are explicit in the workflow, board, active contract, and `run:next` action type; compatibility source review and manual model transport are labeled interim stand-ins.
+- Controller admission is policy-bound and AI cannot admit evidence. Existing policy files default to `human` mode without byte changes; a new policy version selects `controller` mode.
+- Uncertain relevance and exhausted Extract attempts emit write-once checksum-bound exceptions. Command integration covers attempt-budget exhaustion and the open `bounded-failure` item.
+- Publication decisions carry sampled verdicts and drill-down evidence; calibration is immutable and provisional thresholds cannot self-promote.
+- Future memo assembly includes `support check: model-only, unvalidated` while calibration remains provisional.
+- `run:next` reports the current NV reviewed Build request as Foundry-adapter machine work and suppresses the older unexecuted request.
+- Full validation passes: `npm test` reports 187 tests passed, `npm run typecheck` passes, and `npm run build` passes.
 - Raw provider artifacts remain only in the ignored local `app/runs/` folder.
 
 ## Suggested opening prompt
 
-> Read `HANDOFF.md`, `03-Workflow/first-slice.md`, and `02-Contracts/synthesis-build.md`. Human reviewer `FDIHR` completed the NV rows-only support pass; the reviewed note supersedes the provisional note and reviewed metrics are recorded. A reviewed-only Build envelope/request exists with no synthetic input and `limitedEvidence: true`, but its exploratory model output proposed 20 claims and was not recorded. Add a versioned key-claim count/selection bound with tests before a fresh reviewed Build invocation. Do not weaken the historical provisional chain's publication blockers.
+> Read `HANDOFF.md`, `03-Workflow/first-slice.md`, `02-Contracts/synthesis-build.md`, and `02-Contracts/key-judgement-selection.md`. The reviewed-only Build request has no recorded response. Obtain a fresh response, record Build, run Challenge, produce a performed adjudication without relabeling `proposed` claims, then run bounded key-judgement selection and writer v2. Do not alter historical NV artifacts or weaken the provisional chain's publication blockers.
 
 ## Completed Panel 2 human review
 
@@ -373,16 +404,16 @@ The following ignored run artifacts now exist:
 43. `source-note-reviewed.json`: `reviewStatus: "reviewed"`, 19 in-scope and one out-of-IR observation, and supersession of the provisional note.
 44. `metrics-reviewed.json`: support failure `0`, chrome `0`, tag precision `1`, disposition mismatches `0`; omission and underclaims null.
 45. `synthesis/build-envelope-5807f521b2bbf4c73a23a54e3d9cbdc9.json`: reviewed-only, one-source envelope with `reviewStatus: "reviewed"`, `limitedEvidence: true`, and no synthetic input.
-46. `synthesis/requests/synthesis-build-request-0efa5a8aa3ebebc8a8ba5ed74138275e/build-request.json`: reviewed-only model request. An exploratory invocation returned 20 one-observation proposals; it was not recorded because the active contract has no bounded key-claim selection rule.
+46. `synthesis/requests/synthesis-build-request-0efa5a8aa3ebebc8a8ba5ed74138275e/build-request.json`: reviewed-only model request. An exploratory invocation returned 20 one-observation proposals and was not recorded. The active downstream KJ stage now caps memo selection at three, but a live Build still requires a fresh response artifact.
 
 Interpret the four uniform hidden-single-source challenges as checklist calibration data, not four proven claim defects: dependency is already derived and appears once in sourcing. The three alternative hypotheses are the substantive Challenge yield preserved in the memo.
 
 ## Immediate next action
 
-Before recording a reviewed Build response, add a versioned maximum/key-claim selection rule and focused tests. Do not commit an unbounded 20-claim graph that makes the short memo contract impossible. After that bound exists, run a fresh reviewed Build invocation, Challenge, real or explicitly deferred Adjudicate, and writer. Approved scope lineage and an approved memo standard remain separate publication prerequisites.
+Obtain a fresh response for the reviewed Build request, record the reviewed Build graph, run Challenge, and produce a performed adjudication. Do not map current `proposed` status to `accepted`; the bounded stage deliberately rejects provisional adjudication. Then run `prepare:key-judgements`, `record:key-judgements`, `prepare:memo-writer`, and `record:memo-writer`. The v1 standard and three-judgement cap remain provisional governance inputs, so publication stays blocked pending an approved curated standard and approved scope lineage.
 
 Organizational relevance, semantic verification, and general orchestration remain deferred.
 
 ## Human input still required
 
-Confirm provider rules for retaining raw responses and derived fixtures before committing any provider content. When Foundry access becomes available, provide only non-secret endpoint type, deployment name, authentication policy, API version, region, and retention constraints. Credentials remain local environment configuration and must never be pasted into chat or committed.
+Governance must eventually approve a memo standard and support-calibration threshold. When Foundry access becomes available, provide only non-secret endpoint type, deployment name, authentication policy, API version, region, and retention constraints. Credentials remain local environment configuration and must never be pasted into chat or committed.

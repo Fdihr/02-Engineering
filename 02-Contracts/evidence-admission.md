@@ -1,12 +1,12 @@
 # Evidence Admission Contract
 
-Status: Active baseline
+Status: Active compatibility baseline; controller admission is governed by `human-surfaces-and-calibration.md`
 Validated: 2026-09-01
 Implementation: `../app/src/modules/approval/evidence-approval.ts`, `../app/src/workflow/review-evidence.ts`
 
 ## Scope
 
-This contract covers one explicit human decision on one persisted intake result. It does not require the human to author source-to-question relevance. For retrieved sources, that rationale is a separately validated AI proposal under the retrieved-source relevance contract. This contract does not define source retrieval, batch review, source assurance, or publication approval.
+This contract covers the compatibility `human` admission-policy mode: one explicit human decision on one persisted intake result. It is an interim stand-in, not a fifth target human surface. It does not require the human to author source-to-question relevance. For retrieved sources, that rationale is a separately validated AI proposal under the retrieved-source relevance contract. This contract does not define controller admission, source retrieval, batch review, source assurance, or publication approval.
 
 ## Command
 
