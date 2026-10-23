@@ -1,0 +1,9 @@
+Proprietary — Vestas Internal Use
+
+This skill contains Vestas brand guidelines, visual identity specifications,
+typography specifications, colour values, component descriptions, and brand assets
+derived from Vestas Wind Systems A/S official brand materials.
+
+Do not distribute outside Vestas without authorisation.
+
+All trademarks, logos, images, and brand references belong to Vestas Wind Systems A/S.

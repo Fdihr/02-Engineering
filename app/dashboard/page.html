@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Run view: $run_id</title>
+  <script>
+    (function () {
+      try { if (localStorage.getItem('app_theme') === 'dark') document.documentElement.classList.add('dark'); }
+      catch (error) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="/design_system.css">
+  <link rel="stylesheet" href="/run_view.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to dashboard</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <img src="/assets/vestas/Vestas_White.svg" alt="Vestas">
+        <h1>Run view</h1>
+        <span class="run-id" id="run-id">$run_id</span>
+      </div>
+      <span class="topbar-meta figures" id="counts" aria-live="polite">Loading run…</span>
+      <div class="topbar-actions">
+        <span class="read-only">Read-only</span>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Dark theme</button>
+      </div>
+    </div>
+  </header>
+  <main id="main">
+    <div class="stack">
+      <section class="waiting" aria-labelledby="waiting-title">
+        <h2 id="waiting-title">Waiting on a person <span class="empty">(derived from artefact presence)</span></h2>
+        <div id="waiting" aria-live="polite"><div class="empty">Loading…</div></div>
+      </section>
+      <section aria-labelledby="sources-title">
+        <h2 id="sources-title">Source assurance</h2>
+        <div id="sources"><div class="empty">Loading…</div></div>
+      </section>
+      <section aria-labelledby="synthesis-title">
+        <h2 id="synthesis-title">Synthesis, relevance, memo and verification</h2>
+        <div id="synthesis"><div class="empty">Loading…</div></div>
+      </section>
+      <section aria-labelledby="exceptions-title">
+        <h2 id="exceptions-title">Exception queue</h2>
+        <div id="exceptions"><div class="empty">Loading…</div></div>
+      </section>
+      <section aria-labelledby="events-title">
+        <h2 id="events-title">Events <span class="empty">(newest first)</span></h2>
+        <div id="events"><div class="empty">Loading…</div></div>
+      </section>
+    </div>
+    <aside aria-labelledby="viewer-heading">
+      <h2 id="viewer-heading">Artefact</h2>
+      <div class="viewer-title" id="viewer-title">Select an artefact to inspect.</div>
+      <pre id="viewer" aria-live="polite"></pre>
+    </aside>
+  </main>
+  <script>
+    (function () {
+      var pollMs = $poll_ms;
+      function el(tag, cls, text) {
+        var node = document.createElement(tag);
+        if (cls) node.className = cls;
+        if (text !== undefined && text !== null) node.textContent = String(text);
+        return node;
+      }
+      function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+      function empty(host, message) { clear(host); host.appendChild(el('div', 'empty', message)); }
+
+      function statusMark(status, label) {
+        var known = ['pending', 'in-progress', 'committed', 'failed', 'provisional', 'reviewed', 'synthetic'];
+        var className = known.indexOf(status) >= 0 ? status : 'pending';
+        var mark = el('span', 'status ' + className);
+        mark.setAttribute('role', 'img');
+        mark.setAttribute('aria-label', label || status.replace(/-/g, ' '));
+        mark.appendChild(el('span', 'status-dot'));
+        mark.appendChild(document.createTextNode(label || status.replace(/-/g, ' ')));
+        return mark;
+      }
+      function artifactLink(artifact) {
+        var link = el('button', 'artifact-link', artifact.relPath + ' (' + artifact.size + ' B)');
+        link.type = 'button';
+        link.setAttribute('aria-label', 'View artefact ' + artifact.relPath);
+        link.addEventListener('click', function () { viewArtifact(artifact.relPath); });
+        var wrap = el('span');
+        wrap.appendChild(link);
+        (artifact.flags || []).forEach(function (flag) { wrap.appendChild(el('span', 'flag', flag)); });
+        return wrap;
+      }
+      function stageRow(stage) {
+        var row = el('div', 'stage');
+        row.appendChild(el('div', 'name', stage.name));
+        row.appendChild(statusMark(stage.status));
+        var detail = el('div', 'detail');
+        if (stage.attempts > 0) detail.appendChild(el('div', 'figures', 'Attempts: ' + stage.attempts));
+        var failureKeys = Object.keys(stage.failures || {});
+        if (failureKeys.length > 0) {
+          detail.appendChild(el('div', 'fail', 'Failures: ' + failureKeys.map(function (key) { return key + ' ×' + stage.failures[key]; }).join(', ')));
+        }
+        (stage.artifacts || []).forEach(function (artifact) { detail.appendChild(artifactLink(artifact)); });
+        row.appendChild(detail);
+        return row;
+      }
+      function renderWaiting(items) {
+        var host = document.getElementById('waiting');
+        clear(host);
+        if (!items || items.length === 0) { host.appendChild(el('div', 'empty', 'No human action is currently derived from the run artefacts.')); return; }
+        var list = el('ul');
+        items.forEach(function (item) { list.appendChild(el('li', null, item)); });
+        host.appendChild(list);
+      }
+      function renderSources(sources) {
+        var host = document.getElementById('sources');
+        clear(host);
+        if (!sources || sources.length === 0) { empty(host, 'No admitted sources under assurance/ yet.'); return; }
+        sources.forEach(function (source) {
+          var block = el('div', 'source');
+          block.appendChild(el('h3', null, source.snapshotId + (source.waitingOn ? ' · waiting: ' + source.waitingOn : '')));
+          var lane = el('div', 'lane');
+          source.stages.forEach(function (stage) { lane.appendChild(stageRow(stage)); });
+          block.appendChild(lane);
+          host.appendChild(block);
+        });
+      }
+      function renderSynthesis(stages) {
+        var host = document.getElementById('synthesis');
+        clear(host);
+        if (!stages || stages.length === 0) { empty(host, 'No synthesis artefacts yet.'); return; }
+        var lane = el('div', 'lane');
+        stages.forEach(function (stage) { lane.appendChild(stageRow(stage)); });
+        host.appendChild(lane);
+      }
+      function table(headers) {
+        var wrap = el('div', 'table-wrap');
+        var table = el('table');
+        var head = el('tr');
+        headers.forEach(function (label) {
+          var cell = el('th', null, label);
+          cell.scope = 'col';
+          head.appendChild(cell);
+        });
+        table.appendChild(head);
+        wrap.appendChild(table);
+        return { wrap: wrap, table: table };
+      }
+      function renderExceptions(items) {
+        var host = document.getElementById('exceptions');
+        clear(host);
+        if (!items || items.length === 0) { empty(host, 'No exceptions recorded.'); return; }
+        var view = table(['Kind', 'Status', 'Raised', 'ID']);
+        items.forEach(function (item) {
+          var row = el('tr');
+          row.appendChild(el('td', null, item.kind));
+          var status = el('td');
+          status.appendChild(statusMark(item.status === 'open' ? 'failed' : 'committed', item.status));
+          row.appendChild(status);
+          row.appendChild(el('td', 'figures', item.raisedAt));
+          var idCell = el('td');
+          idCell.appendChild(artifactLink({ relPath: item.relPath, size: 0, flags: [] }));
+          row.appendChild(idCell);
+          view.table.appendChild(row);
+        });
+        host.appendChild(view.wrap);
+      }
+      function renderEvents(items) {
+        var host = document.getElementById('events');
+        clear(host);
+        if (!items || items.length === 0) { empty(host, 'No events.jsonl found under this run.'); return; }
+        var view = table(['At', 'Event', 'Stage', 'Attempt', 'Status', 'Actor']);
+        items.forEach(function (item) {
+          var row = el('tr');
+          row.appendChild(el('td', 'figures', item.at));
+          row.appendChild(el('td', null, item.type));
+          row.appendChild(el('td', null, item.stage));
+          row.appendChild(el('td', 'figures', item.attempt === null ? '' : item.attempt));
+          row.appendChild(el('td', null, item.status));
+          row.appendChild(el('td', null, item.actor));
+          view.table.appendChild(row);
+        });
+        host.appendChild(view.wrap);
+      }
+      function viewArtifact(relPath) {
+        document.getElementById('viewer-title').textContent = relPath;
+        var viewer = document.getElementById('viewer');
+        viewer.textContent = 'Loading artefact…';
+        fetch('/api/artifact?path=' + encodeURIComponent(relPath)).then(function (response) {
+          if (!response.ok) throw new Error('Not available (' + response.status + ')');
+          return response.text();
+        }).then(function (text) {
+          try { viewer.textContent = JSON.stringify(JSON.parse(text), null, 2); }
+          catch (error) { viewer.textContent = text; }
+        }).catch(function (error) { viewer.textContent = error.message || 'Request failed.'; });
+      }
+      function renderError() {
+        document.getElementById('counts').textContent = 'Run data unavailable';
+        ['waiting', 'sources', 'synthesis', 'exceptions', 'events'].forEach(function (id) {
+          empty(document.getElementById(id), 'Could not load this run. Check the run directory and refresh.');
+        });
+      }
+      function refresh() {
+        fetch('/api/run').then(function (response) {
+          if (!response.ok) throw new Error('Run data unavailable');
+          return response.json();
+        }).then(function (view) {
+          document.getElementById('counts').textContent = view.counts.files + ' files · ' + view.counts.sources + ' sources · ' + view.counts.openExceptions + ' open exceptions · ' + view.counts.events + ' events' + (view.truncated ? ' · scan truncated' : '');
+          renderWaiting(view.waitingOn);
+          renderSources(view.sources);
+          renderSynthesis(view.synthesis);
+          renderExceptions(view.exceptions);
+          renderEvents(view.events);
+        }).catch(renderError);
+      }
+      var themeToggle = document.getElementById('theme-toggle');
+      function syncThemeControl() {
+        var dark = document.documentElement.classList.contains('dark');
+        themeToggle.textContent = dark ? 'Light theme' : 'Dark theme';
+        themeToggle.setAttribute('aria-pressed', String(dark));
+      }
+      themeToggle.addEventListener('click', function () {
+        var dark = !document.documentElement.classList.contains('dark');
+        document.documentElement.classList.toggle('dark', dark);
+        try { localStorage.setItem('app_theme', dark ? 'dark' : 'light'); }
+        catch (error) {}
+        syncThemeControl();
+      });
+      syncThemeControl();
+      refresh();
+      window.setInterval(refresh, pollMs);
+    })();
+  </script>
+</body>
+</html>
