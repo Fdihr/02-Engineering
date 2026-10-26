@@ -97,6 +97,13 @@ const main = async (): Promise<void> => {
       preparedAt
     );
     if (!question.ok) throw new Error(`Approved question rejected: ${question.error}`);
+    if (question.value.scopeApproval) {
+      requireChecksum(
+        await loadRunArtifact(runRoot, question.value.scopeApproval.artifactRef, "Approved scope"),
+        question.value.scopeApproval.artifactSha256,
+        "Approved scope"
+      );
+    }
     const standardArtifact = await loadJsonArtifact(resolve(standardPath));
     const standard = validateMemoStandardV1(standardArtifact.value);
     if (!standard.ok) throw new Error(`Memo standard rejected: ${standard.error}`);
@@ -138,7 +145,7 @@ const main = async (): Promise<void> => {
           artifactRef: output,
           reviewStatus: request.value.reviewStatus,
           limitedEvidence: request.value.limitedEvidence,
-          approvedScope: null
+          approvedScope: request.value.approvedScope
         })}\n`,
         "utf8"
       )

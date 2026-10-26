@@ -10,7 +10,8 @@ import {
 } from "../memo/standard-v1.js";
 import {
   createBoundedWriterRequest,
-  recordWriterResponse
+  recordWriterResponse,
+  renderMemoMarkdown
 } from "../memo/writer.js";
 import type { ChallengeRecord } from "./challenge.js";
 import {
@@ -527,4 +528,68 @@ test("writer v2 consumes bounded selected judgements without model rewriting", a
     }),
     { ok: false, error: "INVALID_WRITER_COVERAGE" }
   );
+
+  assert.equal(writerRequest.value.approvedScope, null);
+  assert.ok(recorded.value.memo.publicationBlockers.includes("LEGACY_SCOPE_LINEAGE_UNAVAILABLE"));
+  assert.match(renderMemoMarkdown(recorded.value.memo), /The visit is reported by one source\. \[claim:claim-a\] \*\*Status: accepted\.\*\*/);
+
+  const scopedQuestion = {
+    ...question,
+    scopeApproval: {
+      scopeId: "scope-1",
+      scopeVersion: 1,
+      artifactRef: "runs/run-1/memo-scopes/scope-1/v1/approved-memo-scope.json",
+      artifactSha256: "b".repeat(64)
+    }
+  };
+  const dependentBuild = structuredClone(buildRecord);
+  dependentBuild.synthesis.limitations = [{
+    id: "limitation-dependency",
+    kind: "source-caveat",
+    sourceNoteIds: ["note-1"],
+    text: "Reporting dependency is mixed: NCSC-NL, Modat."
+  }];
+  const scopedRequest = createBoundedWriterRequest({
+    buildRecord: dependentBuild,
+    buildRecordArtifact: buildArtifact,
+    challengeRecord,
+    challengeRecordArtifact: challengeArtifact,
+    adjudication,
+    adjudicationArtifact,
+    keyJudgementRecord: keyRecord.value,
+    keyJudgementRecordArtifact: binding(keyRecord.value.id),
+    question: scopedQuestion,
+    questionArtifact: binding("question"),
+    standard,
+    standardArtifact,
+    preparedAt: "2026-09-03T10:06:00.000Z"
+  });
+  assert.equal(scopedRequest.ok, true);
+  if (!scopedRequest.ok) return;
+  assert.deepEqual(scopedRequest.value.approvedScope, {
+    artifactRef: scopedQuestion.scopeApproval.artifactRef,
+    artifactSha256: scopedQuestion.scopeApproval.artifactSha256
+  });
+  assert.ok(!scopedRequest.value.derivedLimitations.some((text) => text.includes("legacy question")));
+  assert.match(scopedRequest.value.derivedSourcingSummary, /Reporting dependency is mixed: NCSC-NL, Modat\./);
+  const scopedRecorded = recordWriterResponse({
+    request: scopedRequest.value,
+    requestArtifact: binding("writer-request-scoped"),
+    responseValue: { ...response, requestId: scopedRequest.value.id },
+    responseArtifact: binding("writer-response-scoped"),
+    buildRecord: dependentBuild,
+    challengeRecord,
+    adjudication,
+    keyJudgementRecord: keyRecord.value,
+    question: scopedQuestion,
+    standard,
+    recordedAt: "2026-09-03T10:08:00.000Z"
+  });
+  assert.equal(scopedRecorded.ok, true);
+  if (!scopedRecorded.ok) return;
+  assert.ok(!scopedRecorded.value.memo.publicationBlockers.includes("LEGACY_SCOPE_LINEAGE_UNAVAILABLE"));
+  assert.deepEqual(scopedRecorded.value.memo.approvedScope, scopedRequest.value.approvedScope);
+  assert.deepEqual(scopedRecorded.value.memo.sourcingSummary.reportingDependencies, [
+    "Reporting dependency is mixed: NCSC-NL, Modat."
+  ]);
 });

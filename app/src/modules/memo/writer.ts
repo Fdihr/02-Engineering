@@ -139,7 +139,7 @@ export type BoundedWriterRequest = {
   adjudication: ArtifactBinding;
   keyJudgementRecord: ArtifactBinding;
   approvedQuestion: ArtifactBinding;
-  approvedScope: null;
+  approvedScope: ArtifactBinding | null;
   memoStandard: ArtifactBinding;
   claims: Array<{
     alias: string;
@@ -207,7 +207,7 @@ export type MemoDocument = {
   memoStandardId: string;
   memoStandardVersion: 0 | 1;
   approvedQuestionId: string;
-  approvedScope: null;
+  approvedScope: ArtifactBinding | null;
   lineage: {
     buildRecord: ArtifactBinding;
     challengeRecord: ArtifactBinding;
@@ -358,6 +358,60 @@ const derivedLimitations = (build: SynthesisBuildRecord): string[] => [
     ? ["Synthetic source lineage is present; this memo is not for publication."]
     : []),
   "No checksum-bound approved scope artifact exists for this legacy question.",
+  "support check: model-only, unvalidated"
+];
+
+// Bounded (v2) derivations; legacy v1 helpers above stay byte-stable so old requests still recompute.
+const boundedReportingDependencies = (build: SynthesisBuildRecord): string[] =>
+  build.synthesis.limitations
+    .map((entry) => entry.text)
+    .filter(
+      (text) =>
+        text.includes("relayed from") || text.startsWith("Reporting dependency is ")
+    );
+
+const boundedSourceSummary = (build: SynthesisBuildRecord): string => {
+  const sourceCount = new Set(
+    build.synthesis.claims.flatMap((claim) => claim.supportingSourceNoteIds)
+  ).size;
+  const evidenceStatus = build.synthesis.claims.some((claim) => claim.provisional)
+    ? "provisional"
+    : "reviewed";
+  const dependencies = boundedReportingDependencies(build);
+  return [
+    `The claim picture rests on ${sourceCount} ${evidenceStatus} claim-bearing publisher source${sourceCount === 1 ? "" : "s"}.`,
+    dependencies.length > 0
+      ? dependencies.join(" ")
+      : "No reporting dependency is recorded for the claim-bearing sources.",
+    build.reviewStatus === "synthetic"
+      ? "A synthetic non-evidence input remains in lineage."
+      : "No synthetic input is present."
+  ].join(" ");
+};
+
+const approvedScopeBinding = (
+  question: ApprovedResearchQuestion
+): ArtifactBinding | null =>
+  question.scopeApproval
+    ? {
+        artifactRef: question.scopeApproval.artifactRef,
+        artifactSha256: question.scopeApproval.artifactSha256
+      }
+    : null;
+
+const boundedDerivedLimitations = (
+  build: SynthesisBuildRecord,
+  approvedScope: ArtifactBinding | null
+): string[] => [
+  ...(build.synthesis.claims.some((claim) => claim.provisional)
+    ? ["Evidence is provisional because its observations were not reviewed by a human."]
+    : []),
+  ...(build.reviewStatus === "synthetic"
+    ? ["Synthetic source lineage is present; this memo is not for publication."]
+    : []),
+  ...(approvedScope
+    ? []
+    : ["No checksum-bound approved scope artifact exists for this legacy question."]),
   "support check: model-only, unvalidated"
 ];
 
@@ -763,7 +817,7 @@ export const createBoundedWriterRequest = (input: {
     adjudication: bindings[2]!,
     keyJudgementRecord: bindings[3]!,
     approvedQuestion: bindings[4]!,
-    approvedScope: null,
+    approvedScope: approvedScopeBinding(input.question),
     memoStandard: bindings[5]!,
     claims: resolvedClaims,
     keyJudgements: keyJudgements.filter(
@@ -777,9 +831,12 @@ export const createBoundedWriterRequest = (input: {
     requiredOmissions: input.keyJudgementRecord.selection.omissions.map(
       (omission) => ({ ...omission })
     ),
-    derivedSourcingSummary: sourceSummary(input.buildRecord),
+    derivedSourcingSummary: boundedSourceSummary(input.buildRecord),
     derivedLimitations: [
-      ...derivedLimitations(input.buildRecord),
+      ...boundedDerivedLimitations(
+        input.buildRecord,
+        approvedScopeBinding(input.question)
+      ),
       ...input.keyJudgementRecord.selection.omissions.map(
         (omission) =>
           `Key judgement omitted for ${omission.requirementId}: ${omission.reason}`
@@ -838,7 +895,7 @@ export const validateBoundedWriterRequest = (
     !readArtifactBinding(value.keyJudgementRecord) ||
     !readArtifactBinding(value.approvedQuestion) ||
     !readArtifactBinding(value.memoStandard) ||
-    value.approvedScope !== null ||
+    (value.approvedScope !== null && !readArtifactBinding(value.approvedScope)) ||
     !Array.isArray(value.claims) ||
     !Array.isArray(value.keyJudgements) ||
     !Array.isArray(value.requiredGaps) ||
@@ -1013,7 +1070,11 @@ export const recordWriterResponse = (input: {
   const silentCount = input.buildRecord.synthesis.questionCoverage.filter(
     (entry) => entry.disposition === "silent"
   ).length;
-  const hasRelayedReporting = reportingDependencies(input.buildRecord).length > 0;
+  const hasRelayedReporting = (
+    bounded
+      ? boundedReportingDependencies(input.buildRecord)
+      : reportingDependencies(input.buildRecord)
+  ).length > 0;
   const evidenceStatus = input.buildRecord.synthesis.claims.some(
     (claim) => claim.provisional
   )
@@ -1149,7 +1210,10 @@ export const recordWriterResponse = (input: {
   const claimSourceIds = new Set(
     input.buildRecord.synthesis.claims.flatMap((claim) => claim.supportingSourceNoteIds)
   );
-  const dependencies = reportingDependencies(input.buildRecord);
+  const dependencies = bounded
+    ? boundedReportingDependencies(input.buildRecord)
+    : reportingDependencies(input.buildRecord);
+  const approvedScope = bounded ? boundedRequest.approvedScope : null;
   const blockers = [
     ...(input.buildRecord.reviewStatus === "synthetic" ? ["SYNTHETIC_SOURCE_LINEAGE"] : []),
     ...(input.buildRecord.synthesis.claims.some((claim) => claim.provisional)
@@ -1163,7 +1227,7 @@ export const recordWriterResponse = (input: {
       ? ["OPEN_KEY_JUDGEMENT_CONTEST"]
       : []),
     "PROVISIONAL_MEMO_STANDARD",
-    "LEGACY_SCOPE_LINEAGE_UNAVAILABLE"
+    ...(approvedScope ? [] : ["LEGACY_SCOPE_LINEAGE_UNAVAILABLE"])
   ];
   const memoBody = {
     createdAt: recordedAt,
@@ -1179,7 +1243,7 @@ export const recordWriterResponse = (input: {
     memoStandardId: input.standard.id,
     memoStandardVersion: input.standard.version,
     approvedQuestionId: input.question.id,
-    approvedScope: null,
+    approvedScope,
     lineage: bounded
       ? {
           buildRecord: input.request.buildRecord,
@@ -1283,7 +1347,7 @@ const renderStatements = (statements: MemoStatement[]): string[] =>
         `- ${statement.text} ${statement.claimCitations.join(" ")} ${
           statement.openChallengeIds.length > 0
             ? `**Contested: ${statement.openChallengeIds.length} open challenge${statement.openChallengeIds.length === 1 ? "" : "s"}.**`
-            : "**Status: proposed.**"
+            : `**Status: ${statement.status}.**`
         }`
       );
 

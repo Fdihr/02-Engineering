@@ -15,6 +15,13 @@ def file_entry(rel_path, size=100):
 
 
 class ModelTests(unittest.TestCase):
+    def test_empty_run_shows_pending_stages_without_publication_claim(self):
+        view = build_run_view("empty", [], [], [], "2026-10-26T00:00:00Z")
+        self.assertEqual(len(view["panel1"]["stages"]), 6)
+        self.assertEqual(len(view["synthesis"]), 8)
+        self.assertTrue(all(stage["status"] == "pending" for stage in view["synthesis"]))
+        self.assertFalse(any("publication" in item for item in view["waitingOn"]))
+
     def test_failure_counts_accepts_nested_arrays_and_rejects_invalid_values(self):
         self.assertEqual(
             failure_counts({"failures": [{"check": "E2", "count": 2}, {"check": "E3", "count": 14}]}),
@@ -76,19 +83,91 @@ class ModelTests(unittest.TestCase):
         self.assertEqual([event["type"] for event in events], ["second", "first"])
         self.assertEqual(events[0]["attempt"], 2)
 
+    def test_evidence_candidates_show_pending_until_a_human_decision_event(self):
+        rel = "source-reintakes/cand-1/intake-result.json"
+        intake = {
+            "item": {
+                "source": {"title": "Exposed wind OT", "publisherHost": "example.org", "finalUrl": "https://example.org/a"},
+                "questionRelevance": {"assessment": {
+                    "verdict": "partially-relevant", "rationale": "Why",
+                    "support": [{"anchor": {"quote": "8,547 systems"}, "relationToQuestion": "Exposure"}],
+                    "limitations": ["Not compromise"],
+                }},
+            },
+            "decision": {"approvalStatus": "pending_human_review"},
+        }
+        pending = build_run_view("run-e", [file_entry(rel)], [{"relPath": rel, "value": intake}], [], "t")
+        self.assertEqual(pending["counts"]["pendingEvidence"], 1)
+        self.assertEqual(pending["evidenceReview"][0]["support"][0]["quote"], "8,547 systems")
+        self.assertTrue(pending["waitingOn"][0].startswith("evidence review: 1"))
+
+        event = ('{"decisionId":"d1","sourceRunId":"run-e","occurredAt":"2026-10-26T10:00:00Z","actorType":"human",'
+                 '"actorId":"FDIHR","stage":"evidence_admission","status":"completed",'
+                 '"intakeArtifactRef":"runs/run-e/' + rel + '","eventType":"evidence.admission.approved","snapshotId":"snapshot-d1"}')
+        decided = build_run_view("run-e", [file_entry(rel)], [{"relPath": rel, "value": intake}],
+                                 [{"relPath": "evidence-events.jsonl", "lines": [event]}], "t")
+        self.assertEqual(decided["counts"]["pendingEvidence"], 0)
+        self.assertEqual(decided["evidenceReview"][0]["decision"]["outcome"], "approved")
+        self.assertEqual(decided["evidenceReview"][0]["decision"]["reviewerId"], "FDIHR")
+
+    def test_assurance_review_is_pending_until_a_review_record_exists(self):
+        package = "assurance/snap-1/review/review-package.json"
+        value = {
+            "observations": [{"observationId": "obs-1", "text": "Claim", "quote": "Quote text here", "claimKind": "event",
+                              "attribution": {"kind": "direct"}, "irIds": ["ir-01"]}],
+            "requirements": [{"irId": "ir-01", "text": "What?"}],
+            "modelDispositions": [{"irId": "ir-01", "disposition": "partial", "note": "Some"}],
+        }
+        pending = build_run_view("r", [file_entry(package)], [{"relPath": package, "value": value}], [], "t")
+        review = pending["assuranceReviews"][0]
+        self.assertEqual((review["status"], pending["counts"]["awaitingReview"]), ("awaiting-review", 1))
+        self.assertEqual(review["requirements"][0]["disposition"], "partial")
+        record = "assurance/snap-1/review/review-record-reviewed.json"
+        done = build_run_view("r", [file_entry(package), file_entry(record)],
+                              [{"relPath": package, "value": value}, {"relPath": record, "value": {"reviewerId": "FDIHR", "supportPass": "performed"}}], [], "t")
+        self.assertEqual(done["assuranceReviews"][0]["status"], "recorded")
+        self.assertEqual(done["counts"]["awaitingReview"], 0)
+
+    def test_ai_queue_waits_until_a_record_references_the_request(self):
+        build = "synthesis/requests/b1/build-request.json"
+        extract = "assurance/snap-1/extract/attempt-1/extract-request.json"
+        docs = [{"relPath": build, "value": {"preparedAt": "2026-10-26T10:00:00Z"}},
+                {"relPath": extract, "value": {"preparedAt": "2026-10-26T09:00:00Z"}}]
+        pending = build_run_view("r", [file_entry(d["relPath"]) for d in docs], docs, [], "t")
+        self.assertEqual([(i["label"], i["status"]) for i in pending["aiQueue"]],
+                         [("Source extraction", "awaiting-ai"), ("Synthesis Build", "awaiting-ai")])
+        self.assertEqual(pending["counts"]["awaitingAiStage"], 2)
+        done_docs = docs + [
+            {"relPath": "synthesis/records/b1/synthesis-build-record.json", "value": {"request": {"artifactRef": "runs/r/" + build}}},
+            {"relPath": "assurance/snap-1/extract/attempt-1/checks.json", "value": {"failures": []}},
+        ]
+        done = build_run_view("r", [file_entry(d["relPath"]) for d in done_docs], done_docs, [], "t")
+        self.assertEqual({i["status"] for i in done["aiQueue"]}, {"recorded"})
+        self.assertEqual(done["counts"]["awaitingAiStage"], 0)
+
     def test_run_view_groups_synthesis_exceptions_and_waiting(self):
         files = [
+            file_entry("memo-scopes/scope-01/v1/approved-memo-scope.json"),
+            file_entry("research-questions/rq-01/approved-research-question.json"),
+            file_entry("discoveries/dp-01/discovery-results.json"),
             file_entry("synthesis/build-record.json"),
             file_entry("synthesis/memo-provisional.json"),
             file_entry("exceptions/exc-001.json"),
         ]
         jsons = [
+            {"relPath": "memo-scopes/scope-01/v1/approved-memo-scope.json", "value": {"id": "scope-01", "version": 1, "status": "approved", "purpose": {"value": "Purpose"}, "threatTopic": {"value": "Topic"}, "geographies": {"value": ["Europe"]}}},
+            {"relPath": "research-questions/rq-01/approved-research-question.json", "value": {"id": "rq-01", "question": "What happened?", "rationale": "Why", "status": "approved"}},
+            {"relPath": "discoveries/dp-01/discovery-results.json", "value": {"planId": "dp-01", "researchQuestionId": "rq-01", "apiCalls": 4, "candidates": [{"providerItemId": "item-1", "title": "Lead 1", "sourceType": "news", "score": 6}]}},
             {"relPath": "synthesis/build-record.json", "value": {"limitedEvidence": True, "provisional": True}},
             {"relPath": "synthesis/memo-provisional.json", "value": {"reviewStatus": "provisional"}},
             {"relPath": "exceptions/exc-001.json", "value": {"id": "exc-001", "kind": "bounded-failure", "status": "open", "raisedAt": "2026-09-04T10:00:00Z"}},
         ]
         view = build_run_view("run-synth", files, jsons, [], "2026-09-07T00:00:00Z")
+        self.assertEqual(view["panel1"]["scope"]["id"], "scope-01")
+        self.assertEqual(len(view["panel1"]["candidates"]), 1)
         self.assertEqual(view["synthesis"][0]["status"], "provisional")
+        self.assertEqual(view["report"]["profiles"][0]["id"], "rsm")
+        self.assertEqual(len(view["report"]["rsmPillars"]), 3)
         self.assertEqual(view["counts"]["openExceptions"], 1)
         self.assertIn("exception queue: 1 open", view["waitingOn"])
         self.assertIn("publication gate: blocked (provisional or synthetic lineage)", view["waitingOn"])

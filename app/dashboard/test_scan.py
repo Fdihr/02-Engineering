@@ -7,6 +7,18 @@ from dashboard.scan import read_artifact_text, resolve_inside_run, scan_run_dire
 
 
 class ScanTests(unittest.TestCase):
+    def test_shared_events_match_exact_run_identity(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parent = Path(temp_dir)
+            root = parent / "run-1"
+            root.mkdir()
+            records = [{"runId": "run-1"}, {"runId": "run-10"},
+                       {"sourceRunId": "run-1"}, {"error": "run-1"}]
+            (parent / "research-events.jsonl").write_text(
+                "\n".join(json.dumps(record) for record in records), encoding="utf-8")
+            scan = scan_run_directory(root)
+            self.assertEqual(len(scan["events"][0]["lines"]), 2)
+
     def test_scan_reads_bounded_json_and_events(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

@@ -144,6 +144,13 @@ const main = async (): Promise<void> => {
       recordedAt
     );
     if (!question.ok) throw new Error(`Approved question rejected: ${question.error}`);
+    if (isBounded && question.value.scopeApproval) {
+      requireChecksum(
+        await loadRunArtifact(runRoot, question.value.scopeApproval.artifactRef, "Approved scope"),
+        question.value.scopeApproval.artifactSha256,
+        "Approved scope"
+      );
+    }
     const standardArtifact = requireChecksum(
       await loadJsonArtifact(resolve(request.memoStandard.artifactRef)),
       request.memoStandard.artifactSha256,
