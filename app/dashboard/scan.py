@@ -45,6 +45,9 @@ def list_available_runs(runs_root: str | Path) -> list[dict[str, Any]]:
         try:
             if entry.is_symlink() or not entry.is_dir(follow_symlinks=False):
                 continue
+            # Evidence admission writes snapshot folders beside analyses; they are not runs.
+            if os.path.isfile(os.path.join(entry.path, "approved-evidence-snapshot.json")):
+                continue
             stat = entry.stat(follow_symlinks=False)
             items.append({
                 "runId": entry.name,

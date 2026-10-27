@@ -7,6 +7,8 @@ import re
 from collections import defaultdict
 from typing import Any
 
+from .journey import build_journey
+
 FileEntry = dict[str, Any]
 JsonFile = dict[str, Any]
 EventLines = dict[str, Any]
@@ -36,8 +38,7 @@ RULES: dict[str, Any] = {
         ("challenge", re.compile(r"challenge", re.IGNORECASE)),
         ("adjudicate", re.compile(r"adjudic", re.IGNORECASE)),
         ("key judgements", re.compile(r"key-judgement", re.IGNORECASE)),
-        ("relevance", re.compile(r"org-relevance|organizational-relevance", re.IGNORECASE)),
-        ("memo", re.compile(r"memo-writer|draft-memo|^memo-|/memo-", re.IGNORECASE)),
+        ("memo", re.compile(r"memo-writer|draft-memo|^memo/|^memo-|/memo-", re.IGNORECASE)),
         ("verification", re.compile(r"verif", re.IGNORECASE)),
         ("publication", re.compile(r"publication", re.IGNORECASE)),
     ),
@@ -146,6 +147,10 @@ def _status_from_name(name: str, value: Any) -> str | None:
             return "reviewed"
         if record_status == "proposed":
             return "in-progress"
+        if record_status == "blocked":
+            return "provisional"
+        if isinstance(value.get("contentVerdict"), str):
+            return "committed"
         if isinstance(value.get("candidates"), list) or isinstance(value.get("requirements"), list) or isinstance(value.get("segments"), list):
             return "committed"
         if isinstance(value.get("snapshotId"), str) and isinstance(value.get("admittedBy"), str):
@@ -563,228 +568,6 @@ def _build_relevance_queue(run_id: str, json_by_path: dict[str, Any], candidates
     return queue
 
 
-def _extract_memo_statements(items: Any) -> list[dict[str, Any]]:
-    result: list[dict[str, Any]] = []
-    if not isinstance(items, list):
-        return result
-    for entry in items:
-        if not _is_record(entry):
-            continue
-        stmt = entry.get("statement") if _is_record(entry.get("statement")) else entry
-        conf = entry.get("confidence") if _is_record(entry.get("confidence")) else {}
-        text = _string_field(stmt, ["text", "statement", "judgementText"])
-        if not text:
-            continue
-        result.append({
-            "id": _string_field(stmt, ["id", "requirementId"]),
-            "text": text,
-            "status": _string_field(stmt, ["status"]) or "proposed",
-            "confidence": _string_field(conf, ["level"]) or _string_field(entry, ["confidence"]) or "low",
-            "ceiling": _string_field(conf, ["ceiling"]) or _string_field(entry, ["ceiling"]) or "low",
-            "rationale": _string_field(conf, ["rationale"]),
-            "citations": [str(c) for c in stmt.get("claimCitations", [])] if isinstance(stmt.get("claimCitations"), list) else [],
-        })
-    return result
-
-
-def _build_report_view(
-    run_id: str,
-    panel1: dict[str, Any],
-    sources: list[dict[str, Any]],
-    json_by_path: dict[str, Any],
-) -> dict[str, Any]:
-    memo_doc: dict[str, Any] | None = None
-    memo_rel_path = ""
-    build_claims: list[dict[str, Any]] = []
-    key_judgements: list[dict[str, Any]] = []
-    source_notes: list[dict[str, Any]] = []
-
-    for rel_path, value in sorted(json_by_path.items()):
-        if not _is_record(value):
-            continue
-        schema = _string_field(value, ["schemaVersion"])
-        if schema == "memo-writer-record-v1" and _is_record(value.get("memo")):
-            if memo_doc is None or _string_field(value["memo"], ["createdAt"]) >= _string_field(memo_doc, ["createdAt"]):
-                memo_doc = value["memo"]
-                memo_rel_path = rel_path
-        elif schema == "intelligence-memo-v1":
-            if memo_doc is None or _string_field(value, ["createdAt"]) >= _string_field(memo_doc, ["createdAt"]):
-                memo_doc = value
-                memo_rel_path = rel_path
-        elif _is_record(value.get("synthesis")) and isinstance(value["synthesis"].get("claims"), list):
-            for claim in value["synthesis"]["claims"]:
-                if not _is_record(claim):
-                    continue
-                conf = claim.get("confidence") if _is_record(claim.get("confidence")) else {}
-                build_claims.append({
-                    "id": _string_field(claim, ["id", "claimId"]),
-                    "text": _string_field(claim, ["statement", "text"]),
-                    "kind": _string_field(claim, ["kind"]),
-                    "confidence": _string_field(conf, ["level"]) or "low",
-                    "provisional": bool(claim.get("provisional")),
-                    "relPath": rel_path,
-                })
-        elif isinstance(value.get("selections"), list) and "policyId" in value:
-            for sel in value["selections"]:
-                if _is_record(sel):
-                    key_judgements.append({
-                        "id": _string_field(sel, ["requirementId", "claimAlias"]),
-                        "text": _string_field(sel, ["judgementText"]),
-                        "status": _string_field(sel, ["status"]) or "accepted",
-                        "confidence": _string_field(sel, ["confidence"]) or "low",
-                        "ceiling": _string_field(sel, ["ceiling"]) or "low",
-                        "rationale": "",
-                        "citations": [_string_field(sel, ["claimId", "claimAlias"])],
-                    })
-        elif _basename(rel_path).startswith("source-note") and isinstance(value.get("observations"), list):
-            source_notes.append({
-                "id": _string_field(value, ["id", "noteId"]) or _basename(rel_path),
-                "reviewStatus": _string_field(value, ["reviewStatus"]) or "committed",
-                "observationCount": len(value["observations"]),
-                "relPath": rel_path,
-            })
-
-    scope = panel1.get("scope") or {}
-    questions = panel1.get("questions") or []
-    requirements = panel1.get("requirements") or []
-    candidates = panel1.get("candidates") or []
-    primary_question = questions[0]["question"] if questions else "No approved research question recorded yet."
-    geographies = scope.get("geographies") or (questions[0].get("geographies") if questions else []) or ["Europe"]
-    window_from = (scope.get("from") or (questions[0].get("from") if questions else "") or "")[:10]
-    window_to = (scope.get("to") or (questions[0].get("to") if questions else "") or "")[:10]
-
-    if memo_doc is not None:
-        state = "committed-memo"
-        review_status = _string_field(memo_doc, ["reviewStatus"]) or "provisional"
-        bluf_items = _extract_memo_statements(memo_doc.get("bluf"))
-        bluf_text = bluf_items[0]["text"] if bluf_items else "Committed intelligence memo recorded."
-        kjs = _extract_memo_statements(memo_doc.get("keyJudgments")) or key_judgements
-        analysis_items = _extract_memo_statements(memo_doc.get("analysis"))
-        uncertainty_items = _extract_memo_statements(memo_doc.get("uncertainties"))
-        indicators = _extract_memo_statements(memo_doc.get("indicators"))
-        gaps = memo_doc.get("gaps") if isinstance(memo_doc.get("gaps"), list) else []
-        blockers = [str(b) for b in memo_doc.get("publicationBlockers", [])] if isinstance(memo_doc.get("publicationBlockers"), list) else []
-        sourcing_text = _string_field(memo_doc.get("sourcingSummary") if _is_record(memo_doc.get("sourcingSummary")) else {}, ["text"])
-    else:
-        state = "synthesis-in-progress" if (build_claims or source_notes) else ("collection-preview" if candidates else "awaiting-collection")
-        review_status = "provisional"
-        if build_claims:
-            bluf_text = (
-                f"Regional preview ({', '.join(geographies)}): {len(build_claims)} synthesis claims and "
-                f"{len(source_notes)} source intelligence notes are recorded across {len(sources)} admitted sources. "
-                "Final memo writer stage has not yet been committed."
-            )
-        elif candidates:
-            top_Score = candidates[0]["score"] if candidates else 0
-            bluf_text = (
-                f"Early regional signal preview ({', '.join(geographies)}): {len(candidates)} ranked Seerist discovery leads "
-                f"(top relevance score {top_Score}) are queued for intake, source assurance, and synthesis. "
-                "Admit and review priority leads to promote them into verified Key Judgements."
-            )
-        else:
-            bluf_text = (
-                f"Scoped for {', '.join(geographies)} ({window_from or 'unbounded'} to {window_to or 'present'}). "
-                "Run Seerist collection or admit sources to populate the Regional Security Manager brief."
-            )
-        kjs = key_judgements or [
-            {
-                "id": c["id"] or f"claim-{idx}",
-                "text": c["text"],
-                "status": "provisional" if c["provisional"] else "proposed",
-                "confidence": c["confidence"],
-                "ceiling": c["confidence"],
-                "rationale": f"Synthesis claim ({c['kind']})",
-                "citations": [c["id"]],
-            }
-            for idx, c in enumerate(build_claims[:4], start=1)
-        ]
-        analysis_items = []
-        uncertainty_items = []
-        indicators = []
-        gaps = [{"irId": req["id"] or f"ir-{idx:02d}", "disposition": "pending" if not source_notes else "partial", "text": req["text"]} for idx, req in enumerate(requirements, start=1)]
-        blockers = ["MEMO_NOT_YET_WRITTEN", "AWAITING_SOURCE_ASSURANCE_AND_SYNTHESIS"] if not memo_doc else []
-        sourcing_text = (
-            f"{len(sources)} admitted source snapshots · {len(source_notes)} assured source notes · "
-            f"{len(candidates)} ranked Seerist discovery leads."
-        )
-
-    # Group signals / implications into RSM operational pillars
-    rsm_pillars = [
-        {
-            "id": "sites-manufacturing",
-            "title": "Physical sites, factories & service hubs",
-            "focus": "Industrial disruption, ransomware on production, civil unrest, or localized sabotage near Vestas facilities.",
-            "keywords": ("manufactur", "factory", "industrial", "production", "ransomware", "extortion", "plant", "strike", "unrest"),
-            "signals": [],
-        },
-        {
-            "id": "wind-ot-grid",
-            "title": "Wind farm operations, OT/SCADA & grid interconnect",
-            "focus": "State-linked pre-positioning, utility OT targeting, substation disruption, and remote turbine telemetry.",
-            "keywords": ("ot", "operational technology", "scada", "ics", "energy", "grid", "wind", "renewable", "utility", "substation"),
-            "signals": [],
-        },
-        {
-            "id": "supply-logistics",
-            "title": "Regional supply chain, vendors & transport corridors",
-            "focus": "Tier-1 supplier compromise, vendor remote access, subsea/port/rail sabotage, and component transit.",
-            "keywords": ("supply chain", "vendor", "firmware", "remote access", "npm", "subsea", "port", "maritime", "rail", "logistics", "sabotage", "hybrid"),
-            "signals": [],
-        },
-    ]
-    for cand in candidates[:25]:
-        haystack = (cand.get("title", "") + " " + " ".join(cand.get("matchedTerms", []))).lower()
-        for pillar in rsm_pillars:
-            if len(pillar["signals"]) < 5 and any(kw in haystack for kw in pillar["keywords"]):
-                pillar["signals"].append({
-                    "title": cand["title"],
-                    "score": cand["score"],
-                    "sourceType": cand["sourceType"],
-                    "date": (cand.get("providerTimestamp") or "")[:10],
-                    "matchedTerms": cand.get("matchedTerms", []),
-                })
-
-    return {
-        "runId": run_id,
-        "state": state,
-        "reviewStatus": review_status,
-        "memoRelPath": memo_rel_path,
-        "profiles": [
-            {"id": "rsm", "label": "Regional Security Manager (RSM)", "active": True},
-            {"id": "ciso-ot", "label": "CISO / OT Security Lead", "active": False},
-            {"id": "exec-brief", "label": "Executive Leadership Brief", "active": False},
-            {"id": "canonical-memo", "label": "Canonical Audit Memo (v1)", "active": False},
-        ],
-        "header": {
-            "title": scope.get("purpose") or primary_question,
-            "threatTopic": scope.get("threatTopic") or "",
-            "question": primary_question,
-            "geographies": geographies,
-            "from": window_from,
-            "to": window_to,
-            "audience": scope.get("audience") or "Regional Security Manager (Europe)",
-        },
-        "bluf": bluf_text,
-        "keyJudgements": kjs,
-        "rsmPillars": rsm_pillars,
-        "analysis": analysis_items,
-        "uncertainties": uncertainty_items,
-        "indicators": indicators,
-        "requirements": [
-            {
-                "id": req["id"] or f"ir-{idx:02d}",
-                "text": req["text"],
-                "status": req["status"],
-            }
-            for idx, req in enumerate(requirements, start=1)
-        ],
-        "gaps": gaps,
-        "sourcingSummary": sourcing_text,
-        "publicationBlockers": blockers,
-        "topLeads": candidates[:10],
-    }
-
-
 def parse_events(event_files: list[EventLines]) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     for file in event_files:
@@ -909,6 +692,8 @@ def _build_panel1_view(files: list[FileEntry], json_by_path: dict[str, Any]) -> 
                     "title": _string_field(cand, ["title"]) or "(untitled)",
                     "sourceType": _string_field(cand, ["sourceType"]) or "unknown",
                     "score": _number_field(cand, ["score"]) or 0,
+                    "tier": _number_field(cand, ["tier"]) or 9,
+                    "tierLabel": _string_field(cand, ["tierLabel"]) or "Not tiered (earlier search)",
                     "matchedTerms": [str(t) for t in cand.get("matchedTerms", [])] if isinstance(cand.get("matchedTerms"), list) else [],
                     "sourceUrl": _string_field(cand, ["sourceUrl"]),
                     "providerTimestamp": _string_field(cand, ["providerTimestamp"]),
@@ -937,13 +722,14 @@ def _build_panel1_view(files: list[FileEntry], json_by_path: dict[str, Any]) -> 
             dedup_questions[qid] = q
 
     candidates.sort(key=lambda item: (item["score"], item["providerTimestamp"]), reverse=True)
+    candidates.sort(key=lambda item: item["tier"])
     return {
         "stages": stages,
         "scope": scope_summary,
         "questions": list(dedup_questions.values()),
         "requirements": requirements,
         "discoveries": discoveries,
-        "candidates": candidates[:50],
+        "candidates": candidates,
         "intakes": intakes,
     }
 
@@ -993,6 +779,7 @@ def build_run_view(
     scanned_at: str,
 ) -> dict[str, Any]:
     json_by_path = {entry["relPath"]: entry["value"] for entry in jsons}
+    full = dict(json_by_path)
     by_snapshot: dict[str, list[FileEntry]] = defaultdict(list)
     synthesis_files: list[FileEntry] = []
     panel1_files: list[FileEntry] = []
@@ -1014,7 +801,7 @@ def build_run_view(
             panel1_files.append(file)
             if not (RULES["synthesis_dir"] in parts):
                 continue
-        if RULES["synthesis_dir"] in parts or any(pattern.search(_basename(file["relPath"])) for _, pattern in RULES["synthesis_stages"]):
+        if RULES["synthesis_dir"] in parts or parts[0] == "memo" or any(pattern.search(_basename(file["relPath"])) for _, pattern in RULES["synthesis_stages"]):
             synthesis_files.append(file)
 
     panel1 = _build_panel1_view(panel1_files, json_by_path)
@@ -1029,7 +816,6 @@ def build_run_view(
     synthesis = _build_synthesis_view(synthesis_files, json_by_path)
     exceptions = _build_exceptions(files, json_by_path)
     events = parse_events(event_files)
-    report = _build_report_view(run_id, panel1, sources, json_by_path)
     evidence_review = _build_evidence_review(run_id, json_by_path, event_files)
     relevance_queue = _build_relevance_queue(run_id, json_by_path, evidence_review)
     pending_evidence = sum(1 for c in evidence_review if c["decision"] is None and c["approvalStatus"] == "pending_human_review")
@@ -1051,13 +837,22 @@ def build_run_view(
         waiting.insert(0, f"relevance: {awaiting_ai} source(s) waiting for an AI relevance answer")
     if pending_evidence:
         waiting.insert(0, f"evidence review: {pending_evidence} candidate(s) awaiting your admission decision")
+    journey = build_journey(run_id, full, {
+        "panel1": panel1,
+        "evidenceReview": evidence_review,
+        "relevanceQueue": relevance_queue,
+        "assuranceReviews": assurance_reviews,
+        "adjudications": adjudications,
+        "aiQueue": ai_queue,
+        "exceptions": exceptions,
+    })
     return {
         "runId": run_id,
         "scannedAt": scanned_at,
+        "journey": journey,
         "panel1": panel1,
         "sources": sources,
         "synthesis": synthesis,
-        "report": report,
         "evidenceReview": evidence_review,
         "relevanceQueue": relevance_queue,
         "assuranceReviews": assurance_reviews,

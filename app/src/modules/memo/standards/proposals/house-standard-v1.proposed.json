@@ -1,0 +1,231 @@
+{
+  "schemaVersion": "memo-standard-pack-proposal-v1",
+  "id": "house-standard-v1",
+  "version": 1,
+  "status": "proposed",
+  "proposedAt": "2026-10-27T00:00:00.000Z",
+  "approvedAt": null,
+  "approvedBy": null,
+  "note": "Curated from the Vestas CTI Memo-Archive. Defines form and voice only; no fact, entity or judgement from a source memo may be reused as evidence. Not loaded by the writer until approved and supported by a parser.",
+  "audienceProfile": "Vestas CISO, Executive Management and security leadership; secondary: regional security managers and, through approved staff communication, employees.",
+  "sourceMemoRefs": [
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - August - Israel-Iran Situation Update.docx", "sha256": "4fe48fed720b21cb6376d2bcc943fda16ab40a6d7431b596c5becfe0d232759b", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - August - Ukraine-Russia Situation Update.docx", "sha256": "9bd00cc604430d84fd80145989fa77385f8457a7cf88406c2ce5b4e40c42ab66", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - August 21st - China's new anti-espionage law.docx", "sha256": "d5cfb228a63a64c932401c0a3e2a6ab8391769b84266bb3ec29ee04db583d740", "purpose": "citation" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - DATE - Threat development Russia September 2023.docx", "sha256": "ae60dd34050e557b967d59e2814ed8e15a2d8d826313dae86928bb0e52f84b1d", "purpose": "confidence" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - Dec 15th - FE's Udsyn 2023.docx", "sha256": "ba799415f930eea8dd7be706f575270364a833a0f7c107c5a8fcdd0ec54a4d53", "purpose": "voice" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - February - Coordinated Cyber Attack on Polish Energy Sector.docx", "sha256": "67880df66e950c3c2cc2773cfdd00d34882373abf3d9c52c8695451acc8401fc", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - May 14th - India cyber threat Assesment.docx", "sha256": "484591e7b305ccc319b3c2dbb37afb84fc10b502a1e5a8f99b66d101b9dedfc8", "purpose": "voice" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - Nov 22th - Rusiawest escalation.docx", "sha256": "eba4bbb04880343495907667e300a9d9d351faf810fcefc10202258dcea9ad4b", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - Oct 5th - China's new anti-espionage law.docx", "sha256": "5eaa0096120bbef21d94c549129faa323169905fcf9cfd4e6926cb3510e61100", "purpose": "citation" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - October - Russis Historic Background.docx", "sha256": "2bff13d217eb85d47f9b8ae0f3ef0cd60098934020a7f32ea2edb53d0aab6be7", "purpose": "analysis-depth" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - October - What will Russia do next.docx", "sha256": "db66bca4a2fc3edd34e98cd518dc71bb43efdc8b8da2043e2f4d8dff90a04898", "purpose": "analysis-depth" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - September 15th - Russia hybrid war.docx", "sha256": "1624e2c41f71ffc856e281d1934938a96aab5afcbc2dcf569921c8936a476958", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - Updated July 6th - Threat development Russia june 28h -2023.docx", "sha256": "3e8b1d349aa252e043bfb361a3f505c1499f3e0443b2a2d20bd374a06983ab0e", "purpose": "analysis-depth" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - sept 12th - China's cyber threat 2023 yearly .docx", "sha256": "bab4e913d7832d8e8ee0fbd85755b10dda20196efcb6a1a13854200d3309c69b", "purpose": "confidence" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum - August - Cyber Threat Landscape Ongoing Updates.docx", "sha256": "691479019a8d2e1964d249780498491190bd5c338626231101705e063097229e", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum - Feb 25th - Bitter APT Group Threat Report Appendix.docx", "sha256": "88134a4896d3ea6aee99b9ded2c1b665149778765ddeba235ab7849760b44c82", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum - june 4th - Dansihe auth increase cyber threat rating.docx", "sha256": "5a1b24eac37cdafb6ce79fd390ffd06e20619c9929b353f5a3efe825ffdb0a43", "purpose": "voice" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum-sept 2024-Hezbollah-pager-attack.docx", "sha256": "6a019b38e84d767b1170077eafe901137a87f3182716a0f247f5a80a933d771b", "purpose": "analysis-depth" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/03-Critical-Infrastructure/Memorandum - Dec 5th - Vestas-DTEK Collab.docx", "sha256": "fe1145e7fc5e41885da93ab3baccf53b00f2e70ceabfd415e79cda03e2104d4b", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/03-Critical-Infrastructure/Memorandum - February - Threat Warning to Nordic Critical Energy Infrastructure.docx", "sha256": "1cd321d9ee6b1bcf33d63df9646e27a178b742f8de2819fbc1caa916dfba378e", "purpose": "voice" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/03-Critical-Infrastructure/Memorandum - January - Fortinet Finland Vulnerability.docx", "sha256": "bfcfae2eff5fc54bfa8ed945b651b9cf83f41c674a0c572cd8dcb1fd011a0e6c", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/03-Critical-Infrastructure/Memorandum - June 25th - GNSS Jamming and Its Impact on Offshore Communication and Navigation Systems.docx", "sha256": "006018bd52065d3a28da46b80e997005eba4ae94f7c1be41c040bbff4db32976", "purpose": "analysis-depth" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/03-Critical-Infrastructure/Memorandum - May 23rd - Chinese 'rogue' hardware.docx", "sha256": "0b53f89126864ef1f502cdafdf616629259d11eba67187a42290be09893f1a16", "purpose": "voice" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/03-Critical-Infrastructure/Memorandum - Nov 21th - Optic Fiber Cut in Baltic Sea.docx", "sha256": "96a9243cfee5ab9d5b0caa6ebb9efd6a822bd5efa5cb030c180e732c9617a87b", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/04-Policy-Regulation/Memorandum - March 24st - EU Emerging security strategy and the implication to Vestas.docx", "sha256": "7a4f68852cfb268591ba16d2cfc1698eb9a13bb1f5dea68a16e3d56a16c6b889", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/04-Policy-Regulation/Memorandum - March 24st - EU Energy Security Policy Development 2025.docx", "sha256": "3640969c73d516905bd24f82fbc17cc0c9186f29f0e2b56d633dcecf1ce2021b", "purpose": "voice" }
+  ],
+  "unreadSourceRefs": [
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - April 10th - US China Tariff Analysis.docx", "sha256": "2018a6f38e7ead64823f40a7cf196ef7f2e9c58c17d262cfcacb6c8c6a637ac9", "reason": "legacy binary .doc" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - May 14th - India Assesment.docx", "sha256": "be96adf095664cd891e5134506f7501e76e5e2231647aaf613718e1c04808f75", "reason": "legacy binary .doc" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - Nov 22th - Russia-west escalation.docx", "sha256": "f16a1deba02a514bebbc44369371f6084a6062ed2487ce4fe7f9ab2eb461273c", "reason": "legacy binary .doc" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum - Feb 25th - Bitter APT.docx", "sha256": "5c2776444bc199f22df0247b02bdf7ee12ece8df570fc717ddd1f333a249e601", "reason": "legacy binary .doc" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum - Feb 25th - Signal Linked Device Exploit.docx", "sha256": "b95211528c32eb488ffd208481c9af37465b1a338d0e6be4b7baef4c8b680f11", "reason": "legacy binary .doc" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum - Feb 25th - Signal Linked Device Exploit (JCAVE backup).docx", "sha256": "24696917e2affe1c821af4c80174cf4fcafaf14178ef02d16c2141b364923214", "reason": "legacy binary .doc; backup copy" }
+  ],
+  "frame": {
+    "title": "Memorandum – <subject>",
+    "dateLine": "Date: <D Month YYYY>",
+    "asOfLine": "This memorandum reflects the assessment as of <D Month YYYY>.",
+    "classifications": ["Internal", "Confidential", "Restricted"],
+    "requiredSections": ["purpose", "assessment-box", "references"],
+    "lexiconFootnoteWhen": "any estimative term is used"
+  },
+  "sections": {
+    "purpose": { "heading": "Purpose of this memorandum", "governedSource": "scope" },
+    "context-lines": { "heading": null, "governedSource": "scope" },
+    "situation": { "heading": "Situation", "governedSource": "analysis:reported-fact" },
+    "events": { "heading": "Events", "governedSource": "analysis:reported-fact" },
+    "object": { "heading": "<object examined>", "governedSource": "analysis:reported-fact" },
+    "context": { "heading": "Context", "governedSource": "analysis" },
+    "analysis": { "heading": "Analysis", "governedSource": "analysis" },
+    "specific-points": { "heading": "Specific points to highlight", "governedSource": "analysis" },
+    "points-of-concern": { "heading": "Specific points of concern", "governedSource": "analysis" },
+    "conclusions": { "heading": "Conclusions", "governedSource": "key-judgments" },
+    "impacts": { "heading": "Conclusions and impacts to Vestas and Vestas customers", "governedSource": "analysis+organizational-relevance" },
+    "considerations": { "heading": "Considerations", "governedSource": "analysis+competing-explanations" },
+    "relevance": { "heading": "Relevance to cyber security in critical infrastructure", "governedSource": "analysis" },
+    "counterbalance": { "heading": "Balancing the picture", "governedSource": "competing-explanations" },
+    "what-next": { "heading": "What happens next", "governedSource": "key-judgments+indicators" },
+    "scenarios": { "heading": "Possible scenarios", "governedSource": "competing-explanations" },
+    "assessment-box": { "heading": "Assessment | Threat Assessment | Cyber Threat Assessment", "governedSource": "bluf+key-judgments" },
+    "assessment-update": { "heading": "Assessment as of <date>", "governedSource": "bluf+key-judgments" },
+    "future-development": { "heading": "Future development", "governedSource": "indicators" },
+    "detailed-analysis": { "heading": "Detailed analysis", "governedSource": "analysis" },
+    "bias": { "heading": "Bias and analytic challenges", "governedSource": "uncertainties+sourcing-summary" },
+    "staff-communication": { "heading": "Suggested communication to Vestas employees", "governedSource": "analyst" },
+    "suggested-actions": { "heading": "Suggested actions", "governedSource": "analyst" },
+    "caveat": { "heading": null, "governedSource": "uncertainties" },
+    "references": { "heading": "References", "governedSource": "sourcing-summary" },
+    "lexicon": { "heading": "Wording used in assessments", "governedSource": "standard" }
+  },
+  "variants": [
+    {
+      "id": "flash",
+      "label": "Flash: threat warning or alert",
+      "readerQuestion": "Is this hitting us, and what do we do now?",
+      "audience": "CISO and ExM",
+      "words": [350, 550],
+      "order": ["purpose", "situation", "considerations", "assessment-box", "suggested-actions", "references"],
+      "assessmentBox": { "title": "Cyber Threat Assessment", "riskLevel": true, "judgements": [2, 4], "closingLine": "monitoring" }
+    },
+    {
+      "id": "update",
+      "label": "Update: threat level or posture change",
+      "readerQuestion": "Has anything changed for us?",
+      "audience": "CISO and security leadership",
+      "words": [400, 650],
+      "order": ["purpose", "situation", "analysis", "specific-points", "assessment-box", "staff-communication", "references"],
+      "optional": ["staff-communication"],
+      "assessmentBox": { "title": "Assessment", "firstJudgementStatesChange": true, "judgements": [2, 4] }
+    },
+    {
+      "id": "event",
+      "label": "Event: assessment of a single incident or development",
+      "readerQuestion": "What happened, why, and what does it mean for us?",
+      "audience": "CISO, ExM and security leadership",
+      "words": [450, 900],
+      "order": ["purpose", "situation", "object", "conclusions", "considerations", "relevance", "assessment-box", "references"],
+      "optional": ["object", "relevance"],
+      "assessmentBox": { "title": "Assessment", "judgements": [2, 4], "endsWithStakeholderExpectation": true }
+    },
+    {
+      "id": "outlook",
+      "label": "Outlook: strategic assessment (living document)",
+      "readerQuestion": "What is likely to happen over the coming months or years?",
+      "audience": "ExM and strategy owners",
+      "words": [800, 3000],
+      "order": ["purpose", "situation", "counterbalance", "what-next", "scenarios", "considerations", "assessment-box", "assessment-update", "future-development", "caveat", "references", "lexicon"],
+      "optional": ["scenarios", "assessment-update"],
+      "assessmentBox": { "title": "Cyber Threat Assessment", "horizonRequired": true, "judgements": [3, 6] },
+      "rules": ["Counterbalance is mandatory.", "Indicators are numbered.", "Updates are added newest first and never overwrite earlier assessments."]
+    },
+    {
+      "id": "policy",
+      "label": "Policy: regulation and policy implications",
+      "readerQuestion": "What does this policy or law change for Vestas's business?",
+      "audience": "ExM, legal, public affairs and security leadership",
+      "words": [600, 1200],
+      "order": ["purpose", "events", "context", "impacts", "assessment-box", "detailed-analysis", "bias", "references"],
+      "optional": ["detailed-analysis"],
+      "assessmentBox": { "title": "Assessment", "judgements": [2, 4] },
+      "rules": ["Bias section is mandatory when sources are mostly from one side of a dispute."]
+    },
+    {
+      "id": "actor",
+      "label": "Actor: threat actor profile with optional technical appendix",
+      "readerQuestion": "Who is this actor, what can they do, and are we a target?",
+      "audience": "CISO, SOC and threat intelligence consumers",
+      "words": [700, 1200],
+      "order": ["purpose", "context", "analysis", "specific-points", "assessment-box", "references", "lexicon"],
+      "appendix": ["overview", "ttps-by-attack-tactic", "campaign-highlights", "infrastructure", "case-studies", "iocs-defanged", "detection-and-response", "references"],
+      "assessmentBox": { "title": "Assessment", "judgements": [2, 4] }
+    },
+    {
+      "id": "business",
+      "label": "Business: project or partnership risk",
+      "readerQuestion": "Does this decision change our exposure?",
+      "audience": "Business owner, CISO and regional security manager",
+      "words": [400, 700],
+      "order": ["context-lines", "purpose", "points-of-concern", "assessment-box", "staff-communication", "references"],
+      "optional": ["staff-communication"],
+      "assessmentBox": { "title": "Assessment", "labelledJudgements": ["Current prioritisation", "Resource allocation", "Operational control"] }
+    }
+  ],
+  "likelihoodLexicon": {
+    "highly-unlikely": { "term": "Highly unlikely", "meaning": "There is a minor chance of the effect.", "defaultHorizon": "will not occur within five years" },
+    "unlikely": { "term": "Unlikely", "meaning": "There is a little chance of the effect.", "defaultHorizon": "may occur within five years" },
+    "likely": { "term": "Likely", "meaning": "There is a chance of the effect.", "defaultHorizon": "may occur within one year" },
+    "highly-likely": { "term": "Highly likely", "meaning": "There is a high chance of the effect.", "defaultHorizon": "will occur within one year" },
+    "unknown": { "term": "Unknown", "meaning": "Evidence does not allow a judgement.", "defaultHorizon": null }
+  },
+  "confidenceLexicon": {
+    "low": "Low confidence: a single source, or sources that depend on each other.",
+    "moderate": "Medium confidence: supported by independent sources.",
+    "high": "High confidence: supported by sources of multiple epistemologies."
+  },
+  "riskLevels": {
+    "scope": "flash",
+    "values": ["LOW", "MEDIUM", "HIGH"],
+    "meaning": "Consequence for Vestas if the threat materialises; not a likelihood."
+  },
+  "blufPolicy": [
+    "The assessment box carries the bottom line and is placed on page one.",
+    "The first judgement states the change in risk for Vestas, including no change.",
+    "Negative findings are stated explicitly."
+  ],
+  "judgmentPolicy": [
+    "One sentence per judgement, starting with an estimative phrase or with 'Vestas'.",
+    "Every likelihood term carries a confidence level and a time horizon.",
+    "Every judgement names who is affected: Vestas, Vestas's customers, or serviced assets.",
+    "A judgement repeated from an earlier memo must be supported by this memo's evidence."
+  ],
+  "uncertaintyRules": [
+    "State what is not known in the situation or assessment ('We do not have specific details about…').",
+    "Appraise source credibility in one sentence when a judgement rests on few sources.",
+    "Outlooks close with the time-of-writing caveat."
+  ],
+  "citationRules": [
+    "Every external source appears under References as 'Publisher. (Year). Title. URL' or as the briefing title.",
+    "Governed renderings keep inline claim citations from intelligence-memo-v1."
+  ],
+  "styleRules": [
+    "Title 'Memorandum – <subject>' with an en dash.",
+    "Bold run-in headings; no numbered sections.",
+    "Bold run-in labels in bullets end with a colon.",
+    "First-person plural for the team's judgements; third person for Vestas.",
+    "Spell out abbreviations once.",
+    "Dates as 'D Month YYYY'.",
+    "Lead with the fact, then its meaning for Vestas."
+  ],
+  "prohibitedPatterns": [
+    "confirmed",
+    "proven",
+    "certain",
+    "verified beyond doubt",
+    "DATE",
+    "Current Date",
+    "(evt. Slettes)"
+  ],
+  "qualityExemplars": [
+    { "id": "ex-purpose-flash", "purpose": "structure", "abstractedPattern": "To alert <audience> regarding <confirmed event type> detailed in <authoritative source>, and to inform about <secondary finding>.", "sourceMemoRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - February - Coordinated Cyber Attack on Polish Energy Sector.docx" },
+    { "id": "ex-situation-labelled", "purpose": "structure", "abstractedPattern": "Situation bullets open with a bold label (Threat actor:, Impact:, Official status:, Current status:) followed by one dated fact.", "sourceMemoRef": "01-Intelligence/03-Archive/Memo-Archive/03-Critical-Infrastructure/Memorandum - February - Threat Warning to Nordic Critical Energy Infrastructure.docx" },
+    { "id": "ex-no-change", "purpose": "voice", "abstractedPattern": "There is no change in the cyber risk for Vestas and Vestas's customers. <Threat type> against <sector> is <likelihood term>.", "sourceMemoRef": "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum - june 4th - Dansihe auth increase cyber threat rating.docx" },
+    { "id": "ex-negative-finding", "purpose": "voice", "abstractedPattern": "There has been no <attack type> on <infrastructure>; Vestas serviced sites near <area> have not been targeted. We have no indications that Vestas is a target for <objectives>.", "sourceMemoRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - May 14th - India cyber threat Assesment.docx" },
+    { "id": "ex-credibility", "purpose": "confidence", "abstractedPattern": "The reporting is assessed to be trustworthy even though <motive for bias>; <second source> supports the conclusion without the same motive.", "sourceMemoRef": "01-Intelligence/03-Archive/Memo-Archive/03-Critical-Infrastructure/Memorandum - May 23rd - Chinese 'rogue' hardware.docx" },
+    { "id": "ex-two-conclusions", "purpose": "analysis-depth", "abstractedPattern": "There are two possible conclusions regarding <aspect>: <explanation A>; <explanation B>.", "sourceMemoRef": "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum-sept 2024-Hezbollah-pager-attack.docx" },
+    { "id": "ex-counterbalance", "purpose": "analysis-depth", "abstractedPattern": "While <main trend>, it remains important to recognise the limits of <driver> and the enduring resilience of <actor>: <buffers>. The situation so far is <disruptive rather than existential>.", "sourceMemoRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - October - Russis Historic Background.docx" },
+    { "id": "ex-indicators", "purpose": "analysis-depth", "abstractedPattern": "Key indicators: (1) <observable staging>, (2) <observable signal spike combined with information activity>, (3) <observable political move>.", "sourceMemoRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - October - What will Russia do next.docx" },
+    { "id": "ex-scenarios", "purpose": "analysis-depth", "abstractedPattern": "Each scenario repeats the same sub-headings: description, relation to <counterpart>, change in cyber threat.", "sourceMemoRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - Updated July 6th - Threat development Russia june 28h -2023.docx" },
+    { "id": "ex-estimative-ladder", "purpose": "confidence", "abstractedPattern": "A run of judgements in descending likelihood: It is highly likely that <X>. It is likely that <Y>. It is unlikely that <Z>.", "sourceMemoRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - DATE - Threat development Russia September 2023.docx" },
+    { "id": "ex-decision-owner", "purpose": "voice", "abstractedPattern": "<Exposure reasoning>; therefore, <decision owner> should determine if Vestas should <posture change>.", "sourceMemoRef": "01-Intelligence/03-Archive/Memo-Archive/03-Critical-Infrastructure/Memorandum - February - Threat Warning to Nordic Critical Energy Infrastructure.docx" },
+    { "id": "ex-bias-section", "purpose": "citation", "abstractedPattern": "Potential biases: <perspective of most sources>; <limited access to the other side's primary sources>.", "sourceMemoRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - August 21st - China's new anti-espionage law.docx" }
+  ],
+  "openDecisions": [
+    "Keep fixed horizons in the likelihood lexicon, or state the horizon per judgement.",
+    "Confirm classification levels and who may mark Restricted.",
+    "Choose one reading order for the assessment box across versions.",
+    "Name the approver for promoting this proposal to the curated memo standard."
+  ]
+}

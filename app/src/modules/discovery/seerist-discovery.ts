@@ -4,6 +4,7 @@ import {
   validateApprovedResearchQuestion,
   type ResearchQuestionError
 } from "../research/research-question.js";
+import { assignSourceTier, type SourceTierPolicy } from "./source-tiers.js";
 
 export type SeeristDiscoveryQuery = {
   id: string;
@@ -70,7 +71,11 @@ export type SeeristDiscoveryCandidate = {
   sourceUrl?: string;
   clusterId?: string;
   clusterSize?: number;
+  tier: number;
+  tierId: string;
+  tierLabel: string;
   score: number;
+  shortlisted: boolean;
   matchedTerms: string[];
   queryIds: string[];
   rawArtifactRefs: string[];
@@ -386,12 +391,20 @@ const normalizedText = (value: unknown): string =>
 const optionalString = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() ? value : undefined;
 
+// Analyst reports carry language maps such as { en: "..." } instead of plain strings.
+const localizedString = (value: unknown): string | undefined =>
+  optionalString(value) ??
+  (isRecord(value)
+    ? optionalString(value.en) ?? Object.values(value).map(optionalString).find(Boolean)
+    : undefined);
+
 const finiteNumber = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value) ? value : undefined;
 
 export const rankSeeristDiscoveryCandidates = (
   plan: SeeristDiscoveryPlan,
   pages: CollectedSeeristPage[],
+  tierPolicy: SourceTierPolicy,
   paginationAssessments: SeeristPaginationAssessment[] = []
 ): SeeristDiscoveryCandidate[] => {
   const candidates = new Map<string, SeeristDiscoveryCandidate>();
@@ -414,8 +427,8 @@ export const rankSeeristDiscoveryCandidates = (
         continue;
       }
 
-      const title = optionalString(properties.title);
-      const summary = optionalString(properties.summary);
+      const title = localizedString(properties.title);
+      const summary = localizedString(properties.summary);
       const titleText = normalizedText(title);
       const summaryText = normalizedText(summary);
       const matchedTerms: string[] = [];
@@ -439,24 +452,26 @@ export const rankSeeristDiscoveryCandidates = (
         continue;
       }
 
+      const sourceType = optionalString(properties.source);
+      const sourceUrl = optionalString(properties.link ?? properties.source_url);
       candidates.set(providerItemId, {
         providerItemId,
-        ...(optionalString(properties.source) ? { sourceType: properties.source as string } : {}),
+        ...(sourceType ? { sourceType } : {}),
         ...(optionalString(properties["@timestamp"])
           ? { providerTimestamp: properties["@timestamp"] as string }
           : {}),
         ...(title ? { title } : {}),
         ...(summary ? { summary } : {}),
-        ...(optionalString(properties.link ?? properties.source_url)
-          ? { sourceUrl: (properties.link ?? properties.source_url) as string }
-          : {}),
+        ...(sourceUrl ? { sourceUrl } : {}),
         ...(optionalString(properties.cluster_id)
           ? { clusterId: properties.cluster_id as string }
           : {}),
         ...(finiteNumber(properties.cluster_size) !== undefined
           ? { clusterSize: properties.cluster_size as number }
           : {}),
+        ...assignSourceTier(tierPolicy, sourceType, sourceUrl),
         score,
+        shortlisted: false,
         matchedTerms,
         queryIds: [page.queryId],
         rawArtifactRefs: [page.artifactRef],
@@ -481,13 +496,20 @@ export const rankSeeristDiscoveryCandidates = (
     });
   }
 
-  return [...candidates.values()]
-    .filter((candidate) => candidate.score >= plan.minimumScore)
-    .sort(
-      (left, right) =>
-        right.score - left.score ||
-        (right.providerTimestamp ?? "").localeCompare(left.providerTimestamp ?? "") ||
-        left.providerItemId.localeCompare(right.providerItemId)
-    )
-    .slice(0, plan.maxResults);
+  // Every lead is kept; minimumScore and maxResults only decide the shortlist flag.
+  const ordered = [...candidates.values()].sort(
+    (left, right) =>
+      left.tier - right.tier ||
+      right.score - left.score ||
+      (right.providerTimestamp ?? "").localeCompare(left.providerTimestamp ?? "") ||
+      left.providerItemId.localeCompare(right.providerItemId)
+  );
+  let shortlistCount = 0;
+  for (const candidate of ordered) {
+    if (candidate.score >= plan.minimumScore && shortlistCount < plan.maxResults) {
+      candidate.shortlisted = true;
+      shortlistCount += 1;
+    }
+  }
+  return ordered;
 };

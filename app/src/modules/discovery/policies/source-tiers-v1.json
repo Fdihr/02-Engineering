@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "source-tier-policy-v1",
+  "id": "source-tiers-v1",
+  "version": 1,
+  "purpose": "Orders and labels discovery leads. A tier never removes a lead and never replaces source assurance or human admission.",
+  "defaultTier": 4,
+  "tiers": [
+    {
+      "tier": 1,
+      "id": "control-risks-analysis",
+      "label": "Control Risks analyst report",
+      "basis": "Written by Control Risks human analysts and delivered through Seerist; attributed provider analysis, not independent corroboration.",
+      "sourceTypes": ["analysis"],
+      "domains": []
+    },
+    {
+      "tier": 2,
+      "id": "official",
+      "label": "Official or government source",
+      "basis": "Government, agency, CERT/NCSC, EU, NATO, or intergovernmental publisher.",
+      "sourceTypes": [],
+      "domains": [
+        "gov", "mil", "gov.uk", "gouv.fr", "bund.de", "europa.eu", "nato.int", "un.org", "osce.org", "iaea.org", "entsoe.eu",
+        "ncsc.nl", "government.nl", "rijksoverheid.nl", "ncsc.ch", "admin.ch", "gov.pl", "cert.pl", "cert.se", "msb.se",
+        "regeringen.se", "cfcs.dk", "um.dk", "fmn.dk", "nsm.no", "regjeringen.no", "cert.at", "gv.at", "gob.es", "incibe.es",
+        "gov.it", "governo.it", "gov.ie", "gov.lv", "gov.lt", "valitsus.ee", "ria.ee", "gov.ua", "gov.ro", "gov.gr", "gov.pt",
+        "belgium.be", "ccb.belgium.be", "gov.cz", "gov.sk", "gov.si", "gov.hr", "gov.hu", "gov.fi", "gov.bg"
+      ]
+    },
+    {
+      "tier": 3,
+      "id": "established-media",
+      "label": "Established or specialist media",
+      "basis": "Established national or international outlet, defence or policy institute, or specialist cyber, OT, or energy publication.",
+      "sourceTypes": [],
+      "domains": [
+        "reuters.com", "apnews.com", "afp.com", "bbc.co.uk", "bbc.com", "ft.com", "economist.com", "bloomberg.com", "wsj.com",
+        "nytimes.com", "washingtonpost.com", "theguardian.com", "politico.eu", "politico.com", "dw.com", "euronews.com",
+        "france24.com", "rfi.fr", "aljazeera.com", "nbcnews.com", "cnn.com", "cbsnews.com", "npr.org", "axios.com",
+        "nikkei.com", "straitstimes.com", "scmp.com",
+        "lemonde.fr", "lefigaro.fr", "liberation.fr", "latribune.fr", "lesechos.fr", "zeit.de", "spiegel.de", "faz.net",
+        "sueddeutsche.de", "tagesschau.de", "handelsblatt.com", "nzz.ch", "srf.ch", "elpais.com", "elmundo.es", "20minutos.es",
+        "corriere.it", "repubblica.it", "ilsole24ore.com", "ilmessaggero.it", "ansa.it", "lalibre.be", "lesoir.be", "vrt.be",
+        "nos.nl", "nrc.nl", "volkskrant.nl", "dr.dk", "berlingske.dk", "politiken.dk", "svt.se", "dn.se", "yle.fi", "hs.fi",
+        "nrk.no", "aftenposten.no", "rte.ie", "irishtimes.com", "lsm.lv", "err.ee", "lrt.lt", "notesfrompoland.com", "tvn24.pl",
+        "rp.pl", "digi24.ro", "hotnews.ro", "lequotidien.lu", "wort.lu", "kyivpost.com", "kyivindependent.com", "ukrinform.net",
+        "meduza.io", "themoscowtimes.com",
+        "usni.org", "defensenews.com", "breakingdefense.com", "janes.com", "warontherocks.com", "iiss.org", "rusi.org",
+        "csis.org", "chathamhouse.org", "ecfr.eu",
+        "therecord.media", "bleepingcomputer.com", "securityweek.com", "darkreading.com", "theregister.com", "csoonline.com",
+        "cyberscoop.com", "wired.com", "arstechnica.com", "industrialcyber.co", "krebsonsecurity.com", "thehackernews.com",
+        "helpnetsecurity.com", "infosecurity-magazine.com", "cybersecuritydive.com", "dragos.com", "claroty.com",
+        "nozominetworks.com", "securelist.com", "welivesecurity.com", "recordedfuture.com",
+        "rechargenews.com", "windpowermonthly.com", "offshorewind.biz"
+      ]
+    },
+    {
+      "tier": 4,
+      "id": "other",
+      "label": "Other news or unrated source",
+      "basis": "Not yet rated: regional, aggregator, blog, research, or unlisted publisher. Assess at source review.",
+      "sourceTypes": [],
+      "domains": []
+    },
+    {
+      "tier": 5,
+      "id": "social",
+      "label": "Social media",
+      "basis": "User-generated post; useful as a lead or signal, weakest provenance.",
+      "sourceTypes": ["reddit", "twitter", "instagram", "telegram", "facebook", "youtube", "tiktok", "vk"],
+      "domains": ["reddit.com", "x.com", "twitter.com", "instagram.com", "t.me", "facebook.com", "youtube.com", "tiktok.com", "vk.com"]
+    }
+  ]
+}

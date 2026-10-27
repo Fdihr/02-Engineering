@@ -48,6 +48,8 @@ The active boundary is `../02-Contracts/research-question-and-provider-operation
 
 The bounded discovery command supports explicit query variants and limited pagination when one provider operation has insufficient recall. It preserves every raw page, detects changing totals, timestamp inversions, duplicate IDs, contradictory pagination links, malformed pages, and budget exhaustion, then carries those reasons into affected candidate limitations. It deduplicates provider items, scores explicit title and summary term matches, and creates a read-only candidate report. It cannot intake or approve candidates.
 
+Every deduplicated provider item is kept. The versioned source-tier policy `app/src/modules/discovery/policies/source-tiers-v1.json` labels each lead (1 Control Risks analyst report, 2 official, 3 established or specialist media, 4 other or unrated, 5 social) and the report orders leads by tier, then score. `minimumScore` and `maxResults` now set only a `shortlisted` flag; they no longer remove leads. Results record the tier policy ID, version, and checksum. A tier is an ordering aid, not a source-assurance judgement. Multilingual analyst titles and summaries (`{ "en": ... }`) are read in English. Control Risks analyst reports carry their text in the Seerist payload and have no web link, so they cannot yet be pulled through exact-URL retrieval.
+
 ## Completed slice: one-item evidence intake
 
 One verified Seerist collection bundle plus selected item -> validate question, operation, manifests, raw checksum, and observed fields -> classify provider role -> deterministic route -> ledger entry.

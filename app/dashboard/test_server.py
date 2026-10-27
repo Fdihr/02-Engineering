@@ -8,7 +8,7 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from dashboard.server import create_server, parse_stage_answer, _handle_analyst_action
+from dashboard.server import create_server, parse_stage_answer, read_lead, _handle_analyst_action
 
 
 class ServerTests(unittest.TestCase):
@@ -39,6 +39,11 @@ class ServerTests(unittest.TestCase):
         self.assertIn("lang=\"en-GB\"", page)
         self.assertIn("Dark theme", page)
         self.assertIn("/design_system.css", page)
+        self.assertIn("/run_view.js", page)
+        for script in ("/run_view.js", "/run_panes.js"):
+            with urlopen(self.base + script) as response:
+                self.assertIn("text/javascript", response.headers.get("Content-Type"))
+                self.assertIn("window.CTI", response.read().decode("utf-8"))
 
         with urlopen(self.base + "/design_system.css") as response:
             design_css = response.read().decode("utf-8")
@@ -235,6 +240,19 @@ class ServerTests(unittest.TestCase):
         decision = json.loads((out / "adjudication-decision.json").read_text(encoding="utf-8"))
         self.assertEqual(decision["reviewerId"], "FDIHR")
 
+    def test_prepare_actions_require_records_inside_the_run(self):
+        runs_root = self.run_dir / "runs-root"
+        run_dir = runs_root / "run-p"
+        run_dir.mkdir(parents=True)
+        with patch("dashboard.server._run_npm_script") as runner:
+            for payload in (
+                {"action": "prepare-key-judgements", "runId": "run-p", "challengeRecordPath": "../x/challenge-record.json"},
+                {"action": "prepare-key-judgements", "runId": "run-p", "challengeRecordPath": "synthesis/challenge/records/c1/challenge-record.json"},
+                {"action": "prepare-memo-writer", "runId": "run-p", "keyJudgementRecordPath": "synthesis/key-judgements/records/k1/key-judgement-record.json"},
+            ):
+                self.assertEqual(_handle_analyst_action(runs_root, run_dir, payload)[0], 400)
+            runner.assert_not_called()
+
     def test_stage_answer_parsing_strips_fences_and_reports_bad_json(self):
         self.assertEqual(parse_stage_answer('```json\n{"a": [1]}\n```')[0], {"a": [1]})
         self.assertEqual(parse_stage_answer('Here it is: [{"x": 1}] thanks')[0], [{"x": 1}])
@@ -280,6 +298,28 @@ class ServerTests(unittest.TestCase):
         served.write_text(json.dumps({"prompt": {"system": "SYS", "user": "USR"}}), encoding="utf-8")
         with urlopen(self.base + "/api/stage-prompt?" + urlencode({"path": "memo/requests/w1/writer-request.json"})) as response:
             self.assertEqual(json.loads(response.read())["prompt"], "SYS\n\nUSR")
+    def test_lead_reader_returns_plain_text_and_stays_inside_raw_pages(self):
+        raw = self.run_dir / "discoveries" / "dp-1" / "raw-pages" / "q-01-offset-0.json"
+        raw.parent.mkdir(parents=True)
+        raw.write_text(json.dumps({"features": [
+            {"properties": {"id": "cr-1", "source": "analysis", "publishedDate": "2026-10-23T00:00:00Z",
+                            "title": {"en": "Cyber Weekly"}, "summary": {"en": "<p><strong>Key:</strong> risk &amp; more</p>"},
+                            "body": {"en": "<h4>Key points</h4><ul><li><p>First</p></li><li>Second<script>x</script></li></ul>"},
+                            "countries": [{"name": {"en": "Germany"}}]}},
+            {"properties": {"id": 42, "source": "news", "title": "Wire", "summary": "Plain summary.", "link": "https://example.org/a"}},
+        ]}), encoding="utf-8")
+        ref = "runs/test-run/discoveries/dp-1/raw-pages/q-01-offset-0.json"
+        lead = read_lead(self.run_dir, "test-run", ref, "cr-1")
+        self.assertEqual(lead["title"], "Cyber Weekly")
+        self.assertEqual(lead["summary"], "Key: risk & more")
+        self.assertEqual(lead["body"], "Key points\n\n• First\n\n• Second")
+        self.assertEqual(lead["countries"], ["Germany"])
+        self.assertEqual(read_lead(self.run_dir, "test-run", ref, "42")["link"], "https://example.org/a")
+        self.assertIsNone(read_lead(self.run_dir, "test-run", ref, "missing"))
+        self.assertIsNone(read_lead(self.run_dir, "test-run", "note.json", "cr-1"))
+        self.assertIsNone(read_lead(self.run_dir, "test-run", "discoveries/../raw-pages/x.json", "cr-1"))
+        with urlopen(self.base + "/api/lead?" + urlencode({"path": ref, "id": "42"})) as response:
+            self.assertEqual(json.loads(response.read())["summary"], "Plain summary.")
 
 
 if __name__ == "__main__":

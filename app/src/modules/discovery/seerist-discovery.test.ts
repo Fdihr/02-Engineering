@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   assessSeeristDiscoveryPagination,
@@ -7,6 +8,13 @@ import {
   type CollectedSeeristPage,
   type SeeristDiscoveryPlan
 } from "./seerist-discovery.js";
+import { readSourceTierPolicy, type SourceTierPolicy } from "./source-tiers.js";
+
+const tierPolicyResult = readSourceTierPolicy(
+  JSON.parse(readFileSync(new URL("./policies/source-tiers-v1.json", import.meta.url), "utf8"))
+);
+if (!tierPolicyResult.ok) throw new Error("Shipped tier policy is invalid.");
+const tierPolicy: SourceTierPolicy = tierPolicyResult.value;
 
 const approvedQuestion = {
   id: "rq-test",
@@ -80,7 +88,7 @@ test("rejects discovery without explicit scope approval lineage", () => {
   );
 });
 
-test("merges duplicate pages and deterministically filters unrelated results", () => {
+test("merges duplicate pages and keeps unrelated results off the shortlist instead of dropping them", () => {
   const relevantFeature = {
     type: "Feature",
     properties: {
@@ -122,9 +130,13 @@ test("merges duplicate pages and deterministically filters unrelated results", (
     }
   ];
 
-  const candidates = rankSeeristDiscoveryCandidates(plan, pages);
+  const candidates = rankSeeristDiscoveryCandidates(plan, pages, tierPolicy);
 
-  assert.equal(candidates.length, 1);
+  assert.equal(candidates.length, 2);
+  assert.deepEqual(
+    candidates.map((candidate) => [candidate.providerItemId, candidate.shortlisted]),
+    [["relevant-1", true], ["unrelated-1", false]]
+  );
   assert.equal(candidates[0]?.providerItemId, "relevant-1");
   assert.deepEqual(candidates[0]?.queryIds, ["person", "role"]);
   assert.deepEqual(candidates[0]?.rawArtifactRefs, [
@@ -137,6 +149,33 @@ test("merges duplicate pages and deterministically filters unrelated results", (
     "Moscow",
     "NATO"
   ]);
+});
+
+test("reads multilingual analyst titles and orders by tier before score", () => {
+  const pages: CollectedSeeristPage[] = [
+    {
+      queryId: "person",
+      pageOffset: 0,
+      artifactRef: "tiers.json",
+      payload: {
+        features: [
+          { properties: { id: "post", source: "reddit", title: "John Ratcliffe CIA Director Moscow NATO", link: "https://www.reddit.com/r/x" } },
+          { properties: { id: "wire", source: "news", title: "CIA Director John Ratcliffe in Moscow", link: "https://www.reuters.com/world/x" } },
+          { properties: { id: "cr", source: "analysis", title: { en: "Cyber Weekly: CIA Director travel" }, summary: { en: "Moscow talks." } } }
+        ]
+      }
+    }
+  ];
+
+  const candidates = rankSeeristDiscoveryCandidates(plan, pages, tierPolicy);
+
+  assert.deepEqual(
+    candidates.map((candidate) => [candidate.providerItemId, candidate.tier, candidate.tierId]),
+    [["cr", 1, "control-risks-analysis"], ["wire", 3, "established-media"], ["post", 5, "social"]]
+  );
+  assert.equal(candidates[0]?.title, "Cyber Weekly: CIA Director travel");
+  assert.equal(candidates[0]?.summary, "Moscow talks.");
+  assert.equal(candidates[0]?.score, 4);
 });
 
 test("flags changing totals, timestamp inversions, duplicate IDs, and exhausted pages", () => {
@@ -188,6 +227,7 @@ test("flags changing totals, timestamp inversions, duplicate IDs, and exhausted 
   const candidates = rankSeeristDiscoveryCandidates(
     boundedPlan,
     pages,
+    tierPolicy,
     assessments
   );
   assert.match(

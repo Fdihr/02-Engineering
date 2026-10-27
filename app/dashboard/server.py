@@ -35,6 +35,8 @@ FONT_FILES = {
 STATIC_FILES = {
     "/design_system.css": (DASHBOARD_DIR / "design_system.css", "text/css; charset=utf-8"),
     "/run_view.css": (DASHBOARD_DIR / "run_view.css", "text/css; charset=utf-8"),
+    "/run_view.js": (DASHBOARD_DIR / "run_view.js", "text/javascript; charset=utf-8"),
+    "/run_panes.js": (DASHBOARD_DIR / "run_panes.js", "text/javascript; charset=utf-8"),
     "/assets/vestas/Vestas_White.svg": (DASHBOARD_DIR / "assets" / "vestas" / "Vestas_White.svg", "image/svg+xml"),
 }
 
@@ -398,6 +400,53 @@ STAGE_RESPONSES = {
 }
 
 
+RAW_PAGE_REL = re.compile(r"^discoveries/[A-Za-z0-9._-]+/raw-pages/[A-Za-z0-9._-]+\.json$")
+MAX_LEAD_TEXT = 60_000
+
+
+def _lead_text(value: Any) -> str:
+    """Seerist text may be a language map and may hold HTML; return readable plain text."""
+    if isinstance(value, dict):
+        value = value.get("en") or next((v for v in value.values() if isinstance(v, str) and v.strip()), "")
+    if not isinstance(value, str):
+        return ""
+    text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", "", value)
+    text = re.sub(r"(?i)<li[^>]*>", "\n• ", text)
+    text = re.sub(r"(?i)<br\s*/?>|</(p|div|li|ul|ol|h[1-6]|tr|blockquote)>", "\n", text)
+    text = html.unescape(re.sub(r"<[^>]+>", "", text))
+    text = re.sub(r"[ \t\r\f\v]+", " ", text)
+    return re.sub(r"\n\s*\n+", "\n\n", text).strip()[:MAX_LEAD_TEXT]
+
+
+def read_lead(run_dir: Path, run_id: str, raw_ref: str, item_id: str) -> dict[str, Any] | None:
+    rel = raw_ref[len(f"runs/{run_id}/"):] if raw_ref.startswith(f"runs/{run_id}/") else raw_ref
+    if not RAW_PAGE_REL.match(rel) or not item_id:
+        return None
+    absolute = resolve_inside_run(run_dir, rel)
+    text = read_artifact_text(absolute, MAX_ARTIFACT_BYTES) if absolute else None
+    try:
+        features = json.loads(text).get("features", []) if text else []
+    except (ValueError, AttributeError):
+        return None
+    for feature in features if isinstance(features, list) else []:
+        props = feature.get("properties") if isinstance(feature, dict) else None
+        if not isinstance(props, dict) or str(props.get("id")) != item_id:
+            continue
+        countries = [c.get("name", {}).get("en") if isinstance(c.get("name"), dict) else c.get("name") or c.get("code")
+                     for c in props.get("countries", []) if isinstance(c, dict)] if isinstance(props.get("countries"), list) else []
+        return {
+            "providerItemId": item_id,
+            "title": _lead_text(props.get("title")),
+            "sourceType": str(props.get("source") or ""),
+            "published": str(props.get("publishedDate") or props.get("@timestamp") or ""),
+            "link": props.get("link") if isinstance(props.get("link"), str) else "",
+            "countries": [str(c) for c in countries if c],
+            "summary": _lead_text(props.get("summary")),
+            "body": _lead_text(props.get("body")),
+        }
+    return None
+
+
 def parse_stage_answer(text: str) -> tuple[Any, str]:
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.IGNORECASE)
     starts = [i for i in (cleaned.find("{"), cleaned.find("[")) if i >= 0]
@@ -496,6 +545,28 @@ def _handle_prepare_synthesis(runs_root: Path, payload: dict[str, Any]) -> tuple
 
 
 CHALLENGE_RECORD_REL = re.compile(r"^synthesis/challenge/records/([A-Za-z0-9._-]+)/challenge-record\.json$")
+KJ_RECORD_REL = re.compile(r"^synthesis/key-judgements/records/[A-Za-z0-9._-]+/key-judgement-record\.json$")
+
+
+def _handle_prepare_stage(runs_root: Path, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    run_id = _valid_id(payload.get("runId"))
+    run_dir = runs_root / run_id if run_id else None
+    if payload.get("action") == "prepare-key-judgements":
+        rel_path = str(payload.get("challengeRecordPath") or "")
+        match = CHALLENGE_RECORD_REL.match(rel_path)
+        adjudication_rel = f"synthesis/adjudication/{match.group(1)}/performed-adjudication.json" if match else ""
+        if not (run_dir and match and Path(_fs_path(run_dir / rel_path)).is_file() and Path(_fs_path(run_dir / adjudication_rel)).is_file()):
+            return 400, {"ok": False, "error": "An adjudicated challenge record in this run is required."}
+        record = json.loads(Path(_fs_path(run_dir / rel_path)).read_text(encoding="utf-8"))
+        build_ref = str(record.get("buildRecord", {}).get("artifactRef", ""))
+        steps = [_run_npm_script("prepare:key-judgements", [build_ref, f"runs/{run_id}/{rel_path}", f"runs/{run_id}/{adjudication_rel}", MEMO_STANDARD_V1])]
+    else:
+        rel_path = str(payload.get("keyJudgementRecordPath") or "")
+        if not (run_dir and KJ_RECORD_REL.match(rel_path) and Path(_fs_path(run_dir / rel_path)).is_file()):
+            return 400, {"ok": False, "error": "A key-judgement record in this run is required."}
+        steps = _chain_after_stage(runs_root, run_id, "key-judgements", {"ok": True, "stdout": f"Output: runs/{run_id}/{rel_path}"})
+    succeeded = all(step["ok"] for step in steps)
+    return (200 if succeeded else 400), {"ok": succeeded, "runId": run_id, "steps": steps, "error": "" if succeeded else steps[-1]["stderr"]}
 
 
 def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
@@ -586,6 +657,8 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
         return _handle_ai_stage(runs_root, payload)
     if action == "prepare-synthesis":
         return _handle_prepare_synthesis(runs_root, payload)
+    if action in ("prepare-key-judgements", "prepare-memo-writer"):
+        return _handle_prepare_stage(runs_root, payload)
     if action == "record-adjudication":
         return _handle_adjudication(runs_root, payload)
     if action == "record-assurance-review":
@@ -944,6 +1017,14 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
                     self._send(404, "text/plain; charset=utf-8", "Relevance request not available")
                     return
                 self._send(200, "application/json; charset=utf-8", json.dumps({"prompt": build_relevance_prompt(request)}, ensure_ascii=False))
+                return
+            if parsed.path == "/api/lead":
+                target_dir, target_id = _resolve_target_run(requested_run)
+                lead = read_lead(target_dir, target_id, query.get("path", [""])[0], query.get("id", [""])[0])
+                if lead is None:
+                    self._send(404, "text/plain; charset=utf-8", "Lead not available")
+                    return
+                self._send(200, "application/json; charset=utf-8", json.dumps(lead, ensure_ascii=False))
                 return
             if parsed.path == "/api/artifact":
                 target_dir, _ = _resolve_target_run(requested_run)

@@ -18,9 +18,13 @@ class ModelTests(unittest.TestCase):
     def test_empty_run_shows_pending_stages_without_publication_claim(self):
         view = build_run_view("empty", [], [], [], "2026-10-26T00:00:00Z")
         self.assertEqual(len(view["panel1"]["stages"]), 6)
-        self.assertEqual(len(view["synthesis"]), 8)
+        self.assertEqual(len(view["synthesis"]), 7)
         self.assertTrue(all(stage["status"] == "pending" for stage in view["synthesis"]))
         self.assertFalse(any("publication" in item for item in view["waitingOn"]))
+        journey = view["journey"]
+        self.assertEqual(journey["phases"][0]["state"], "active")
+        self.assertEqual(journey["queue"][0]["target"], {"tab": "brief"})
+        self.assertIsNone(journey["memo"])
 
     def test_failure_counts_accepts_nested_arrays_and_rejects_invalid_values(self):
         self.assertEqual(
@@ -145,6 +149,21 @@ class ModelTests(unittest.TestCase):
         self.assertEqual({i["status"] for i in done["aiQueue"]}, {"recorded"})
         self.assertEqual(done["counts"]["awaitingAiStage"], 0)
 
+    def test_leads_are_grouped_by_tier_and_never_capped(self):
+        rel = "discoveries/dp-1/discovery-results.json"
+        cands = [{"providerItemId": f"n{i}", "title": f"News {i}", "sourceType": "news", "score": 20 - i % 7,
+                  "tier": 4, "tierLabel": "Other news or unrated source", "shortlisted": i < 50,
+                  "sourceUrl": f"https://example.org/{i}"} for i in range(60)]
+        cands.append({"providerItemId": "cr-1", "title": "Cyber Weekly", "sourceType": "analysis", "score": 3,
+                      "tier": 1, "tierLabel": "Control Risks analyst report", "shortlisted": False})
+        docs = [{"relPath": rel, "value": {"researchQuestionId": "rq", "candidates": cands}}]
+        view = build_run_view("r", [file_entry(rel)], docs, [], "t")
+        leads = view["journey"]["leads"]
+        self.assertEqual(len(leads), 61)
+        self.assertEqual((leads[0]["providerItemId"], leads[0]["tier"], leads[0]["shortlisted"]), ("cr-1", 1, False))
+        self.assertEqual(len(view["panel1"]["candidates"]), 61)
+        self.assertEqual(view["panel1"]["candidates"][0]["tier"], 1)
+
     def test_run_view_groups_synthesis_exceptions_and_waiting(self):
         files = [
             file_entry("memo-scopes/scope-01/v1/approved-memo-scope.json"),
@@ -166,11 +185,65 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(view["panel1"]["scope"]["id"], "scope-01")
         self.assertEqual(len(view["panel1"]["candidates"]), 1)
         self.assertEqual(view["synthesis"][0]["status"], "provisional")
-        self.assertEqual(view["report"]["profiles"][0]["id"], "rsm")
-        self.assertEqual(len(view["report"]["rsmPillars"]), 3)
+        self.assertNotIn("report", view)
+        self.assertEqual(view["journey"]["leads"][0]["providerItemId"], "item-1")
         self.assertEqual(view["counts"]["openExceptions"], 1)
         self.assertIn("exception queue: 1 open", view["waitingOn"])
         self.assertIn("publication gate: blocked (provisional or synthetic lineage)", view["waitingOn"])
+
+    def test_journey_follows_one_lead_and_ignores_a_duplicate_retrieval(self):
+        docs = {
+            "discoveries/dp-1/discovery-results.json": {"researchQuestionId": "rq-1", "candidates": [
+                {"providerItemId": "lead-1", "title": "Grid attack", "score": 7, "rawArtifactRefs": ["runs/r/raw.json"]},
+                {"providerItemId": "lead-2", "title": "Other", "score": 3}]},
+            "source-retrievals/ret-a/source-retrieval-result.json": {"providerItemId": "lead-1", "outcome": "resolved", "attemptedAt": "2026-10-26T08:00:00Z",
+                                                                    "source": {"title": "Grid attack in full", "publisherHost": "example.org"}},
+            "source-retrievals/ret-b/source-retrieval-result.json": {"providerItemId": "lead-1", "outcome": "resolved", "attemptedAt": "2026-10-26T09:00:00Z",
+                                                                    "source": {"title": "Grid attack in full", "publisherHost": "example.org"}},
+            "sources/ret-a/doc/question-relevance/req-a/question-relevance-request.json": {"sourceItemId": "ret-a", "preparedAt": "t"},
+            "sources/ret-a/doc/question-relevance/req-a/assessments/a1/question-relevance-assessment.json": {"verdict": "relevant"},
+            "sources/ret-b/doc/question-relevance/req-b/question-relevance-request.json": {"sourceItemId": "ret-b", "preparedAt": "t"},
+            "source-reintakes/cand-1/intake-result.json": {
+                "item": {"source": {"title": "Grid attack in full"}, "retrievalLineage": {"retrievalId": "ret-a", "sourceLeadProviderItemId": "lead-1"},
+                         "questionRelevance": {"assessmentArtifactRef": "runs/r/sources/ret-a/doc/question-relevance/req-a/assessments/a1/question-relevance-assessment.json",
+                                               "assessment": {"verdict": "relevant"}}},
+                "decision": {"approvalStatus": "pending_human_review"}},
+        }
+        view = build_run_view("r", [file_entry(p) for p in docs], [{"relPath": p, "value": v} for p, v in docs.items()], [], "t")
+        journey = view["journey"]
+        self.assertEqual(len(journey["sources"]), 1)
+        row = journey["sources"][0]
+        self.assertEqual((row["id"], row["duplicates"], row["state"]), ("lead-1", 1, "action"))
+        self.assertEqual(row["current"]["key"], "admit")
+        self.assertEqual([s["state"] for s in row["steps"]], ["done", "done", "done", "you", "todo", "todo", "todo"])
+        self.assertEqual(journey["queue"][0]["title"], "Decide whether to admit as evidence")
+        self.assertEqual(sum(1 for q in journey["queue"] if q["phase"] == "evidence"), 1)
+        self.assertEqual([lead["rowId"] for lead in journey["leads"]], ["lead-1", ""])
+
+    def test_journey_marks_memo_out_of_date_when_a_newer_round_exists(self):
+        def build(index, at):
+            return {"recordedAt": at, "synthesis": {"sourceNoteIds": ["n1"], "claims": [{"id": f"c{index}", "statement": "S", "supportingSourceNoteIds": ["n1"]}]}}
+        docs = {
+            "synthesis/records/b1/synthesis-build-record.json": build(1, "2026-10-26T10:00:00Z"),
+            "synthesis/records/b2/synthesis-build-record.json": build(2, "2026-10-26T12:00:00Z"),
+            "synthesis/challenge/requests/c2/challenge-request.json": {"preparedAt": "2026-10-26T12:01:00Z",
+                                                                      "buildRecord": {"artifactRef": "runs/r/synthesis/records/b2/synthesis-build-record.json"}},
+            "memo/m1/memo.json": {"createdAt": "2026-10-26T11:00:00Z", "reviewStatus": "reviewed", "publicationBlockers": ["PROVISIONAL_MEMO_STANDARD"],
+                                  "lineage": {"buildRecord": {"artifactRef": "runs/r/synthesis/records/b1/synthesis-build-record.json"}},
+                                  "keyJudgments": [{"statement": {"text": "KJ", "claimIds": ["c1"]}, "confidence": {"level": "low"}}]},
+        }
+        view = build_run_view("r", [file_entry(p) for p in docs], [{"relPath": p, "value": v} for p, v in docs.items()], [], "t")
+        journey = view["journey"]
+        self.assertEqual([r["current"] for r in journey["rounds"]], [False, True])
+        self.assertEqual([s["state"] for s in journey["rounds"][1]["steps"]], ["done", "ai", "todo", "todo", "todo"])
+        memo = journey["memo"]
+        self.assertEqual((memo["roundIndex"], memo["isCurrent"]), (1, False))
+        self.assertEqual(memo["blockers"][0]["label"], "Memo standard still provisional")
+        self.assertEqual(memo["keyJudgments"][0]["claimIds"], ["c1"])
+        self.assertEqual(journey["queue"][0]["title"], "Run the AI Challenge")
+        self.assertEqual(next(p for p in journey["phases"] if p["key"] == "memo")["state"], "active")
+        self.assertEqual(view["synthesis"][4]["name"], "memo")
+        self.assertNotEqual(view["synthesis"][4]["status"], "pending")
 
 
 if __name__ == "__main__":

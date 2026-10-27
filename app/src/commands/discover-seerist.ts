@@ -9,6 +9,9 @@ import {
   type CollectedSeeristPage
 } from "../modules/discovery/seerist-discovery.js";
 import { renderSeeristDiscoverySummary } from "../modules/reporting/seerist-discovery-summary.js";
+import { readSourceTierPolicy } from "../modules/discovery/source-tiers.js";
+
+const tierPolicyUrl = new URL("../modules/discovery/policies/source-tiers-v1.json", import.meta.url);
 
 const usage =
   "Usage: npm run discover:seerist -- <discovery-plan.json> <approved-research-question.json>";
@@ -76,6 +79,11 @@ const main = async (): Promise<void> => {
     const apiKey = process.env.SEERIST_API_KEY;
     if (!apiKey) {
       throw new Error("SEERIST_API_KEY is not configured.");
+    }
+    const tierPolicyBytes = await readFile(tierPolicyUrl);
+    const tierPolicy = readSourceTierPolicy(JSON.parse(tierPolicyBytes.toString("utf8")));
+    if (!tierPolicy.ok) {
+      throw new Error(`Source tier policy rejected: ${tierPolicy.error}`);
     }
 
     const discoveryParent = resolve(runRoot, runId, "discoveries");
@@ -188,6 +196,7 @@ const main = async (): Promise<void> => {
     const candidates = rankSeeristDiscoveryCandidates(
       prepared.value.plan,
       pages,
+      tierPolicy.value,
       paginationAssessments
     );
     const completedAt = new Date().toISOString();
@@ -205,6 +214,11 @@ const main = async (): Promise<void> => {
           apiCalls,
           pages: pageManifests,
           paginationAssessments,
+          tierPolicy: {
+            id: tierPolicy.value.id,
+            version: tierPolicy.value.version,
+            artifactSha256: sha256(tierPolicyBytes)
+          },
           candidates
         },
         null,
@@ -234,6 +248,7 @@ const main = async (): Promise<void> => {
         status: "completed",
         apiCalls,
         candidateCount: candidates.length,
+        shortlistedCount: candidates.filter((candidate) => candidate.shortlisted).length,
         artifactRef: artifactRef(resultsPath)
       })}\n`,
       "utf8"
@@ -243,6 +258,8 @@ const main = async (): Promise<void> => {
     console.log(`Plan: ${planId}`);
     console.log(`API calls: ${apiCalls}`);
     console.log(`Candidates: ${candidates.length}`);
+    console.log(`Shortlisted: ${candidates.filter((candidate) => candidate.shortlisted).length}`);
+    console.log(`Control Risks analysis: ${candidates.filter((candidate) => candidate.tier === 1).length}`);
     console.log(`Output: ${artifactRef(resultsPath)}`);
     console.log(`Review: ${artifactRef(summaryPath)}`);
   } catch (error) {
