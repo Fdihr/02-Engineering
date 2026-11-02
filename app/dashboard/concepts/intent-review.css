@@ -10,6 +10,8 @@
 .rq-list .meta { margin:2px 0 0; }
 .rq-note { margin:12px 0 0; }
 .plate-pane { position:sticky; top:80px; }
+.next-step { margin:16px 0 0; }
+.next-step .btn-primary { display:inline-flex; align-items:center; text-decoration:none; }
 @media (max-width:1023px) {
   .plate-pane { position:static; order:-1; padding:0; border-top:0; }
 }

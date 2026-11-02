@@ -58,7 +58,7 @@
         <li>Writing</li>
         <li>Publication</li>
       </ol>
-      <a class="yours" href="/concepts/new-analysis.html">Edit the question</a>
+      <a class="yours" id="strip-yours" href="/concepts/new-analysis.html">Edit the question</a>
     </div>
 
     <div class="review">
@@ -104,6 +104,7 @@
     var esc = window.escapeHtml;
     var $ = function (id) { return document.getElementById(id); };
     var approved = false;
+    var collected = false;
 
     var scope = [
       { f: 'Purpose', v: 'Understand how sabotage by state-linked actors could affect energy and subsea infrastructure', o: 'stated' },
@@ -153,7 +154,8 @@
 
     function renderDecision() {
       if (approved) {
-        $('decision').innerHTML = '<div class="caution is-done">' + mark('done', 'Approved') + '<span>Research plan v1 approved by FDIHR. The question, scope and research questions are locked for this run; changes need a new version.</span></div>';
+        $('decision').innerHTML = '<div class="caution is-done">' + mark('done', 'Approved') + '<span>Research plan v1 approved by FDIHR. The question, scope and research questions are locked for this run; changes need a new version.</span></div>' +
+          (collected ? '<p class="next-step"><a class="btn-primary" href="/concepts/analysis.html">Open the analysis</a></p>' : '');
         return;
       }
       $('decision').innerHTML =
@@ -180,6 +182,20 @@
         '<li>Findings</li><li>Writing</li><li>Publication</li>';
       renderDecision(); renderScope(); renderRq();
       window.showToast('Research plan approved. Collection has started.');
+      $('strip-yours').textContent = 'Follow it in the analysis';
+      $('strip-yours').href = '/concepts/analysis.html';
+      var calls = 0;
+      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var timer = setInterval(function () {
+        calls = reduce ? 120 : Math.min(120, calls + 6);
+        $('strip-now').innerHTML = mark('running', 'Collecting') + '<span>Collecting, <span class="figures">' + calls + '</span> of <span class="figures">120</span> calls</span>';
+        if (calls < 120) return;
+        clearInterval(timer);
+        collected = true;
+        $('strip-now').innerHTML = '<span class="ai-mark">AI checking relevance</span><span><span class="figures">120</span> calls collected, <span class="figures">64</span> sources found</span>';
+        renderDecision();
+        window.showToast('Collection finished. 64 sources are being checked for relevance.');
+      }, 150);
     }
 
     document.addEventListener('click', function (e) {
