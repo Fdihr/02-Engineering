@@ -24,7 +24,7 @@ npm run reintake:source -- <source-retrieval-result.json> <question-relevance-as
 
 The first command verifies the retrieval, canonical document, and approved-question artifacts before creating a complete model-ready request. The second hashes the exact request and response, rechecks the source-document and question artifacts, validates every anchor, and persists the assessment plus controller-derived routing decision. The third accepts only a validated positive assessment, verifies its sibling decision and complete retrieval, source-document, request, response, and assessment lineage, then creates one non-overwritable pending candidate. Chat narrative and raw model prose cannot substitute for the typed artifacts or invoke evidence approval.
 
-This is explicitly not a production Copilot API integration. Provenance records `provider: "github-copilot-vscode"` and `model: "not-exposed-by-host"`; the assessment must state that limitation. When an approved Foundry deployment becomes available, a narrow live adapter replaces this manual transport while the request, assessment, anchor, and authority contracts remain unchanged.
+Manual paste-back records `provider: "github-copilot-vscode"` and `model: "not-exposed-by-host"`; that assessment must state the identity limitation. The dashboard additionally supports a local, tool-disabled Copilot SDK session using the saved Settings model. SDK responses use `question-relevance-copilot-sdk-response-v1` and record `provider: "github-copilot-sdk"` with the explicit session model. Both transports use the same request, assessment, anchor, positive-only reintake and human-admission boundaries.
 
 ## Eligibility
 

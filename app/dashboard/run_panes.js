@@ -89,6 +89,7 @@
     }
   };
   var GENERATED = ['in-irs', 'in-disc-queries', 'in-disc-terms', 'in-purpose', 'in-topic', 'in-rationale'];
+  var scopedRunId = '';
   function $(id) { return document.getElementById(id); }
   function isoDate(date) {
     var pad = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -117,7 +118,7 @@
     var value = $('in-run-id').value.trim();
     var hint = $('run-id-hint');
     var problem = !SAFE_ID.test(value) ? 'Use letters, digits, dots and dashes (start with a letter or digit).'
-      : existingRuns().indexOf(value) >= 0 ? 'An analysis with this ID already exists.' : '';
+      : existingRuns().indexOf(value) >= 0 && value !== scopedRunId ? 'An analysis with this ID already exists.' : '';
     hint.textContent = problem || 'Available.';
     hint.className = 'hint' + (problem ? ' fail' : '');
     $('in-run-id').classList.toggle('invalid', Boolean(problem));
@@ -153,6 +154,10 @@
   }
   function applyPreset(name) {
     var preset = PRESETS[name];
+    scopedRunId = '';
+    $('in-generated-question').value = '';
+    $('scope-confirm').checked = false;
+    $('draft-question-status').textContent = '';
     $('in-question').value = preset.question;
     $('in-geo').value = preset.geo;
     document.querySelectorAll('.vestas-lens').forEach(function (cb) { cb.checked = preset.lenses.indexOf(cb.value) >= 0; });
@@ -174,7 +179,8 @@
       to: $('in-to').value,
       purpose: $('in-purpose').value,
       threatTopic: $('in-topic').value,
-      question: $('in-question').value,
+      researchThesis: $('in-question').value,
+      question: $('in-generated-question').value,
       rationale: $('in-rationale').value,
       requirements: $('in-irs').value,
       minimumScore: Number($('in-disc-score').value || 4),
@@ -200,13 +206,7 @@
   function setIrs(list) { $('in-irs').value = list.join('\n'); state.dirty['in-irs'] = true; invalidateReview(); }
 
   function propose() {
-    var question = $('in-question');
-    if (!question.value.trim()) {
-      $('question-error').hidden = false;
-      question.setAttribute('aria-invalid', 'true');
-      question.focus();
-      return;
-    }
+    if (!$('in-question').value.trim()) return;
     if (!$('in-from').value || !$('in-to').value) setWindow(60);
     if (!$('in-run-id').value.trim()) suggestRunId('analysis');
     syncDerivations();
@@ -215,22 +215,56 @@
     state.draft = true;
     C.navigate('intent');
   }
+
+  function reviewIntent() {
+    var p = intentPayload(true);
+    var irs = lines(p.requirements);
+    var problems = [];
+    if (!C.analyst()) problems.push('Enter your analyst ID in the top bar.');
+    if (!p.researchThesis.trim()) problems.push('Write the research thesis.');
+    if (!p.question.trim()) problems.push('Write the question.');
+    if (!validateRunId()) problems.push('Fix the analysis ID.');
+    if (!p.from || !p.to || p.from > p.to) problems.push('Set a valid window.');
+    if (!irs.length || irs.length > 24 || irs.some(function (l) { return l.length > 400; })) problems.push('Give 1–24 requirements of at most 400 characters.');
+    if (!p.purpose.trim() || !p.threatTopic.trim() || !p.rationale.trim()) problems.push('Complete the scope wording.');
+    $('intent-problem').textContent = problems.join(' ');
+    if (problems.length) return;
+    var summary = document.createDocumentFragment();
+    add(summary, C.kv([
+      ['Analysis ID', p.runId], ['Approver', C.analyst()], ['Research thesis', p.researchThesis], ['Question', p.question], ['Why it matters', p.rationale],
+      ['Purpose', p.purpose], ['Threat topic', p.threatTopic], ['Audience', p.audience], ['Geographies', p.geographies],
+      ['Window', p.from + ' → ' + p.to], ['Deliverable', $('in-output').selectedOptions[0].textContent]
+    ]));
+    add(summary, el('div', 'form-label', 'Information requirements (' + irs.length + ')'));
+    var ol = el('ol', 'approval-list');
+    irs.forEach(function (ir) { ol.appendChild(el('li', null, ir)); });
+    summary.appendChild(ol);
+    add(summary, el('div', 'form-label', 'Seerist collection if you choose “Approve and collect leads”'));
+    add(summary, C.kv([['Searches', lines(p.queries).join(' · ')], ['Ranking terms', p.rankingTerms], ['Minimum score', String(p.minimumScore)]]));
+    C.replace($('approval-summary'), summary);
+    $('approve-confirm-text').textContent = 'I, ' + C.analyst() + ', approve this scope, question and ' + plural(irs.length, 'requirement') + '.';
+    $('approval-review').hidden = false;
+    $('approve-confirm').checked = false;
+    syncApproveButtons();
+    $('approval-review').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
   function approve(runDiscovery) {
     var payload = intentPayload(runDiscovery);
     C.postAction(payload, runDiscovery ? 'Approving and collecting leads' : 'Approving the analysis').then(function (data) {
       if (!data || !data.ok) return;
-      state.draft = false;
+      state.newMode = false;
       state.dirty = {};
       invalidateReview();
       $('in-question').value = '';
-      $('in-run-id').value = '';
+      $('in-generated-question').value = '';
+      scopedRunId = '';
       C.switchRun(data.runId || payload.runId);
-      C.go({ tab: 'sources', focus: 'leads' });
+      C.go(runDiscovery ? { tab: 'sources', focus: 'leads' } : { tab: 'brief' });
     });
   }
   C.startNew = function () {
+    if (!$('in-question').value.trim()) applyPreset('europe');
     if (!$('in-to').value) setWindow(60);
-    if (!$('in-question').value.trim()) { state.dirty = {}; syncDerivations(); }
     if (!$('in-run-id').value.trim()) suggestRunId('analysis');
     validateRunId();
     $('in-question').focus();
@@ -239,17 +273,47 @@
     setWindow(60);
     document.querySelectorAll('[data-preset]').forEach(function (b) { b.addEventListener('click', function () { applyPreset(b.getAttribute('data-preset')); }); });
     document.querySelectorAll('[data-window-days]').forEach(function (b) { b.addEventListener('click', function () { setWindow(Number(b.getAttribute('data-window-days'))); invalidateReview(); }); });
-    $('in-question').addEventListener('input', function () {
-      $('question-error').hidden = true;
-      $('in-question').removeAttribute('aria-invalid');
-      syncDerivations();
-    });
+    GENERATED.forEach(function (id) { $(id).addEventListener('input', function () { state.dirty[id] = true; }); });
+    $('in-question').addEventListener('input', syncDerivations);
     $('in-geo').addEventListener('input', syncDerivations);
     document.querySelectorAll('.vestas-lens').forEach(function (cb) { cb.addEventListener('change', syncDerivations); });
     $('in-run-id').addEventListener('input', validateRunId);
-    $('brief-new').addEventListener('input', invalidateReview);
-    $('brief-new').addEventListener('change', invalidateReview);
-    $('brief-new').addEventListener('submit', function (e) { e.preventDefault(); propose(); });
+    $('brief-new').addEventListener('input', function (e) { if (e.target.id !== 'approve-confirm') invalidateReview(); });
+    $('brief-new').addEventListener('change', function (e) { if (e.target.id !== 'approve-confirm') invalidateReview(); });
+    $('btn-review-intent').addEventListener('click', reviewIntent);
+    $('btn-draft-question').classList.add('act');
+    $('btn-draft-question').setAttribute('data-needs-analyst', '1');
+    $('btn-draft-question').addEventListener('click', function () {
+      var payload = intentPayload(false);
+      if (!validateRunId()) return;
+      if (!$('scope-confirm').checked) {
+        $('draft-question-status').textContent = 'Confirm the thesis and scope before drafting.';
+        $('scope-confirm').focus();
+        return;
+      }
+      payload.action = 'draft-research-question';
+      payload.scopeConfirmed = true;
+      // Remember the in-progress run even if generation fails after scope approval.
+      scopedRunId = payload.runId;
+      $('draft-question-status').textContent = 'Approving scope, then drafting with local Copilot...';
+      C.postAction(payload, 'Drafting the research question').then(function (data) {
+        if (!data || !data.ok) {
+          $('draft-question-status').textContent = data && data.error || 'Drafting failed. Check Settings and retry.';
+          return;
+        }
+        $('in-generated-question').value = data.draft.question;
+        $('in-rationale').value = data.draft.rationale;
+        state.dirty['in-rationale'] = true;
+        invalidateReview();
+        $('draft-question-status').textContent = 'Drafted with ' + data.model + '. Review and edit the question before approval.';
+        $('in-generated-question').focus();
+      });
+    });
+    $('btn-edit-intent').addEventListener('click', function () { invalidateReview(); $('in-question').focus(); });
+    $('approve-confirm').addEventListener('change', syncApproveButtons);
+    $('btn-approve-collect').addEventListener('click', function () { approve(true); });
+    $('btn-approve-only').addEventListener('click', function () { approve(false); });
+    $('btn-cancel-new').addEventListener('click', function () { C.navigate('intent'); });
   };
 
   /* ---------- Intent review: draft plan before approval ---------- */
@@ -519,6 +583,35 @@
     var s = b.scope;
     var layout = el('div', 'review');
     var main = el('div', 'intent-main');
+
+    var q = el('section');
+    add(q, C.sectionHead('Research question', 'h2', b.question ? C.artifactLink(b.question.relPath, 'Approved record', true) : null));
+    if (b.question) {
+      add(q, el('p', 'prose', b.question.question), el('p', 'meta prose', b.question.rationale), el('div', 'meta', 'Approved by ' + (b.question.approvedBy || 'analyst')));
+    } else {
+      add(q, el('p', 'meta', 'Scope approved. Review or draft the question before collection.'));
+      var resume = C.linkButton('Continue question drafting', function () {
+        scopedRunId = state.runId;
+        var values = {
+          'in-run-id': state.runId, 'in-question': s.researchThesis, 'in-purpose': s.purpose,
+          'in-topic': s.threatTopic, 'in-geo': s.geographies.join(', '), 'in-audience': s.audience,
+          'in-output': s.requestedOutput, 'in-from': s.from.slice(0, 10), 'in-to': s.to.slice(0, 10),
+          'in-generated-question': b.draftQuestion ? b.draftQuestion.question : '',
+          'in-rationale': b.draftQuestion ? b.draftQuestion.rationale : ''
+        };
+        Object.keys(values).forEach(function (id) { $(id).value = values[id] || ''; });
+        ['in-purpose', 'in-topic', 'in-rationale'].forEach(function (id) { state.dirty[id] = true; });
+        syncDerivations();
+        $('scope-confirm').checked = false;
+        state.newMode = true;
+        invalidateReview();
+        C.render(true);
+        $('in-generated-question').focus();
+      });
+      add(q, resume);
+    }
+    main.appendChild(q);
+    add(main, C.kv([['Research thesis', s.researchThesis]]));
 
     var scope = el('section');
     add(scope, C.sectionHead('Approved scope', 'h3', C.artifactLink(s.relPath, 'Approved record', true)));

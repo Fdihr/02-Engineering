@@ -20,7 +20,11 @@
     homeSel: '',
     leadFilter: 'pending',
     recent: [],
-    dirty: {}
+    dirty: {},
+    copilotModel: null,
+    catalogLoaded: false,
+    modelLoading: false,
+    settingsLoaded: false
   };
   var pollMs = Math.max(1000, Number(body.getAttribute('data-poll-ms')) || 2000);
   var TABS = ['now', 'brief', 'sources', 'synthesis', 'memo', 'audit', 'settings'];
@@ -56,7 +60,7 @@
     return mark;
   }
   function actorMark(actor) {
-    var labels = { you: 'You decide', ai: 'Paste AI answer', system: 'Automatic' };
+    var labels = { you: 'You decide', ai: 'Copilot', system: 'Automatic' };
     return el('span', 'actor ' + actor, labels[actor] || actor);
   }
   var STEP_MARK = { done: 'reviewed', you: 'in-progress', ai: 'in-progress', system: 'in-progress', failed: 'failed', closed: 'pending', skipped: 'pending', todo: 'pending', provisional: 'provisional', ready: 'pending' };
@@ -194,6 +198,9 @@
     'record-assurance-review': 'Recording your source review',
     'record-adjudication': 'Recording your adjudication',
     'record-ai-stage': 'Recording the AI answer',
+    'run-ai-stage': 'Running local Copilot',
+    'draft-research-question': 'Approving scope and drafting the research question',
+    'save-copilot-settings': 'Saving the Copilot model',
     'prepare-synthesis': 'Preparing the synthesis Build',
     'prepare-key-judgements': 'Preparing the key-judgement selection',
     'prepare-memo-writer': 'Preparing the memo writer',
@@ -218,7 +225,7 @@
       'discover:seerist': ['Seerist leads collected', (f['Candidates'] || '0') + ' ranked leads from ' + (f['API calls'] || '0') + ' API calls'],
       'intake:seerist': [reused ? 'Lead already classified' : 'Lead classified', reused ? 'Reused the existing record' : humanise(f['Role']) + ' → ' + humanise(f['Route'])],
       'canonicalize:source': ['Article text prepared', f['Segments'] ? f['Segments'] + ' anchored text segments' : ''],
-      'prepare:question-relevance': ['Relevance check prepared', 'Next: paste the AI relevance answer'],
+      'prepare:question-relevance': ['Relevance check prepared', 'Next: run Copilot relevance'],
       'review:evidence': ['Admission decision recorded', humanise(f['Decision']) + (f['Reviewer'] ? ' by ' + f['Reviewer'] : '')],
       'check:ai-answer': ['AI answer checked', f['Quotes'] ? 'All ' + f['Quotes'] + ' quotes matched the source exactly' : ''],
       'record:question-relevance': ['AI relevance check recorded', f['Verdict'] ? 'Verdict: ' + humanise(f['Verdict']) : ''],
@@ -226,16 +233,16 @@
       'assemble:assurance': ['Source note assembled', (f['In-scope observations'] ? f['In-scope observations'] + ' in-scope observations' : '') + (f['Gaps'] ? ' · ' + f['Gaps'] + ' gaps' : '')],
       'measure:assurance': ['Assurance measured', 'Support failure rate ' + (f['Support failure rate'] || 'n/a')],
       'adjudication:record': ['Adjudication recorded', (f['Accepted'] || '0') + ' accepted · ' + (f['Contested'] || '0') + ' contested · ' + (f['Rejected'] || '0') + ' rejected'],
-      'prepare:key-judgements': ['Key-judgement selection prepared', 'Next: paste the AI selection'],
-      'prepare:assurance-extract': ['Extraction prepared', 'Next: paste the AI extraction'],
+      'prepare:key-judgements': ['Key-judgement selection prepared', 'Next: run Copilot selection'],
+      'prepare:assurance-extract': ['Extraction prepared', 'Next: run Copilot extraction'],
       'record:assurance-extract': ['AI extraction recorded', (f['Observations'] ? f['Observations'] + ' observations' : humanise(f['Status']))],
       'prepare:assurance-review': ['Review package prepared', f['Observations'] ? f['Observations'] + ' observations for your review' : ''],
-      'prepare:synthesis-build': ['Synthesis Build prepared', (f['Source notes'] ? f['Source notes'] + ' source notes · ' : '') + 'Next: paste the AI Build'],
+      'prepare:synthesis-build': ['Synthesis Build prepared', (f['Source notes'] ? f['Source notes'] + ' source notes · ' : '') + 'Next: run Copilot Build'],
       'record:synthesis-build': ['AI Build recorded', f['Claims'] ? f['Claims'] + ' claims' : ''],
-      'prepare:synthesis-challenge': ['Challenge prepared', 'Next: paste the AI Challenge'],
+      'prepare:synthesis-challenge': ['Challenge prepared', 'Next: run Copilot Challenge'],
       'record:synthesis-challenge': ['AI Challenge recorded', (f['Challenges raised'] ? f['Challenges raised'] + ' challenges raised' : '') + ' · Next: your adjudication'],
       'record:key-judgements': ['AI key judgements recorded', (f['Selected'] || '0') + ' selected · ' + (f['Omitted'] || '0') + ' omitted'],
-      'prepare:memo-writer': ['Memo writer prepared', 'Next: paste the AI memo'],
+      'prepare:memo-writer': ['Memo writer prepared', 'Next: run Copilot memo writing'],
       'record:memo-writer': ['Memo committed', (f['Key judgments'] ? f['Key judgments'] + ' key judgements' : '') + (f['Publication'] ? ' · publication ' + f['Publication'] : '')],
       'run:next': ['Next step checked', '']
     };
@@ -320,7 +327,7 @@
     });
   }
 
-  /* ---------- AI task (copy prompt → paste answer → record) ---------- */
+  /* ---------- AI task ---------- */
   var STAGE_INFO = {
     relevance: ['AI relevance check', 'The AI judges whether this article helps answer the approved question and quotes the passages that support its verdict. Every quote is checked against the article text.'],
     extract: ['AI extraction', 'The AI extracts dated, attributed observations from the admitted article and maps them to the information requirements. Every quote must match the article.'],
@@ -358,6 +365,14 @@
     var path = item.requestPath;
     var wrap = el('div');
     add(wrap, el('p', 'meta prose', info[1]));
+    add(wrap, el('p', 'meta', state.copilotModel ? 'Model: ' + state.copilotModel + '. Fresh session, no tools. The answer is validated before recording.' : 'Choose a model in Settings before running Copilot.'));
+    var autoRow = el('div', 'btn-row');
+    add(autoRow, actButton('Run with Copilot', 'btn-primary', function () {
+      postAction({ action: 'run-ai-stage', runId: state.runId, requestPath: path, reviewerId: analyst() }, info[0] + ' with Copilot');
+    }, true, !state.copilotModel), linkButton('Model settings', function () { selectTab('settings', true); }));
+    wrap.appendChild(autoRow);
+    var manual = el('details', 'drawer');
+    manual.appendChild(el('summary', null, 'Manual copy/paste fallback'));
     var steps = el('ol', 'ai-task');
 
     var s1 = el('li', state.promptAt[path] ? 'done' : '');
@@ -429,7 +444,8 @@
     add(row, record, needsAnalyst && !analyst() ? el('span', 'meta', 'Enter your analyst ID in the top bar first.') : null, problem);
     add(s3, freshLabel, row);
     steps.appendChild(s3);
-    wrap.appendChild(steps);
+    manual.appendChild(steps);
+    wrap.appendChild(manual);
     return wrap;
   }
 
@@ -461,7 +477,12 @@
     document.getElementById('nav-home').setAttribute('aria-current', route === 'home' ? 'page' : 'false');
     document.getElementById('nav-audit').setAttribute('aria-current', route === 'audit' ? 'page' : 'false');
     document.getElementById('nav-settings').setAttribute('aria-current', route === 'settings' ? 'page' : 'false');
+    document.getElementById('nav-new').setAttribute('aria-current', route === 'new' ? 'page' : 'false');
     if (route === 'new' && previous !== 'new' && window.CTI.startNew) window.CTI.startNew();
+    if (route === 'settings' && !state.catalogLoaded && !state.modelLoading) {
+      if (state.settingsLoaded) loadModels();
+      else loadSavedModel().then(loadModels);
+    }
     render(true);
     var target = state.pendingScroll;
     state.pendingScroll = null;
@@ -779,6 +800,58 @@
   /* Brief, Sources, Synthesis, Memo and Audit register themselves from run_panes.js. */
   var panes = {};
 
+  function settingsMessage(text, failed) {
+    var status = document.getElementById('copilot-setting-status');
+    status.textContent = text;
+    status.className = 'meta' + (failed ? ' fail' : '');
+  }
+  function loadSavedModel() {
+    return fetch('/api/copilot-settings').then(function (res) { return res.json(); }).then(function (data) {
+      if (data.error) throw new Error(data.error);
+      state.copilotModel = data.settings.model;
+      state.settingsLoaded = true;
+      document.getElementById('copilot-saved-model').textContent = state.copilotModel ? 'Saved for all AI stages: ' + state.copilotModel : 'No model selected.';
+      render(true);
+    }).catch(function (error) { settingsMessage(error.message, true); });
+  }
+  function loadModels() {
+    if (state.modelLoading) return;
+    state.modelLoading = true;
+    var select = document.getElementById('copilot-model');
+    var refreshButton = document.getElementById('btn-refresh-models');
+    select.disabled = true;
+    refreshButton.disabled = true;
+    document.getElementById('btn-save-model').disabled = true;
+    settingsMessage('Loading models from local Copilot...');
+    fetch('/api/copilot-models').then(function (res) { return res.json(); }).then(function (data) {
+      if (data.error) throw new Error(data.error);
+      clear(select);
+      var placeholder = el('option', null, 'Choose a model');
+      placeholder.value = '';
+      select.appendChild(placeholder);
+      data.models.forEach(function (model) {
+        var option = el('option', null, model.name);
+        option.value = model.id;
+        select.appendChild(option);
+      });
+      var available = data.models.some(function (model) { return model.id === state.copilotModel; });
+      if (state.copilotModel && !available) {
+        var missing = el('option', null, state.copilotModel + ' (unavailable)');
+        missing.value = state.copilotModel;
+        missing.disabled = true;
+        select.appendChild(missing);
+      }
+      select.value = state.copilotModel || '';
+      select.disabled = !data.models.length;
+      state.catalogLoaded = true;
+      document.getElementById('btn-save-model').disabled = !select.value || !available;
+      settingsMessage(!data.models.length ? 'No models available for this account.' : state.copilotModel && !available ? 'The saved model is unavailable. Select another model and save it.' : 'Models loaded. Select a model and save.', !data.models.length || Boolean(state.copilotModel && !available));
+    }).catch(function (error) { settingsMessage(error.message, true); }).finally(function () {
+      state.modelLoading = false;
+      refreshButton.disabled = false;
+    });
+  }
+
   /* ---------- Refresh and render ---------- */
   function isTyping() {
     var active = document.activeElement;
@@ -913,16 +986,31 @@
       try { localStorage.setItem('app_theme', dark ? 'dark' : 'light'); } catch (e) { /* storage unavailable */ }
       syncTheme();
     });
+    document.getElementById('btn-refresh-models').addEventListener('click', loadModels);
+    document.getElementById('copilot-model').addEventListener('change', function (event) {
+      document.getElementById('btn-save-model').disabled = !event.target.value || state.busy;
+      settingsMessage('Selection not saved yet.');
+    });
+    document.getElementById('btn-save-model').addEventListener('click', function () {
+      var model = document.getElementById('copilot-model').value;
+      document.getElementById('btn-save-model').disabled = true;
+      settingsMessage('Checking model availability and saving...');
+      postAction({ action: 'save-copilot-settings', model: model }, 'Saving the model').then(function (data) {
+        if (!data || !data.ok) {
+          settingsMessage(data && data.error || 'Could not save the model. Refresh models and retry.', true);
+          document.getElementById('btn-save-model').disabled = false;
+          return;
+        }
+        state.copilotModel = data.settings.model;
+        document.getElementById('copilot-saved-model').textContent = 'Saved for all AI stages: ' + state.copilotModel;
+        settingsMessage('Saved. All automatic AI stages now use ' + state.copilotModel + '.');
+        render(true);
+      });
+    });
     syncTheme();
 
     if (window.CTI.initBrief) window.CTI.initBrief();
-    state.route = currentRoute();
-    state.newMode = state.route === 'new';
-    state.tab = ROUTES[state.route].pane;
-    TABS.forEach(function (name) { document.getElementById('pane-' + name).hidden = name !== state.tab; });
-    document.getElementById('nav-home').setAttribute('aria-current', state.route === 'home' ? 'page' : 'false');
-    document.getElementById('nav-audit').setAttribute('aria-current', state.route === 'audit' ? 'page' : 'false');
-    document.getElementById('nav-settings').setAttribute('aria-current', state.route === 'settings' ? 'page' : 'false');
+    applyRoute();
     refresh();
     window.setInterval(function () { if (!document.hidden && !state.busy) refresh(); }, pollMs);
   });

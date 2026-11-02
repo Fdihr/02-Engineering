@@ -567,7 +567,7 @@ test("Build request uses qualified aliases and response rejects derived fields",
       claims: [proposal(["n1-o01"])]
     }
   };
-  const recorded = recordSynthesisBuildResponse({
+  const recordInput = {
     request: request.value,
     requestArtifact: binding("build-request"),
     responseValue: responseBase,
@@ -578,7 +578,13 @@ test("Build request uses qualified aliases and response rejects derived fields",
     policy: prepared.policy,
     outletIdentityTable: prepared.outlets,
     recordedAt: "2026-09-03T09:32:00.000Z"
+  };
+  const recorded = recordSynthesisBuildResponse(recordInput);
+  const sdkRecorded = recordSynthesisBuildResponse({
+    ...recordInput, responseValue: { ...responseBase, provider: "github-copilot-sdk", model: "test-model-1" }
   });
+  assert.equal(sdkRecorded.ok, true);
+  if (sdkRecorded.ok) assert.equal(sdkRecorded.value.invocation.model, "test-model-1");
   assert.equal(recorded.ok, true);
   if (recorded.ok) {
     assert.equal(recorded.value.synthesis.claims[0]?.provisional, true);
@@ -791,7 +797,7 @@ test("Challenge packs all claims, hides Build rationale, and preselects IR overl
 
 test("all-none Challenge is valid and records zero yield without retry", async () => {
   const fixture = await challengeFixture();
-  const record = recordChallengeResponse({
+  const recordInput = {
     request: fixture.request,
     requestArtifact: binding("challenge-request"),
     responseValue: challengeResponse(fixture.request),
@@ -799,7 +805,14 @@ test("all-none Challenge is valid and records zero yield without retry", async (
     buildRecord: fixture.buildRecord,
     buildRecordArtifact: fixture.buildRecordArtifact,
     recordedAt: "2026-09-03T10:04:00.000Z"
+  };
+  const record = recordChallengeResponse(recordInput);
+  const sdkRecorded = recordChallengeResponse({
+    ...recordInput,
+    responseValue: { ...challengeResponse(fixture.request), provider: "github-copilot-sdk", model: "test-model-1" }
   });
+  assert.equal(sdkRecorded.ok, true);
+  if (sdkRecorded.ok) assert.equal(sdkRecorded.value.invocation.model, "test-model-1");
   assert.equal(record.ok, true);
   if (!record.ok) return;
   assert.equal(record.value.results.length, 12);

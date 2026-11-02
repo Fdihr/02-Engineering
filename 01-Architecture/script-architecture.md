@@ -118,7 +118,7 @@ Canonicalization changes addressing, not evidence content or quality. Every admi
 
 Initial native Seerist evidence candidates cannot enter evidence admission. They route through the provider-neutral canonical document and relevance assessment first. Historical retrieved-source artifacts and validators remain readable for existing runs; no `retrieve:source` or `reintake:source` command is active.
 
-Until an approved Azure AI Foundry deployment exists, GitHub Copilot in VS Code is a manual PoC transport between those two commands. The adapter records that its underlying model is not exposed. It has no filesystem or transition authority through the application, and the deterministic validators and artifact contract remain the future Foundry boundary.
+The dashboard can execute these prepared requests through the local GitHub Copilot SDK using the PC's existing sign-in and an explicitly saved model from the live catalog. `app/src/commands/local-copilot.ts` owns runtime/authentication/network side effects; sessions run in empty mode with no tools or permission grants. The dashboard persists raw output and session/model provenance, then delegates to the existing deterministic recorders. This transport also serves thesis-bound question drafting, extraction, Build, Challenge, key judgements and memo writing. It cannot grant human approvals. Manual VS Code paste-back remains a compatibility transport and honestly records that its underlying model is not exposed. Future approved transports can reuse the same request and authority boundaries.
 
 ## Compatibility evidence-admission flow
 

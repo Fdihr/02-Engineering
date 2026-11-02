@@ -246,6 +246,26 @@ class ServerTests(unittest.TestCase):
                 else:
                     os.environ[name] = previous[name]
 
+    def test_local_copilot_settings_endpoints_and_visible_auth_errors(self):
+        with patch("dashboard.server.load_settings", return_value={"model": "saved-model"}):
+            with urlopen(self.base + "/api/copilot-settings") as response:
+                self.assertEqual(json.loads(response.read())["settings"]["model"], "saved-model")
+        with patch("dashboard.server.available_models", return_value=[{"id": "test-model", "name": "Test"}]):
+            with urlopen(self.base + "/api/copilot-models") as response:
+                self.assertEqual(json.loads(response.read())["models"][0]["id"], "test-model")
+        from dashboard.copilot import CopilotError
+        with patch("dashboard.server.available_models", side_effect=CopilotError("Sign in required")):
+            with self.assertRaises(HTTPError) as failed:
+                urlopen(self.base + "/api/copilot-models")
+            self.assertEqual(failed.exception.code, 503)
+            self.assertEqual(json.loads(failed.exception.read())["error"], "Sign in required")
+        with patch("dashboard.server.save_model", return_value={"model": "test-model"}) as saver:
+            request = Request(self.base + "/api/action", data=b'{"action":"save-copilot-settings","model":"test-model"}',
+                              headers={"Content-Type": "application/json"})
+            with urlopen(request) as response:
+                self.assertEqual(json.loads(response.read())["settings"]["model"], "test-model")
+            saver.assert_called_once_with(self.run_dir.parent, "test-model")
+
     def test_intent_requires_identity_and_preserves_existing_run(self):
         with patch("dashboard.server._run_npm_script") as runner:
             status, result = _handle_analyst_action(self.run_dir.parent, self.run_dir,

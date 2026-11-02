@@ -300,7 +300,7 @@ test("record safely unwraps the response and attaches claim-owned fields", () =>
       }
     }
   };
-  const recorded = recordKeyJudgementResponse({
+  const recordInput = {
     request: request.value,
     requestArtifact: binding("key-judgement-request"),
     responseValue: response,
@@ -310,7 +310,13 @@ test("record safely unwraps the response and attaches claim-owned fields", () =>
     adjudication,
     policy,
     recordedAt: "2026-09-03T10:05:00.000Z"
+  };
+  const recorded = recordKeyJudgementResponse(recordInput);
+  const sdkRecorded = recordKeyJudgementResponse({
+    ...recordInput, responseValue: { ...response, provider: "github-copilot-sdk", model: "test-model-1" }
   });
+  assert.equal(sdkRecorded.ok, true);
+  if (sdkRecorded.ok) assert.equal(sdkRecorded.value.invocation.model, "test-model-1");
   assert.equal(recorded.ok, true);
   if (!recorded.ok) return;
   assert.equal(recorded.value.selection.selections.length, 2);
@@ -470,7 +476,7 @@ test("writer v2 consumes bounded selected judgements without model rewriting", a
     capturedBy: "TESTER",
     proposal: { statements: [] }
   };
-  const recorded = recordWriterResponse({
+  const recordInput = {
     request: writerRequest.value,
     requestArtifact: binding("writer-request-v2"),
     responseValue: response,
@@ -482,7 +488,13 @@ test("writer v2 consumes bounded selected judgements without model rewriting", a
     question,
     standard,
     recordedAt: "2026-09-03T10:08:00.000Z"
+  };
+  const recorded = recordWriterResponse(recordInput);
+  const sdkRecorded = recordWriterResponse({
+    ...recordInput, responseValue: { ...response, provider: "github-copilot-sdk", model: "test-model-1" }
   });
+  assert.equal(sdkRecorded.ok, true);
+  if (sdkRecorded.ok) assert.equal(sdkRecorded.value.invocation.model, "test-model-1");
   assert.equal(recorded.ok, true);
   if (!recorded.ok) return;
   assert.deepEqual(

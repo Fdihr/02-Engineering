@@ -1,4 +1,5 @@
 import { err, ok, type Result } from "../../core/result.js";
+import { readModelIdentity, type ModelIdentity } from "../../core/model-identity.js";
 import type { ArtifactBinding, NoteObservation, SourceNote } from "../assurance/types.js";
 import {
   boundedString,
@@ -132,8 +133,8 @@ export type ChallengeRecord = {
   revalidationAuthorisation?: ArtifactBinding;
   invocation: {
     id: string;
-    provider: typeof CHALLENGE_PROVIDER;
-    model: typeof CHALLENGE_MODEL;
+    provider: ModelIdentity["provider"];
+    model: string;
     startedAt: string;
     completedAt: string;
     freshSession: true;
@@ -613,8 +614,7 @@ export const recordChallengeResponse = (input: {
       "proposal"
     ]) ||
     input.responseValue.schemaVersion !== CHALLENGE_RESPONSE_SCHEMA_VERSION ||
-    input.responseValue.provider !== CHALLENGE_PROVIDER ||
-    input.responseValue.model !== CHALLENGE_MODEL
+    !readModelIdentity(input.responseValue)
   ) return err("CHALLENGE_REQUEST_MISMATCH");
   if (input.responseValue.freshSession !== true) return err("FRESH_SESSION_NOT_ATTESTED");
   const requestId = nonEmptyString(input.responseValue.requestId);
@@ -622,7 +622,8 @@ export const recordChallengeResponse = (input: {
   const startedAt = validTime(input.responseValue.startedAt);
   const completedAt = validTime(input.responseValue.completedAt);
   const capturedBy = nonEmptyString(input.responseValue.capturedBy);
-  if (!requestId || !invocationId || !startedAt || !completedAt || !capturedBy) {
+  const identity = readModelIdentity(input.responseValue);
+  if (!requestId || !invocationId || !startedAt || !completedAt || !capturedBy || !identity) {
     return err("INVALID_CHALLENGE_RESPONSE");
   }
   if (requestId !== input.request.id) return err("CHALLENGE_REQUEST_MISMATCH");
@@ -707,8 +708,7 @@ export const recordChallengeResponse = (input: {
     ...(revalidationAuthorisation ? { revalidationAuthorisation } : {}),
     invocation: {
       id: invocationId,
-      provider: CHALLENGE_PROVIDER,
-      model: CHALLENGE_MODEL,
+      ...identity,
       startedAt,
       completedAt,
       freshSession: true as const,

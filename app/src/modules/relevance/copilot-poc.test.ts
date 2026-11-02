@@ -121,3 +121,17 @@ test("rejects a response for another request", () => {
     { ok: false, error: "RELEVANCE_REQUEST_MISMATCH" }
   );
 });
+
+test("SDK relevance records the explicit model and still requires human admission", () => {
+  const result = assessCopilotPocResponse(
+    request.value, "runs/run-1/request.json", "d".repeat(64),
+    { ...response, schemaVersion: "question-relevance-copilot-sdk-response-v1", provider: "github-copilot-sdk", model: "test-model-1" },
+    "runs/run-1/response.json", "e".repeat(64)
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.assessment.modelInvocation.model, "test-model-1");
+    assert.equal(result.value.assessment.modelInvocation.provider, "github-copilot-sdk");
+    assert.equal(result.value.decision.approvalStatus, "pending_human_review");
+  }
+});

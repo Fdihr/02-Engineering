@@ -816,6 +816,7 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> d
         "brief": {
             "scope": scope,
             "question": approved_question,
+            "draftQuestion": next((q for q in reversed(panel1.get("questions", [])) if q.get("status") == "proposed"), None),
             "requirements": [
                 {"irId": irid, "text": text, "coverage": next((c["disposition"] for c in (current_round or {}).get("coverage", []) if c["irId"] == irid), "")}
                 for irid, text in requirement_text.items()

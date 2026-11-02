@@ -26,6 +26,7 @@
         </div>
         <nav class="topnav" aria-label="Workbench">
           <a href="#/home" id="nav-home">Home <span class="n" id="count-home"></span></a>
+          <a href="#/new" id="nav-new">New analysis</a>
           <a href="#/audit" id="nav-audit">Audit <span class="n" id="count-audit"></span></a>
           <a href="#/settings" id="nav-settings">Settings</a>
         </nav>
@@ -52,12 +53,14 @@
     <div class="tab-pane" id="pane-brief" hidden>
       <div id="brief-run"></div>
 
-      <form class="new-form" id="brief-new" hidden novalidate>
-        <div class="field">
-          <label for="in-question">Your question</label>
-          <p class="meta" id="question-hint">Ask it the way you would ask a colleague, or state the hypothesis to test.</p>
-          <textarea id="in-question" rows="4" required aria-describedby="question-hint question-error" placeholder="For example: how are state-linked actors targeting Nordic and Baltic energy infrastructure?"></textarea>
-          <div class="reason-error" id="question-error" hidden>Add your question first. The research plan is drafted from it.</div>
+      <div id="brief-new" hidden>
+        <div class="section-head"><h2>New analysis</h2><button class="btn-link" id="btn-cancel-new" type="button">Back to the current analysis</button></div>
+        <p class="meta prose">Approve the thesis and scope to draft a question with local Copilot. Review the question and requirements separately before collection.</p>
+
+        <div class="brief-step">
+          <div class="brief-step-title">1. Working thesis or intelligence question</div>
+          <p class="meta">State the hypothesis to test, or the question to answer.</p>
+          <textarea class="thesis-box" id="in-question" aria-label="Working thesis or intelligence question"></textarea>
           <div class="chip-row">
             <span class="meta">Start from:</span>
             <button class="chip-btn" type="button" data-preset="europe">Europe cyber and geopolitical</button>
@@ -117,30 +120,74 @@
           <span class="hint" id="run-id-hint"></span>
         </div>
 
-        <p class="caution">Anything you leave to the plan is drafted as an assumption. You check every assumption in the next step before anything is collected.</p>
-
-        <div class="submit-row">
-          <button class="btn-primary" id="btn-propose" type="submit">Propose research plan</button>
+        <div class="brief-step">
+          <div class="brief-step-title">4. Draft and review the research question</div>
+          <p class="meta">Copilot tests the approved thesis against the scope; it must not assume the thesis is true. Your model in Settings is used for every AI stage.</p>
+          <label class="check"><input type="checkbox" id="scope-confirm">I approve the thesis and scope above, including the purpose and topic below, for question drafting.</label>
+          <div class="btn-row">
+            <button class="btn-primary" id="btn-draft-question" type="button">Approve scope and draft with Copilot</button>
+            <span class="meta" id="draft-question-status" role="status"></span>
+          </div>
+          <div class="form-grid">
+            <div class="field field-wide"><label for="in-generated-question">Research question (review and edit)</label><textarea id="in-generated-question" rows="4" placeholder="Draft with Copilot, or write your own question."></textarea></div>
+            <div class="field field-wide"><label for="in-rationale">Question rationale (review and edit)</label><textarea id="in-rationale" rows="3"></textarea></div>
+          </div>
+          <p class="meta">The requirements and search suggestions below are lens-based templates, not Copilot output. Edit them to match the question.</p>
+          <div class="form-grid">
+            <div class="field field-wide"><label for="in-irs">Information requirements (one per line)</label><textarea id="in-irs" rows="6"></textarea></div>
+            <div class="field field-wide"><label for="in-disc-queries">Seerist searches (one per line, 2–3 words work best)</label><textarea id="in-disc-queries" rows="4"></textarea></div>
+            <div class="field field-wide"><label for="in-disc-terms">Ranking terms (comma-separated)</label><input id="in-disc-terms" type="text"></div>
+            <div class="field"><label for="in-disc-score">Minimum lead score</label><input id="in-disc-score" type="number" min="1" max="20" value="4"></div>
+          </div>
+          <details class="drawer">
+            <summary>Scope wording</summary>
+            <div class="drawer-body form-grid">
+              <div class="field field-wide"><label for="in-purpose">Purpose</label><input id="in-purpose" type="text"></div>
+              <div class="field field-wide"><label for="in-topic">Threat topic</label><input id="in-topic" type="text"></div>
+            </div>
+          </details>
+          <div class="btn-row">
+            <button class="btn-primary" id="btn-review-intent" type="button">Review before approval</button>
+            <span class="meta fail" id="intent-problem"></span>
+          </div>
         </div>
-      </form>
 
-      <div id="brief-draft" hidden></div>
-
-      <div id="plan-store" hidden>
-        <textarea id="in-irs" aria-label="Research questions"></textarea>
-        <textarea id="in-disc-queries" aria-label="Seerist searches"></textarea>
-        <input id="in-disc-terms" type="text" aria-label="Ranking terms">
-        <input id="in-disc-score" type="number" min="1" max="20" value="4" aria-label="Minimum lead score">
-        <input id="in-purpose" type="text" aria-label="Purpose">
-        <input id="in-topic" type="text" aria-label="Threat topic">
-        <textarea id="in-rationale" aria-label="Why this matters to Vestas"></textarea>
+        <section id="approval-review" hidden aria-labelledby="approval-title">
+          <div class="section-head"><h2 id="approval-title">5. You are approving</h2><button class="btn-link" id="btn-edit-intent" type="button">Edit</button></div>
+          <div id="approval-summary"></div>
+          <label class="check"><input type="checkbox" id="approve-confirm"> <span id="approve-confirm-text">I approve this scope, question and these requirements.</span></label>
+          <div class="btn-row">
+            <button class="btn-primary" id="btn-approve-collect" type="button" disabled>Approve and collect leads</button>
+            <button class="btn-secondary" id="btn-approve-only" type="button" disabled>Approve without collecting</button>
+          </div>
+        </section>
       </div>
+      <div id="brief-draft" hidden></div>
     </div>
+
     <div class="tab-pane" id="pane-sources" hidden></div>
     <div class="tab-pane" id="pane-synthesis" hidden></div>
     <div class="tab-pane" id="pane-memo" hidden></div>
     <div class="tab-pane" id="pane-audit" hidden></div>
-    <section class="tab-pane" id="pane-settings" hidden></section>
+    <div class="tab-pane" id="pane-settings" aria-label="Settings" hidden>
+      <section>
+        <div class="section-head"><h2>Local Copilot</h2></div>
+        <p class="meta prose">Runs on this PC through the GitHub Copilot SDK using your local sign-in. One model is used for question drafting, relevance, extraction, synthesis, challenge, key judgements and memo writing. Human approvals remain yours.</p>
+        <div class="form-grid">
+          <div class="field field-wide">
+            <label for="copilot-model">Model for all AI stages</label>
+            <select id="copilot-model" disabled aria-describedby="copilot-setting-status"><option value="">Refresh models to choose</option></select>
+            <span class="hint" id="copilot-saved-model">No model selected.</span>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn-primary" id="btn-save-model" type="button" disabled>Save model</button>
+          <button class="btn-secondary" id="btn-refresh-models" type="button">Refresh models</button>
+          <span class="meta" id="copilot-setting-status" role="status"></span>
+        </div>
+        <p class="meta prose">Only available models from your account are offered. An unavailable saved model is never silently replaced. If sign-in is required, sign in to GitHub Copilot CLI on this PC, then refresh.</p>
+      </section>
+    </div>
   </main>
 
   <aside class="activity" id="activity" hidden aria-live="polite"></aside>

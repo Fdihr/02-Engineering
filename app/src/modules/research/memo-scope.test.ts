@@ -7,6 +7,10 @@ const proposal = {
   runId: "research-run-001",
   version: 1,
   purpose: { value: "Assess operational continuity risk.", origin: "human" },
+  researchThesis: {
+    value: "Disruptions are more likely to arise from attacks on third-party operational dependencies.",
+    origin: "human"
+  },
   threatTopic: { value: "Cyber and hybrid threats", origin: "human" },
   audience: { value: "Strategic risk leadership", origin: "human" },
   geographies: { value: ["Northern Europe"], origin: "human" },
@@ -48,6 +52,14 @@ test("inferred values require an assumption reason", () => {
   );
 
   assert.deepEqual(result, { ok: false, error: "INVALID_MEMO_SCOPE" });
+});
+
+test("new scope proposals require an explicit research thesis", () => {
+  const { researchThesis: _researchThesis, ...withoutThesis } = proposal;
+  assert.deepEqual(
+    approveMemoScope(withoutThesis, "analyst-001", "2026-06-30T12:00:00.000Z"),
+    { ok: false, error: "INVALID_MEMO_SCOPE" }
+  );
 });
 
 test("approved scope validation enforces artifact lineage and chronology", () => {
