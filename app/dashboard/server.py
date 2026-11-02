@@ -8,6 +8,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime, timezone
@@ -17,6 +18,7 @@ from string import Template
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
+from . import settings
 from .model import RELEVANCE_REQUEST_PATH, ai_stage_for, build_run_view
 from .relevance_bridge import build_relevance_prompt, build_response, candidate_id_for, parse_model_answer
 from .scan import _fs_path, list_available_runs, read_artifact_text, resolve_inside_run, scan_run_directory
@@ -989,6 +991,13 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
             if parsed.path == "/api/runs":
                 self._send(200, "application/json; charset=utf-8", json.dumps({"runs": list_available_runs(runs_root), "defaultRunId": run_id}, ensure_ascii=False))
                 return
+            if parsed.path == "/api/settings":
+                self._send(200, "application/json; charset=utf-8", json.dumps({
+                    "keys": settings.key_status(os.environ),
+                    "runsFolder": settings.runs_folder_info(runs_root),
+                    "platform": sys.platform,
+                }, ensure_ascii=False))
+                return
             if parsed.path == "/api/run":
                 self._send(200, "application/json; charset=utf-8", json.dumps(self._current_view(requested_run), ensure_ascii=False))
                 return
@@ -1056,34 +1065,71 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
         def _method_not_allowed(self) -> None:
             self._send(405, "text/plain; charset=utf-8", "Read-only", {"Allow": "GET"})
 
-        def do_POST(self) -> None:
-            parsed = urlsplit(self.path)
-            if parsed.path != "/api/action":
-                self._method_not_allowed()
-                return
+        def _read_post_payload(self) -> dict[str, Any] | None:
+            """Apply the same-origin, content-type and size guards; sends the error and returns None on failure."""
             host = self.headers.get("Host", "")
             allowed_hosts = {f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}"}
             origin = self.headers.get("Origin")
             if host not in allowed_hosts or (origin is not None and origin != f"http://{host}"):
                 self._send(403, "application/json", json.dumps({"ok": False, "error": "Local same-origin actions only."}))
-                return
+                return None
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 self._send(415, "application/json", json.dumps({"ok": False, "error": "JSON content type required."}))
-                return
+                return None
             try:
                 length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
                 length = 0
             if length <= 0 or length > MAX_POST_BYTES:
                 self._send(400, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "Invalid request payload size."}))
-                return
+                return None
             try:
                 payload = json.loads(self.rfile.read(length).decode("utf-8"))
             except (UnicodeError, json.JSONDecodeError):
                 self._send(400, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "Invalid JSON body."}))
-                return
+                return None
             if not isinstance(payload, dict):
                 self._send(400, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "Expected JSON object."}))
+                return None
+            return payload
+
+        def _handle_settings_post(self, path: str, payload: dict[str, Any]) -> None:
+            name = payload.get("name")
+            if not isinstance(name, str) or name not in settings.KEY_NAMES:
+                self._send(400, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "Unknown key name."}))
+                return
+            if path == "/api/settings/key":
+                cleaned = settings.validate_key(payload.get("value"))
+                if cleaned is None:
+                    self._send(400, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "That does not look like a key. Paste the whole key without spaces."}))
+                    return
+                try:
+                    persisted = settings.save_key(name, cleaned)
+                except OSError:
+                    self._send(500, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "Could not store the key on this computer."}))
+                    return
+                body = {"ok": True, "keys": settings.key_status(os.environ), "persisted": persisted}
+            elif path == "/api/settings/key/remove":
+                try:
+                    persisted = settings.remove_key(name)
+                except OSError:
+                    self._send(500, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "Could not remove the key from this computer."}))
+                    return
+                body = {"ok": True, "keys": settings.key_status(os.environ), "persisted": persisted}
+            else:
+                body = {"ok": True, "result": settings.check_connection(name, os.environ)}
+            self._send(200, "application/json; charset=utf-8", json.dumps(body, ensure_ascii=False))
+
+        def do_POST(self) -> None:
+            path = urlsplit(self.path).path
+            if path not in ("/api/action", "/api/settings/key", "/api/settings/key/remove", "/api/settings/check"):
+                self._method_not_allowed()
+                return
+            payload = self._read_post_payload()
+            if payload is None:
+                return
+            if path != "/api/action":
+                self._handle_settings_post(path, payload)
                 return
             try:
                 status_code, response_obj = _handle_analyst_action(runs_root, run_dir, payload)

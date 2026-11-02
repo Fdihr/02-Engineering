@@ -602,3 +602,21 @@ kbd { display:inline-flex; align-items:center; justify-content:center; min-width
 .src-grid .src-name { padding-right:12px; text-wrap:pretty; }
 
 .next-auto p { margin:0 0 12px; color:var(--ink-2); font-size:var(--text-ui); text-wrap:pretty; }
+
+/* Settings */
+#pane-settings .mono { font-family:var(--font-mono); }
+#pane-settings > p.meta { max-width:44rem; margin:0 0 16px; }
+#pane-settings .settings-section { max-width:44rem; margin:0 0 40px; }
+#pane-settings .key-row { display:grid; grid-template-columns:12rem minmax(0, 1fr) auto; gap:8px 16px; align-items:start; padding:16px 0; border-top:1px solid var(--rule); }
+#pane-settings .key-row:last-child { border-bottom:1px solid var(--rule); }
+#pane-settings .key-name, #pane-settings .key-status { display:flex; flex-direction:column; gap:4px; min-width:0; }
+#pane-settings .key-name strong { font-size:var(--text-ui); font-weight:500; }
+#pane-settings .key-status .mark { white-space:normal; }
+#pane-settings .key-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:8px 14px; }
+#pane-settings .key-form { grid-column:1 / -1; max-width:32rem; padding-top:8px; }
+#pane-settings .key-form label { display:block; margin:0 0 4px; color:var(--ink); font-size:var(--text-ui); font-weight:500; }
+#pane-settings .key-input { display:flex; align-items:center; gap:12px; }
+#pane-settings .key-input input, #pane-settings .field input { flex:1 1 auto; min-width:0; height:36px; padding:0 12px; color:var(--ink); background:var(--canvas); border:1px solid var(--control); border-radius:var(--radius-control); font:inherit; font-size:var(--text-ui); }
+#pane-settings .key-form .reason-error { margin-top:6px; color:var(--fn-red); font-size:var(--text-meta); }
+#pane-settings .field { max-width:24rem; }
+#pane-settings .field .hint { display:block; margin:0 0 6px; }

@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import threading
 import unittest
@@ -8,6 +9,7 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from dashboard import settings
 from dashboard.server import create_server, parse_stage_answer, read_lead, _handle_analyst_action
 
 
@@ -84,6 +86,49 @@ class ServerTests(unittest.TestCase):
         with self.assertRaises(HTTPError) as unknown:
             urlopen(request)
         self.assertEqual(unknown.exception.code, 400)
+
+    def test_settings_never_return_full_key_and_guard_posts(self):
+        key = "TESTKEY-abcdefgh1234"
+        previous = os.environ.get("SEERIST_API_KEY")
+        os.environ["SEERIST_API_KEY"] = key
+        try:
+            with urlopen(self.base + "/api/settings") as response:
+                body = response.read().decode("utf-8")
+            self.assertNotIn(key, body)
+            self.assertIn("1234", body)
+            data = json.loads(body)
+            self.assertIn("runsFolder", data)
+            with patch.object(settings, "_persist_user_env", lambda *a, **k: True):
+                request = Request(self.base + "/api/settings/key", data=json.dumps({"name": "SEERIST_API_KEY", "value": key}).encode(),
+                                  headers={"Content-Type": "application/json", "Origin": "https://external.example"})
+                with self.assertRaises(HTTPError) as denied:
+                    urlopen(request)
+                self.assertEqual(denied.exception.code, 403)
+                request = Request(self.base + "/api/settings/key", data=json.dumps({"name": "PATH", "value": key}).encode(),
+                                  headers={"Content-Type": "application/json"})
+                with self.assertRaises(HTTPError) as unknown:
+                    urlopen(request)
+                self.assertEqual(unknown.exception.code, 400)
+                request = Request(self.base + "/api/settings/key", data=json.dumps({"name": "SEERIST_API_KEY", "value": "has space"}).encode(),
+                                  headers={"Content-Type": "application/json"})
+                with self.assertRaises(HTTPError) as invalid:
+                    urlopen(request)
+                self.assertEqual(invalid.exception.code, 400)
+                request = Request(self.base + "/api/settings/key", data=json.dumps({"name": "SEERIST_API_KEY", "value": "NEWKEY-abcdefgh5678"}).encode(),
+                                  headers={"Content-Type": "application/json"})
+                with urlopen(request) as response:
+                    saved = response.read().decode("utf-8")
+                self.assertNotIn("NEWKEY-abcdefgh5678", saved)
+                self.assertIn("5678", saved)
+                request = Request(self.base + "/api/settings/key/remove", data=b'{"name":"SEERIST_API_KEY"}',
+                                  headers={"Content-Type": "application/json"})
+                with urlopen(request) as response:
+                    self.assertFalse(json.loads(response.read())["keys"][0]["set"])
+        finally:
+            if previous is None:
+                os.environ.pop("SEERIST_API_KEY", None)
+            else:
+                os.environ["SEERIST_API_KEY"] = previous
 
     def test_intent_requires_identity_and_preserves_existing_run(self):
         with patch("dashboard.server._run_npm_script") as runner:

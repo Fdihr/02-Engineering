@@ -1968,4 +1968,227 @@
     frag.appendChild(layout);
     C.replace(host, frag);
   };
+
+  /* ================= Settings ================= */
+  var settingsState = { data: null, loading: false, error: '', openKey: '', formError: '', draft: '', reveal: false, checks: {}, checking: {}, saving: false, note: '' };
+  var ANALYST_KEY = 'cti_reviewer_id';
+
+  function settingsRequest(path, body) {
+    var opts = body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+    return fetch(path, opts).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok || data.ok === false) throw new Error(data.error || 'Something went wrong. Try again.');
+        return data;
+      });
+    });
+  }
+  function loadSettings() {
+    settingsState.loading = true;
+    settingsState.error = '';
+    renderSettings();
+    return settingsRequest('/api/settings').then(function (data) {
+      settingsState.data = data;
+    }).catch(function (err) {
+      settingsState.error = err.message || 'Could not load settings.';
+    }).then(function () {
+      settingsState.loading = false;
+      renderSettings();
+    });
+  }
+  function clockTime(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+  function closeKeyForm() {
+    settingsState.openKey = '';
+    settingsState.formError = '';
+    settingsState.draft = '';
+    settingsState.reveal = false;
+  }
+  function saveKey(key) {
+    settingsState.saving = true;
+    settingsState.formError = '';
+    renderSettings();
+    settingsRequest('/api/settings/key', { name: key.name, value: settingsState.draft }).then(function () {
+      closeKeyForm();
+      settingsState.checks[key.name] = null;
+      settingsState.note = key.label + ' key saved. New collection steps use it straight away.';
+      settingsState.saving = false;
+      return loadSettings();
+    }).catch(function (err) {
+      settingsState.saving = false;
+      settingsState.formError = err.message;
+      renderSettings();
+    });
+  }
+  function removeKey(key) {
+    if (!window.confirm('Remove the ' + key.label + ' key from this computer? Collection stops working until you add a key again. Analyses already collected stay as they are.')) return;
+    settingsRequest('/api/settings/key/remove', { name: key.name }).then(function () {
+      settingsState.checks[key.name] = null;
+      settingsState.note = key.label + ' key removed.';
+      return loadSettings();
+    }).catch(function (err) {
+      settingsState.note = err.message;
+      renderSettings();
+    });
+  }
+  function checkKey(key) {
+    settingsState.checking[key.name] = true;
+    renderSettings();
+    settingsRequest('/api/settings/check', { name: key.name }).then(function (data) {
+      settingsState.checks[key.name] = data.result;
+    }).catch(function (err) {
+      settingsState.checks[key.name] = { ok: false, message: err.message, checkedAt: new Date().toISOString() };
+    }).then(function () {
+      settingsState.checking[key.name] = false;
+      renderSettings();
+    });
+  }
+  function keyForm(key) {
+    var form = el('form', 'key-form');
+    form.noValidate = true;
+    var inputId = 'set-key-' + key.name;
+    var label = el('label', null, 'New key for ' + key.label);
+    label.setAttribute('for', inputId);
+    var input = el('input');
+    input.id = inputId;
+    input.type = settingsState.reveal ? 'text' : 'password';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.value = settingsState.draft;
+    input.addEventListener('input', function () { settingsState.draft = input.value; });
+    var show = el('button', 'btn-link', settingsState.reveal ? 'Hide' : 'Show');
+    show.type = 'button';
+    show.setAttribute('aria-pressed', String(settingsState.reveal));
+    show.addEventListener('click', function () {
+      settingsState.reveal = !settingsState.reveal;
+      input.type = settingsState.reveal ? 'text' : 'password';
+      show.textContent = settingsState.reveal ? 'Hide' : 'Show';
+      show.setAttribute('aria-pressed', String(settingsState.reveal));
+    });
+    var line = el('div', 'key-input');
+    add(line, input, show);
+    var save = el('button', 'btn-primary', settingsState.saving ? 'Saving…' : 'Save key');
+    save.type = 'submit';
+    save.disabled = settingsState.saving;
+    var btns = el('div', 'btn-row');
+    add(btns, save, C.linkButton('Cancel', function () { closeKeyForm(); renderSettings(); }));
+    add(form, label, line);
+    if (settingsState.formError) {
+      var err = el('div', 'reason-error', settingsState.formError);
+      err.setAttribute('role', 'alert');
+      form.appendChild(err);
+    }
+    form.appendChild(btns);
+    form.addEventListener('submit', function (e) { e.preventDefault(); saveKey(key); });
+    if (settingsState.focusNext) {
+      settingsState.focusNext = false;
+      window.setTimeout(function () { input.focus(); }, 0);
+    }
+    return form;
+  }
+  function keyRow(key) {
+    var row = el('div', 'key-row');
+    var name = el('div', 'key-name');
+    add(name, el('strong', null, key.label), el('span', 'meta mono', key.name));
+    var status = el('div', 'key-status');
+    add(status, key.set ? el('span', 'mark covered', 'Set · ends in ' + key.last4) : el('span', 'mark attention', 'Not set'));
+    var check = settingsState.checks[key.name];
+    if (check) {
+      var stamp = clockTime(check.checkedAt);
+      add(status, el('span', 'mark ' + (check.ok ? 'done' : 'failed'), check.message + (stamp ? ' · checked ' + stamp : '')));
+    }
+    var actions = el('div', 'key-actions');
+    var checking = Boolean(settingsState.checking[key.name]);
+    var test = el('button', 'btn-secondary', checking ? 'Checking…' : 'Check connection');
+    test.type = 'button';
+    test.disabled = !key.set || checking;
+    test.addEventListener('click', function () { checkKey(key); });
+    add(actions, test, C.linkButton(key.set ? 'Replace key' : 'Add key', function () {
+      var same = settingsState.openKey === key.name;
+      closeKeyForm();
+      settingsState.openKey = same ? '' : key.name;
+      settingsState.focusNext = !same;
+      renderSettings();
+    }));
+    if (key.set) actions.appendChild(C.linkButton('Remove', function () { removeKey(key); }));
+    add(row, name, status, actions);
+    if (settingsState.openKey === key.name) row.appendChild(keyForm(key));
+    return row;
+  }
+  function analystSection() {
+    var sec = el('section', 'settings-section');
+    sec.setAttribute('aria-labelledby', 'h-set-analyst');
+    var head = C.sectionHead('Analyst', 'h2');
+    head.firstChild.id = 'h-set-analyst';
+    var field = el('div', 'field');
+    var label = el('label', null, 'Your analyst ID');
+    label.setAttribute('for', 'set-analyst');
+    var input = el('input');
+    input.id = 'set-analyst';
+    input.type = 'text';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    try { input.value = localStorage.getItem(ANALYST_KEY) || ''; } catch (e) { /* storage unavailable */ }
+    var saved = el('span', 'meta', '');
+    saved.setAttribute('role', 'status');
+    var save = el('button', 'btn-secondary', 'Save');
+    save.type = 'button';
+    save.addEventListener('click', function () {
+      var value = input.value.trim();
+      try { localStorage.setItem(ANALYST_KEY, value); } catch (e) { /* storage unavailable */ }
+      var top = document.getElementById('analyst-id');
+      top.value = value;
+      top.dispatchEvent(new Event('input', { bubbles: true }));
+      saved.textContent = value ? 'Saved. Decisions you approve are recorded as ' + value + '.' : 'Cleared.';
+    });
+    add(field, label, el('span', 'hint', 'Recorded with every decision you approve. Stored in this browser.'), input);
+    add(sec, head, field, add(el('div', 'btn-row'), save, saved));
+    return sec;
+  }
+  function foldersSection(info) {
+    var sec = el('section', 'settings-section');
+    sec.setAttribute('aria-labelledby', 'h-set-runs');
+    var head = C.sectionHead('Runs folder', 'h2');
+    head.firstChild.id = 'h-set-runs';
+    var facts = el('dl', 'facts');
+    function fact(term, content) { add(facts, el('dt', null, term), add(el('dd'), content)); }
+    fact('Folder', el('span', 'mono', info.path));
+    fact('Analyses', String(info.analyses));
+    fact('Writable', el('span', 'mark ' + (info.writable ? 'done' : 'failed'), info.writable ? 'Yes' : 'No'));
+    add(sec, head, facts, el('p', 'meta', 'To use a different folder, restart the dashboard with that folder\u2019s path.'));
+    return sec;
+  }
+  function renderSettings() {
+    var host = document.getElementById('pane-settings');
+    var frag = document.createDocumentFragment();
+    var status = el('p', 'meta', settingsState.loading && !settingsState.data ? 'Loading settings…' : settingsState.error || settingsState.note);
+    status.setAttribute('role', 'status');
+    if (settingsState.error) {
+      status.classList.add('fail');
+      add(status, ' ', C.linkButton('Try again', loadSettings));
+    }
+    frag.appendChild(status);
+    var data = settingsState.data;
+    if (data) {
+      var keys = el('section', 'settings-section');
+      keys.setAttribute('aria-labelledby', 'h-set-keys');
+      var head = C.sectionHead('API keys', 'h2', el('span', 'meta', 'Used by collection and source retrieval.'));
+      head.firstChild.id = 'h-set-keys';
+      add(keys, head);
+      data.keys.forEach(function (key) { keys.appendChild(keyRow(key)); });
+      add(frag, keys, analystSection(), foldersSection(data.runsFolder));
+    }
+    C.replace(host, frag);
+  }
+  var settingsShown = false;
+  C.panes.settings = function () {
+    var visible = state.route === 'settings';
+    if (!visible) { settingsShown = false; return; }
+    if (settingsShown) return;
+    settingsShown = true;
+    settingsState.note = '';
+    loadSettings();
+  };
 })();

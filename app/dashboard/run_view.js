@@ -24,7 +24,7 @@
     dirty: {}
   };
   var pollMs = Math.max(1000, Number(body.getAttribute('data-poll-ms')) || 2000);
-  var TABS = ['now', 'brief', 'sources', 'synthesis', 'memo', 'audit'];
+  var TABS = ['now', 'brief', 'sources', 'synthesis', 'memo', 'audit', 'settings'];
 
   /* ---------- DOM helpers ---------- */
   function el(tag, cls, text) {
@@ -445,7 +445,8 @@
     'analysis/findings': { pane: 'synthesis', title: 'Findings', run: true },
     'review': { pane: 'memo', title: 'Publication review', run: true },
     'output': { pane: 'memo', title: 'Output', run: true },
-    'audit': { pane: 'audit', title: 'Audit', run: true }
+    'audit': { pane: 'audit', title: 'Audit', run: true },
+    'settings': { pane: 'settings', title: 'Settings', sub: 'Keys and connections for this computer. Keys are stored in your Windows user environment and never shown in full.' }
   };
   var TAB_ROUTE = { now: 'home', brief: 'intent', sources: 'analysis/evidence', synthesis: 'analysis/findings', memo: 'review', audit: 'audit' };
   function currentRoute() {
@@ -462,6 +463,7 @@
     TABS.forEach(function (name) { document.getElementById('pane-' + name).hidden = name !== state.tab; });
     document.getElementById('nav-home').setAttribute('aria-current', route === 'home' ? 'page' : 'false');
     document.getElementById('nav-audit').setAttribute('aria-current', route === 'audit' ? 'page' : 'false');
+    document.getElementById('nav-settings').setAttribute('aria-current', route === 'settings' ? 'page' : 'false');
     if (route === 'new' && previous !== 'new' && window.CTI.startNew) window.CTI.startNew();
     render(true);
     var target = state.pendingScroll;
@@ -891,6 +893,7 @@
     TABS.forEach(function (name) { document.getElementById('pane-' + name).hidden = name !== state.tab; });
     document.getElementById('nav-home').setAttribute('aria-current', state.route === 'home' ? 'page' : 'false');
     document.getElementById('nav-audit').setAttribute('aria-current', state.route === 'audit' ? 'page' : 'false');
+    document.getElementById('nav-settings').setAttribute('aria-current', state.route === 'settings' ? 'page' : 'false');
     refresh();
     window.setInterval(function () { if (!document.hidden && !state.busy) refresh(); }, pollMs);
   });
