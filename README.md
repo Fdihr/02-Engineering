@@ -15,3 +15,11 @@ Start with:
 6. `03-Workflow/memo-workflow.md` for the canonical target architecture.
 
 Retired V1 workflow artifacts use the explicit `retired-v1` suffix and are historical reference only.
+
+## Open the dashboard
+
+Use `/open-app` in Copilot to open the redesigned CTI Bench dashboard in the
+integrated browser. The repository skill reuses a verified running dashboard
+or starts one from a checkout containing the redesigned UI. It rejects the
+legacy workbench and static concept pages instead of treating any localhost
+response as the current app.
