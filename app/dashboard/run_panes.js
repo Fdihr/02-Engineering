@@ -1671,7 +1671,7 @@
   };
 
   /* ----- Output: the memo read-only, versions and audit trail ----- */
-  var EVENT_LABELS = { 'scope.approved': 'Intent approved', 'discovery.completed': 'Leads collected', 'evidence.admission.approved': 'Source admitted', 'synthesis.build.recorded': 'Synthesis round recorded', 'memo.recorded': 'Memo written' };
+  var EVENT_LABELS = { 'scope.approved': 'Intent approved', 'discovery.completed': 'Seerist collection finished', 'evidence.admission.approved': 'Source admitted as evidence', 'evidence.admission.rejected': 'Source rejected', 'synthesis.build.recorded': 'Synthesis built', 'memo.recorded': 'Memo written' };
   function eventLabel(type) {
     return EVENT_LABELS[type] || capital(String(type || '').replace(/\./g, ' ').replace(/[_-]+/g, ' ').trim());
   }
@@ -1734,79 +1734,238 @@
   };
 
   /* ================= Audit ================= */
-  function stageRow(stage) {
-    var row = el('div', 'stage');
-    var kind = stage.status;
-    add(row, el('div', 'name', capital(stage.name)), C.statusMark(kind, humanise(stage.status)));
-    var detail = el('div', 'detail');
-    if (stage.attempts > 0) add(detail, el('div', 'figures', 'Attempts: ' + stage.attempts));
-    var failures = Object.keys(stage.failures || {});
-    if (failures.length) add(detail, el('div', 'meta fail', 'Failures: ' + failures.map(function (k) { return k + ' ×' + stage.failures[k]; }).join(', ')));
-    if ((stage.artifacts || []).length) {
-      var d = el('details');
-      add(d, el('summary', null, plural(stage.artifacts.length, 'record')));
-      stage.artifacts.forEach(function (a) { d.appendChild(C.artifactLink(a.relPath)); });
-      detail.appendChild(d);
-    }
-    row.appendChild(detail);
-    return row;
+  var STEP_NAMES = {
+    'human intent gate': 'Intent',
+    'bounded seerist collection': 'Seerist collection',
+    'classify provider item': 'Source classification',
+    'resolve + canonicalize source': 'Duplicate sources merged',
+    'ai question-relevance': 'Question relevance',
+    'policy admission': 'Evidence admission',
+    'build': 'Synthesis',
+    'challenge': 'Challenge',
+    'adjudicate': 'Adjudication',
+    'key judgements': 'Key judgements',
+    'memo': 'Memo',
+    'verification': 'Verification',
+    'publication': 'Publication'
+  };
+  var STEP_STATUS = {
+    reviewed: ['done', 'Approved'],
+    committed: ['covered', 'Recorded'],
+    'in-progress': ['running', 'Running'],
+    pending: ['', 'Waiting'],
+    provisional: ['attention', 'Provisional'],
+    failed: ['failed', 'Failed'],
+    synthetic: ['attention', 'Synthetic']
+  };
+  var EVENT_KIND_LABEL = { human: 'Decision by a person', exception: 'Exception', model: 'Model step', machine: 'System step' };
+  var EVENT_FILTERS = [['all', 'All'], ['human', 'People'], ['exception', 'Exceptions'], ['model', 'Model'], ['machine', 'System']];
+  var auditFilter = 'all';
+  var auditOpen = null;
+  var auditStepOpen = null;
+
+  function stepName(stage) { return STEP_NAMES[String(stage.name || '').toLowerCase()] || capital(humanise(stage.name)); }
+  function stepStatus(status) { return STEP_STATUS[status] || STEP_STATUS.pending; }
+  function statusDot(status, withText) {
+    var s = stepStatus(status);
+    var m = el('span', 'mark' + (s[0] ? ' ' + s[0] : ''), withText ? s[1] : '');
+    if (!withText) { m.setAttribute('role', 'img'); m.setAttribute('aria-label', s[1]); m.title = s[1]; }
+    return m;
   }
-  function lane(stages) {
-    var l = el('div', 'lane');
-    stages.forEach(function (s) { l.appendChild(stageRow(s)); });
-    return l;
+  function auditEvents(v) {
+    var list = (v.events || []).map(function (e) {
+      var kind = e.actor === 'human' ? 'human' : (e.actor === 'ai' || e.actor === 'model') ? 'model' : 'machine';
+      var who = kind === 'human' ? (e.actorId || 'A person') : kind === 'model' ? 'Model' : 'System';
+      return { at: e.at || '', kind: kind, who: who, text: eventLabel(e.type), stage: e.stage, status: e.status, attempt: e.attempt, file: e.source };
+    });
+    (v.exceptions || []).forEach(function (x) {
+      list.push({ at: x.raisedAt || '', kind: 'exception', who: '', text: 'Exception: ' + humanise(x.kind), status: x.status, file: x.relPath });
+    });
+    list.sort(function (a, b) {
+      if (a.at === b.at) return 0;
+      if (!a.at) return 1;
+      if (!b.at) return -1;
+      return a.at < b.at ? 1 : -1;
+    });
+    return list;
+  }
+  function dayOf(at) {
+    var d = at ? new Date(at) : null;
+    if (!d || isNaN(d.getTime())) return 'Date not recorded';
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  function timeOf(at) {
+    var d = at ? new Date(at) : null;
+    if (!d || isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+  function renderTimeline(box, all) {
+    var counts = {};
+    EVENT_FILTERS.forEach(function (f) { counts[f[0]] = f[0] === 'all' ? all.length : all.filter(function (e) { return e.kind === f[0]; }).length; });
+    var frag = document.createDocumentFragment();
+    var filters = el('div', 'filters');
+    filters.setAttribute('role', 'group');
+    filters.setAttribute('aria-label', 'Show events');
+    EVENT_FILTERS.forEach(function (f) {
+      var b = el('button', 'chip-btn', f[1]);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(auditFilter === f[0]));
+      add(b, el('span', 'n', String(counts[f[0]])));
+      b.addEventListener('click', function () { auditFilter = f[0]; auditOpen = null; renderTimeline(box, all); });
+      filters.appendChild(b);
+    });
+    frag.appendChild(filters);
+    var list = all.filter(function (e) { return auditFilter === 'all' || e.kind === auditFilter; });
+    if (!all.length) add(frag, add(el('div', 'empty-state'), el('h3', null, 'No events recorded yet')));
+    else if (!list.length) {
+      var empty = el('div', 'empty-state');
+      add(empty, el('h3', null, 'No events of this kind'), add(el('p'), C.linkButton('Show all events', function () { auditFilter = 'all'; auditOpen = null; renderTimeline(box, all); })));
+      frag.appendChild(empty);
+    }
+    var groups = [];
+    list.forEach(function (e, i) {
+      e.id = i;
+      var day = dayOf(e.at);
+      var g = groups[groups.length - 1];
+      if (!g || g.day !== day) { g = { day: day, items: [] }; groups.push(g); }
+      g.items.push(e);
+    });
+    groups.forEach(function (g) {
+      add(frag, add(el('h3', 'day-head', g.day), el('span', 'meta', plural(g.items.length, 'event'))));
+      var ol = el('ol', 'events');
+      g.items.forEach(function (e) {
+        var li = el('li', 'event ' + e.kind);
+        var detailId = 'audit-ev-' + e.id;
+        var row = el('button', 'event-row');
+        row.type = 'button';
+        row.setAttribute('aria-expanded', String(auditOpen === e.id));
+        row.setAttribute('aria-controls', detailId);
+        var dot = el('span', 'ev-kind ' + e.kind);
+        dot.setAttribute('role', 'img');
+        dot.setAttribute('aria-label', EVENT_KIND_LABEL[e.kind]);
+        dot.title = EVENT_KIND_LABEL[e.kind];
+        add(row, el('span', 'ev-time', timeOf(e.at)), dot, el('span', 'ev-text', e.text), el('span', 'ev-who', e.who));
+        if (e.kind === 'exception' && e.status) add(row, el('span', 'ev-reason', 'Status: ' + capital(e.status)));
+        row.addEventListener('click', function () { auditOpen = auditOpen === e.id ? null : e.id; renderTimeline(box, all); });
+        var detail = el('div', 'ev-detail');
+        detail.id = detailId;
+        var facts = el('dl', 'facts');
+        function fact(k, val) { add(facts, el('dt', null, k)); var dd = el('dd'); add(dd, val); facts.appendChild(dd); }
+        if (e.kind !== 'exception') fact('Step', e.stage ? capital(humanise(e.stage)) : 'Not recorded');
+        if (e.who) fact('Done by', e.who);
+        if (e.status) fact('Status', capital(humanise(e.status)));
+        if (e.attempt) fact('Attempt', String(e.attempt));
+        if (e.file) fact('Record', C.artifactLink(e.file));
+        add(detail, add(el('div'), add(el('div', 'ev-detail-body'), facts)));
+        add(li, row, detail);
+        ol.appendChild(li);
+      });
+      frag.appendChild(ol);
+    });
+    C.replace(box, frag);
+  }
+  function stepRows(tbody, stages, title, colspan) {
+    add(tbody, add(el('tr', 'stage-row'), (function () { var th = el('th', null, title); th.setAttribute('scope', 'rowgroup'); th.colSpan = colspan; return th; })()));
+    stages.forEach(function (stage) {
+      var key = title + '/' + stage.name;
+      var records = stage.artifacts || [];
+      var open = auditStepOpen === key && records.length > 0;
+      var tr = el('tr', 'step');
+      var btn = el('button', 'step-btn', stepName(stage));
+      btn.type = 'button';
+      btn.setAttribute('aria-expanded', String(open));
+      btn.disabled = !records.length;
+      var td = el('td');
+      td.appendChild(btn);
+      var st = el('td', 'st');
+      st.appendChild(statusDot(stage.status, true));
+      add(tr, td, st, el('td', 'n', String(records.length)));
+      tbody.appendChild(tr);
+      var extra = el('tr', 'step-records');
+      extra.hidden = !open;
+      var cell = el('td');
+      cell.colSpan = colspan;
+      records.forEach(function (a) { add(cell, add(el('div'), C.artifactLink(a.relPath))); });
+      if (stage.attempts > 0) add(cell, el('div', 'meta figures', 'Attempts: ' + stage.attempts));
+      var failures = Object.keys(stage.failures || {});
+      if (failures.length) add(cell, el('div', 'meta fail', 'Failures: ' + failures.map(function (k) { return k + ' ×' + stage.failures[k]; }).join(', ')));
+      extra.appendChild(cell);
+      tbody.appendChild(extra);
+      btn.addEventListener('click', function () {
+        auditStepOpen = auditStepOpen === key ? null : key;
+        C.panes.audit();
+      });
+    });
   }
   C.panes.audit = function () {
     var v = state.view;
     var host = $('pane-audit');
     if (!v) return;
     var frag = document.createDocumentFragment();
+    var layout = el('div', 'audit-layout');
 
-    var ex = el('section');
-    add(ex, C.sectionHead('Exceptions', 'h2'));
-    if (!v.exceptions.length) add(ex, el('p', 'meta', 'No exceptions recorded.'));
-    else {
-      var t = el('ul', 'rows audit-rows');
-      v.exceptions.forEach(function (e) {
-        var li = el('li', 'audit-row');
-        add(li, add(el('div'), C.artifactLink(e.relPath, humanise(e.kind))), C.statusMark(e.status === 'open' ? 'failed' : 'committed', capital(e.status)), el('span', 'meta figures', 'Raised ' + when(e.raisedAt)));
-        t.appendChild(li);
+    var main = el('section', 'audit-main');
+    var timeline = el('div');
+    add(main, C.sectionHead('What happened', 'h2', el('span', 'meta', 'Newest first. Select an event to see the record behind it.')), timeline);
+    renderTimeline(timeline, auditEvents(v));
+    add(main, el('p', 'meta', v.counts.files + ' records on disk' + (v.truncated ? ' · scan truncated' : '')));
+
+    var aside = el('aside', 'audit-aside');
+    aside.setAttribute('aria-label', 'Step status, sources and automatic steps');
+
+    var steps = el('div');
+    add(steps, C.sectionHead('Where each step stands', 'h3'));
+    var table = el('table', 'steps');
+    var head = el('tr');
+    [['Step', ''], ['Status', ''], ['Records', 'n']].forEach(function (h) { var th = el('th', h[1] || null, h[0]); th.setAttribute('scope', 'col'); head.appendChild(th); });
+    add(table, add(el('thead'), head));
+    var tbody = el('tbody');
+    stepRows(tbody, v.panel1.stages, 'Intent and evidence', 3);
+    stepRows(tbody, v.synthesis, 'Findings and writing', 3);
+    table.appendChild(tbody);
+    var anyFailed = v.panel1.stages.concat(v.synthesis).some(function (s) { return s.status === 'failed'; });
+    var legend = el('ul', 'legend');
+    legend.setAttribute('aria-label', 'Status key');
+    [['done', 'Approved', ' by a person'], ['covered', 'Recorded', ' by the system'], ['running', 'Running', ' not finished'], ['', 'Waiting', ' not started'], ['attention', 'Provisional', ' needs a decision']]
+      .concat(anyFailed ? [['failed', 'Failed', ' a step failed']] : []).forEach(function (l) {
+        add(legend, add(el('li'), el('span', 'mark' + (l[0] ? ' ' + l[0] : ''), l[1]), l[2]));
       });
-      ex.appendChild(t);
-    }
-    frag.appendChild(ex);
+    add(steps, table, legend);
 
-    var board = el('section');
-    add(board, C.sectionHead('Artefact board', 'h2', el('span', 'meta', v.counts.files + ' files' + (v.truncated ? ' · scan truncated' : ''))));
-    add(board, el('p', 'meta prose', 'Status inferred from the files on disk. Use it to inspect records; the other windows show the workflow.'));
-    add(board, el('h3', null, 'Intent, collection and admission'), lane(v.panel1.stages));
-    v.sources.forEach(function (s) {
+    var sources = el('div');
+    add(sources, C.sectionHead('Sources', 'h3', el('span', 'meta', plural(v.sources.length, 'source'))));
+    if (!v.sources.length) add(sources, el('p', 'meta', 'No sources reviewed yet.'));
+    else {
       var note = (C.journey() && C.journey().notes) || {};
-      var title = Object.keys(note).map(function (k) { return note[k]; }).filter(function (n) { return n.snapshotId === s.snapshotId; })[0];
-      add(board, el('h3', null, 'Source: ' + (title ? title.title : s.snapshotId)), lane(s.stages));
-    });
-    add(board, el('h3', null, 'Synthesis and memo'), lane(v.synthesis));
-    frag.appendChild(board);
-
-    var adv = el('section');
-    add(adv, C.sectionHead('Deterministic next step', 'h2'), el('p', 'meta prose', 'Runs run:next, which checks the run for a deterministic step it can take without a human or model decision.'));
-    add(adv, add(el('div', 'btn-row'), runNextButton()));
-    frag.appendChild(adv);
-
-    var evs = el('section');
-    evs.id = 'focus-events';
-    add(evs, C.sectionHead('Events (' + v.events.length + ', newest first)', 'h2'));
-    if (!v.events.length) add(evs, el('p', 'meta', 'No events recorded.'));
-    else {
-      var et = el('ul', 'rows audit-rows');
-      v.events.forEach(function (e) {
-        var li = el('li', 'audit-row');
-        add(li, el('span', 'meta figures', when(e.at)), el('span', null, e.type), el('span', 'meta', [humanise(e.stage), e.status, e.actor].filter(Boolean).join(' · ')));
-        et.appendChild(li);
+      var grid = el('table', 'src-grid');
+      var gh = el('tr');
+      var first = el('th', null, 'Source');
+      first.setAttribute('scope', 'col');
+      gh.appendChild(first);
+      var cols = v.sources[0].stages.map(function (s) { return s.name; });
+      cols.forEach(function (name) { var th = el('th', 'c', capital(humanise(name))); th.setAttribute('scope', 'col'); gh.appendChild(th); });
+      add(grid, add(el('thead'), gh));
+      var gb = el('tbody');
+      v.sources.forEach(function (s) {
+        var title = Object.keys(note).map(function (k) { return note[k]; }).filter(function (n) { return n.snapshotId === s.snapshotId; })[0];
+        var tr = el('tr');
+        add(tr, el('td', 'src-name', title ? title.title : s.snapshotId));
+        cols.forEach(function (name) {
+          var stage = s.stages.filter(function (x) { return x.name === name; })[0];
+          add(tr, add(el('td', 'c'), stage ? statusDot(stage.status, false) : ''));
+        });
+        gb.appendChild(tr);
       });
-      evs.appendChild(et);
+      grid.appendChild(gb);
+      add(sources, grid, add(el('p'), C.linkButton('Open Evidence', function () { C.navigate('analysis/evidence'); })));
     }
-    frag.appendChild(evs);
+
+    var auto = el('div', 'next-auto');
+    add(auto, C.sectionHead('Automatic steps', 'h3'), el('p', null, 'Looks for the next step the system can take on its own. It never approves, admits or publishes anything.'), runNextButton());
+
+    add(aside, steps, sources, auto);
+    add(layout, main, aside);
+    frag.appendChild(layout);
     C.replace(host, frag);
   };
 })();

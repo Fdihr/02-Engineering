@@ -585,6 +585,7 @@ def parse_events(event_files: list[EventLines]) -> list[dict[str, Any]]:
                 "attempt": _number_field(parsed, ["attempt"]),
                 "status": _string_field(parsed, ["status"]),
                 "actor": _string_field(parsed, ["actorType", "actor"]),
+                "actorId": _string_field(parsed, ["actorId", "reviewerId", "analystId"]),
                 "source": file["relPath"],
             })
     events.sort(key=lambda item: item["at"], reverse=True)

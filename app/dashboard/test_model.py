@@ -87,6 +87,14 @@ class ModelTests(unittest.TestCase):
         self.assertEqual([event["type"] for event in events], ["second", "first"])
         self.assertEqual(events[0]["attempt"], 2)
 
+    def test_events_expose_actor_id(self):
+        events = parse_events([{"relPath": "events.jsonl", "lines": [
+            '{"occurredAt":"2026-09-04T09:00:00Z","eventType":"a","actorType":"human","actorId":"demo.analyst"}',
+            '{"occurredAt":"2026-09-04T08:00:00Z","eventType":"b","actorType":"controller"}',
+        ]}])
+        self.assertEqual(events[0]["actorId"], "demo.analyst")
+        self.assertEqual(events[1]["actorId"], "")
+
     def test_evidence_candidates_show_pending_until_a_human_decision_event(self):
         rel = "source-reintakes/cand-1/intake-result.json"
         intake = {

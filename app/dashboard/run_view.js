@@ -445,7 +445,7 @@
     'analysis/findings': { pane: 'synthesis', title: 'Findings', run: true },
     'review': { pane: 'memo', title: 'Publication review', run: true },
     'output': { pane: 'memo', title: 'Output', run: true },
-    'audit': { pane: 'audit', title: 'Audit' }
+    'audit': { pane: 'audit', title: 'Audit', run: true }
   };
   var TAB_ROUTE = { now: 'home', brief: 'intent', sources: 'analysis/evidence', synthesis: 'analysis/findings', memo: 'review', audit: 'audit' };
   function currentRoute() {
