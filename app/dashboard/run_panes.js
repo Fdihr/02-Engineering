@@ -35,6 +35,11 @@
     var entry = COVERAGE[disposition] || ['pending', 'Not assessed yet'];
     return C.statusMark(entry[0], entry[1]);
   }
+  var RQ_MARK = { covered: ['covered', 'Covered'], partial: ['partial', 'Partial'], gap: ['gap', 'Gap'], silent: ['', 'No evidence'], contradicted: ['failed', 'Contradicted'] };
+  function rqMark(disposition) {
+    var entry = RQ_MARK[disposition] || ['unclear', 'Not assessed yet'];
+    return el('span', ('mark ' + entry[0]).trim(), entry[1]);
+  }
   function requirementText(irId) {
     var j = C.journey();
     var req = j ? j.brief.requirements.filter(function (r) { return r.irId === irId; })[0] : null;
@@ -455,7 +460,7 @@
     var plate = el('section', 'plate');
     plate.setAttribute('aria-labelledby', 'h-decision');
     var kicker = el('div', 'plate-kicker');
-    add(kicker, el('span', 'mark attention', 'Waiting for you'), el('span', null, 'Intent decision'));
+    add(kicker, el('span', 'mark attention', 'Waiting for you'),     el('span', null, '· Intent decision'));
     var title = el('h3', 'plate-title', 'Approve the research plan');
     title.id = 'h-decision';
     add(plate, kicker, title, el('div', 'plate-meta', irs.length + ' research questions · ' + lines(p.queries).length + ' Seerist searches'));
@@ -529,36 +534,34 @@
     var reqs = el('section');
     var latest = j.rounds.length ? j.rounds[j.rounds.length - 1].index : 0;
     add(reqs, C.sectionHead('Research questions', 'h3', el('span', 'meta', latest ? 'Coverage from synthesis round ' + latest : 'Coverage appears after the first synthesis round')));
-    var list = el('ul', 'rows');
+    var list = el('ul', 'rows rq-list');
     b.requirements.forEach(function (r) {
-      var li = el('li', 'queue-row');
-      add(li, el('span', 'figures meta', r.irId), el('span', null, r.text), coverageMark(r.coverage));
+      var li = el('li', 'rq-row');
+      add(li, el('strong', 'rq-text', r.text), rqMark(r.coverage), el('span', 'meta rq-id', r.irId));
       list.appendChild(li);
     });
     reqs.appendChild(list);
     if (!b.requirements.length) add(reqs, el('p', 'meta prose', 'No approved research questions. Extraction cannot be prepared until they are recorded (npm run approve:requirements).'));
     main.appendChild(reqs);
 
-    var aside = el('aside', 'trace-pane');
+    var aside = el('aside', 'trace-pane plate-pane');
     aside.setAttribute('aria-label', 'Intent decision');
-    var done = el('div', 'caution is-done');
-    add(done, el('span', 'mark done', 'Approved'), el('span', null, (b.question ? 'Approved by ' + (b.question.approvedBy || 'analyst') + '. ' : '') + 'This brief is read-only.'));
-    aside.appendChild(done);
-    if (b.question) add(aside, el('p', 'meta', 'Question record: '), null);
-    if (b.question) aside.lastChild.appendChild(C.artifactLink(b.question.relPath, 'Approved record', true));
-    var nextStep = el('p', 'next-step');
+    var plate = el('div', 'plate');
+    var kicker = el('div', 'plate-kicker');
+    add(kicker, el('span', 'mark done', 'Approved'),     el('span', null, '· Intent decision'));
     var open = el('a', 'btn-primary', 'Open the evidence');
     open.href = '#/analysis/evidence';
-    nextStep.appendChild(open);
-    aside.appendChild(nextStep);
+    add(plate, kicker, el('p', 'plate-confirm plate-lead', (b.question ? 'Approved by ' + (b.question.approvedBy || 'analyst') + '. ' : '') + 'This brief is read-only.'), add(el('div', 'btn-row'), open));
+    aside.appendChild(plate);
+    if (b.question) add(aside, add(el('p', 'meta'), 'Question record: ', C.artifactLink(b.question.relPath, 'Approved record', true)));
 
     var collect = el('section');
     collect.id = 'focus-collect';
     add(collect, C.sectionHead('Collect leads', 'h3'));
     if (b.discoveries.length) {
-      var t = el('table');
+      var t = el('table', 'collect-table');
       var head = el('tr');
-      ['Searches', 'Leads', 'API calls'].forEach(function (h) { head.appendChild(el('th', null, h)); });
+      [['Searches', ''], ['Leads', 'num'], ['API calls', 'num']].forEach(function (h) { head.appendChild(el('th', h[1], h[0])); });
       t.appendChild(head);
       b.discoveries.forEach(function (d) {
         var tr = el('tr');
@@ -614,15 +617,14 @@
     return 'progress';
   }
   function nextMark(row) {
-    var label = row.current.label;
     switch (row.state) {
-      case 'action': return add(el('span'), C.actorMark(row.current.state), ' ' + label);
-      case 'done': return C.statusMark('reviewed', 'In synthesis');
-      case 'closed': return C.statusMark('pending', 'Closed at ' + label.toLowerCase());
-      case 'failed': return C.statusMark('failed', label + ': needs attention');
-      case 'ready': return C.statusMark('pending', 'Ready for synthesis');
-      case 'provisional': return C.statusMark('provisional', 'Provisional review');
-      default: return C.statusMark('in-progress', label);
+      case 'action': return row.current.state === 'ai' ? el('span', 'ai-mark', 'AI step ready') : el('span', 'mark attention', 'Waiting for you');
+      case 'done': return el('span', 'mark done', 'In synthesis');
+      case 'closed': return el('span', 'mark closed', 'Closed');
+      case 'failed': return el('span', 'mark failed', 'Needs attention');
+      case 'ready': return el('span', 'mark', 'Ready for synthesis');
+      case 'provisional': return el('span', 'mark attention', 'Provisional review');
+      default: return el('span', 'mark running', row.current.label);
     }
   }
   function readLead(lead) {
@@ -785,11 +787,8 @@
     var cand = row.candidate;
     var decision = cand && cand.decision;
     add(box, C.kv([
-      ['Article', row.url ? C.externalLink(row.url) : ''],
-      ['Publisher', row.publisher],
-      ['Seerist lead', lead ? 'Score ' + lead.score + ' · ' + humanise(lead.sourceType) + (lead.providerTimestamp ? ' · ' + lead.providerTimestamp.slice(0, 10) : '') : 'Added directly'],
-      ['Matched terms', lead && lead.matchedTerms.length ? lead.matchedTerms.join(', ') : ''],
       ['Seerist text', lead && lead.rawArtifactRef ? C.linkButton('Read the Seerist lead', function () { readLead(lead); }) : ''],
+      ['Matched terms', lead && lead.matchedTerms.length ? lead.matchedTerms.join(', ') : ''],
       ['AI relevance', cand ? capital(humanise(cand.verdict)) : row.relevance && row.relevance.verdict ? capital(humanise(row.relevance.verdict)) : ''],
       ['Admission', decision ? capital(humanise(decision.outcome)) + ' by ' + (decision.reviewerId || 'analyst') + ' · ' + when(decision.decidedAt) : ''],
       ['Source review', row.review ? (row.review.status === 'recorded' ? 'Reviewed by ' + row.review.reviewerId : humanise(row.review.status)) : ''],
@@ -808,18 +807,15 @@
     return box;
   }
   function sourceRow(row) {
-    var li = el('li', 'source-row');
-    li.id = 'src-' + row.id;
-    var open = state.selectedSource === row.id;
-    var btn = el('button', 'source-summary');
-    btn.type = 'button';
-    if (open) btn.setAttribute('aria-current', 'true');
-    var left = el('div');
+    var published = row.lead && row.lead.providerTimestamp ? row.lead.providerTimestamp.slice(0, 10) : '';
     var meta = [row.publisher, row.lead ? 'Seerist score ' + row.lead.score : 'added directly'].filter(Boolean).join(' · ');
-    add(left, el('div', 'source-title', row.title), el('div', 'meta', meta));
-    var right = el('div', 'source-next');
-    add(right, nextMark(row));
-    add(btn, left, right);
+    var li = el('li');
+    li.id = 'src-' + row.id;
+    var btn = el('button', 'queue-item');
+    btn.type = 'button';
+    btn.setAttribute('data-id', row.id);
+    btn.setAttribute('aria-current', state.selectedSource === row.id ? 'true' : 'false');
+    add(btn, el('span', 'q-title', row.title), published ? el('span', 'q-age', published) : null, el('span', 'q-meta', meta), add(el('span', 'q-state'), nextMark(row)));
     btn.addEventListener('click', function () { state.selectedSource = row.id; C.render(true); });
     li.appendChild(btn);
     return li;
@@ -827,14 +823,29 @@
   function sourceDetail(row) {
     var d = el('section', 'detail');
     d.id = 'detail-' + row.id;
-    add(d, C.sectionHead(row.title, 'h2'), el('p', 'meta', [row.publisher, row.lead && row.lead.providerTimestamp ? 'published ' + row.lead.providerTimestamp.slice(0, 10) : ''].filter(Boolean).join(' · ')));
-    add(d, el('h4', null, 'Next step'), actionPanel(row));
+    var lead = row.lead;
+    var head = el('div', 'section-head detail-head');
+    add(head, el('h3', null, row.title), nextMark(row));
+    add(d, head);
+    var top = el('dl', 'facts');
+    [
+      ['Article', row.url ? C.externalLink(row.url) : ''],
+      ['Publisher', row.publisher],
+      ['Published', lead && lead.providerTimestamp ? lead.providerTimestamp.slice(0, 10) : ''],
+      ['Seerist score', lead ? String(lead.score) + ' · ' + humanise(lead.sourceType) : 'Added directly'],
+      ['Research question', lead ? lead.researchQuestionId : '']
+    ].forEach(function (pair) {
+      if (!pair[1]) return;
+      add(top, el('dt', null, pair[0]), add(el('dd'), pair[1]));
+    });
+    add(d, top);
+    add(d, add(el('div', 'section-head'), el('h3', null, 'Next step')), actionPanel(row));
     var quotes = [];
     if (row.review && row.review.observations) {
       row.review.observations.forEach(function (o) { if (o && o.quote) quotes.push({ quote: o.quote, note: o.attribution || '' }); });
     }
-    if (quotes.length) add(d, el('h4', null, 'Quotes recorded in source review'), quoteList(quotes));
-    add(d, el('h4', null, 'Source facts'), sourceFacts(row));
+    if (quotes.length) add(d, add(el('div', 'section-head'), el('h3', null, 'Quotes recorded in source review')), quoteList(quotes));
+    add(d, add(el('div', 'section-head'), el('h3', null, 'More about this source')), sourceFacts(row));
     return d;
   }
   function runNextButton() {
@@ -858,14 +869,6 @@
     add(tools, runNextButton());
     add(bar, nav, tools);
     return bar;
-  }
-  function publicationLink(j) {
-    if (!j.memo) return null;
-    var wrap = el('p', 'next-step');
-    var a = el('a', 'btn-secondary', 'Open publication review');
-    a.href = '#/review';
-    wrap.appendChild(a);
-    return wrap;
   }
   function leadsSection(j) {
     var sec = el('section');
@@ -956,7 +959,6 @@
     j.sources.forEach(function (r) { var c = category(r); counts[c] = (counts[c] || 0) + 1; });
     if (!state.sourceFilter || (state.sourceFilter === 'action' && !counts.action)) state.sourceFilter = counts.action ? 'action' : 'all';
     var tabs = analysisTabs('sources', j);
-    var sec = el('section');
     var seg = el('div', 'filters');
     seg.setAttribute('role', 'group');
     seg.setAttribute('aria-label', 'Source filter');
@@ -978,12 +980,12 @@
     add(listCol, seg);
     if (!j.sources.length) add(listCol, el('p', 'meta', 'Nothing pulled yet. Choose leads below.'));
     else if (!rows.length) add(listCol, el('p', 'meta', 'No sources in this view.'));
-    var list = el('ul', 'rows');
+    var list = el('ul', 'queue');
     rows.forEach(function (row) { list.appendChild(sourceRow(row)); });
-    listCol.appendChild(list);
+    if (rows.length) listCol.appendChild(list);
+    if (j.sources.length) add(listCol, el('p', 'meta list-note', 'Showing ' + rows.length + ' of ' + j.sources.length + ' sources.'));
     add(inbox, listCol, selected ? sourceDetail(selected) : el('div'));
-    add(sec, C.sectionHead('Sources in the pipeline', 'h2'), el('p', 'meta prose', 'Each pulled lead moves through retrieval, an AI relevance check, your admission decision, AI extraction and your review before it can support a claim. Pick a source to do its next step.'), inbox);
-    add(frag, tabs, publicationLink(j), sec);
+    add(frag, tabs, inbox);
     frag.appendChild(leadsSection(j));
     C.replace(host, frag);
   };
@@ -1163,6 +1165,15 @@
     }
     return sec;
   }
+  function publicationLink(j) {
+    if (!j.memo) return null;
+    var wrap = el('p', 'next-step');
+    var a = el('a', 'btn-secondary', 'Open publication review');
+    a.href = '#/review';
+    wrap.appendChild(a);
+    return wrap;
+  }
+
   C.panes.synthesis = function () {
     var j = C.journey();
     var host = $('pane-synthesis');

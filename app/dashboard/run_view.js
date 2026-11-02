@@ -16,6 +16,8 @@
     drafts: {},
     promptAt: {},
     sourceFilter: '',
+    homeFilter: 'all',
+    homeSel: '',
     leadFilter: 'open',
     selectedLeads: {},
     recent: [],
@@ -542,7 +544,7 @@
     STAGES.forEach(function (stage, i) {
       var li = el('li');
       if (i === current) li.setAttribute('aria-current', 'step');
-      var cls = states[i] === 'done' ? 'mark done' : states[i] === 'attention' ? 'mark attention' : i === current ? 'mark running' : 'mark';
+      var cls = states[i] === 'done' ? 'mark done' : states[i] === 'attention' ? 'mark attention' : i === current ? 'mark running' : null;
       add(li, el('span', cls, stage.label));
       list.appendChild(li);
     });
@@ -559,7 +561,7 @@
     STAGES.forEach(function (stage, i) {
       var li = el('li');
       if (i === 0) li.setAttribute('aria-current', 'step');
-      add(li, el('span', i === 0 ? 'mark attention' : 'mark', stage.label));
+      add(li, el('span', i === 0 ? 'mark attention' : null, stage.label));
       list.appendChild(li);
     });
     add(strip, list, add(el('span', 'yours'), linkButton('Edit the question', function () { navigate('new'); })));
@@ -606,18 +608,98 @@
   }
 
   /* ---------- Home ---------- */
-  function queueList(items) {
-    var list = el('ul', 'queue');
-    items.forEach(function (item) {
-      var li = el('li');
-      var b = el('button', 'queue-item');
-      b.type = 'button';
-      add(b, el('span', 'title', item.title), item.actor === 'you' ? el('span', 'mark attention', 'Waiting for you') : el('span', 'ai-mark', 'AI step ready'), el('span', 'meta', (PHASE_LABEL[item.phase] || '') + ' · ' + item.detail));
-      b.addEventListener('click', function () { go(item.target); });
-      li.appendChild(b);
-      list.appendChild(li);
+  var HOME_FILTERS = [['all', 'All'], ['decision', 'Decisions'], ['ai', 'AI steps'], ['option', 'Next options']];
+  var KIND_LABEL = { decision: 'Decision for you', ai: 'AI step', option: 'Next option' };
+  var WINDOW_LABEL = { now: 'Home', brief: 'Intent', sources: 'Evidence', synthesis: 'Findings', memo: 'Publication review', audit: 'Audit' };
+  function homeItems(j) {
+    var items = [];
+    j.queue.forEach(function (q, i) {
+      var kind = q.actor === 'you' ? 'decision' : 'ai';
+      items.push({ id: kind + ':' + i + ':' + q.title, kind: kind, title: q.title, detail: q.detail, phase: q.phase, target: q.target });
     });
-    return list;
+    j.suggestions.forEach(function (s, i) {
+      items.push({ id: 'option:' + i + ':' + s.title, kind: 'option', title: s.title, detail: s.detail, phase: '', target: s.target });
+    });
+    return items;
+  }
+  function itemMark(item) {
+    if (item.kind === 'decision') return el('span', 'mark attention', 'Waiting for you');
+    if (item.kind === 'ai') return el('span', 'ai-mark', 'AI step ready');
+    return el('span', 'mark', 'Suggested');
+  }
+  function queueRow(id, title, age, meta, mark, selected, onClick) {
+    var li = el('li');
+    var b = el('button', 'queue-item');
+    b.type = 'button';
+    b.setAttribute('data-id', id);
+    b.setAttribute('aria-current', selected ? 'true' : 'false');
+    add(b, el('span', 'q-title', title), age ? el('span', 'q-age', age) : null, el('span', 'q-meta', meta || ''), add(el('span', 'q-state'), mark));
+    b.addEventListener('click', onClick);
+    li.appendChild(b);
+    return li;
+  }
+  function factList(pairs) {
+    var dl = el('dl', 'facts');
+    pairs.forEach(function (pair) {
+      if (pair[1] === undefined || pair[1] === null || pair[1] === '') return;
+      add(dl, el('dt', null, pair[0]), add(el('dd'), pair[1]));
+    });
+    return dl;
+  }
+  function homeVisible(j) {
+    var all = homeItems(j);
+    return all.filter(function (i) { return state.homeFilter === 'all' || i.kind === state.homeFilter; });
+  }
+  function homeSelect(id) {
+    state.homeSel = id;
+    renderNow();
+    var btn = document.querySelector('#pane-now .queue-item[data-id="' + id.replace(/"/g, '\\"') + '"]');
+    if (btn) btn.focus();
+  }
+  function homeMove(step) {
+    var j = journey();
+    if (!j) return;
+    var list = homeVisible(j);
+    if (!list.length) return;
+    var idx = list.map(function (i) { return i.id; }).indexOf(state.homeSel);
+    homeSelect(list[Math.max(0, Math.min(list.length - 1, idx + step))].id);
+  }
+  function homeDetail(item, j) {
+    var box = el('div', 'detail-body');
+    if (!item) {
+      add(box, add(el('div', 'empty-state'), el('h3', null, j.queue.length || j.suggestions.length ? 'Choose an item' : 'Nothing is waiting'), el('p', null, j.queue.length || j.suggestions.length ? 'Select a row on the left, or press J.' : 'Every started step is complete. Open an analysis step or start a new analysis.')));
+      return box;
+    }
+    var plate = el('div', 'plate');
+    var kicker = el('div', 'plate-kicker');
+    add(kicker, itemMark(item), el('span', null, KIND_LABEL[item.kind] + (item.phase ? ' · ' + (PHASE_LABEL[item.phase] || '') : '')));
+    var title = el('h3', 'plate-title', item.title);
+    title.id = 'detail-title';
+    var open = el('button', 'btn-primary', item.kind === 'ai' ? 'Open the AI step' : 'Open');
+    open.type = 'button';
+    open.addEventListener('click', function () { go(item.target); });
+    var actions = el('div', 'btn-row');
+    add(actions, open);
+    if (item.kind === 'ai') {
+      add(actions, actButton('Check next step', 'btn-inverse', function () { postAction({ action: 'run-next', runId: state.runId }); }));
+    }
+    add(plate, kicker, title, el('p', 'plate-confirm', item.detail), actions);
+    box.appendChild(plate);
+
+    var row = item.target && item.target.row ? j.sources.filter(function (r) { return r.id === item.target.row; })[0] : null;
+    var lead = row && row.lead;
+    var facts = factList([
+      ['Kind', KIND_LABEL[item.kind]],
+      ['Phase', PHASE_LABEL[item.phase] || ''],
+      ['Opens', item.target ? WINDOW_LABEL[item.target.tab || 'now'] || '' : ''],
+      ['Source', row ? row.title : ''],
+      ['Article', row && row.url ? externalLink(row.url) : ''],
+      ['Publisher', row ? row.publisher : ''],
+      ['Seerist score', lead ? String(lead.score) : ''],
+      ['Published', lead && lead.providerTimestamp ? lead.providerTimestamp.slice(0, 10) : '']
+    ]);
+    add(box, add(el('section'), sectionHead('Facts', 'h3'), facts));
+    return box;
   }
   function renderNow() {
     var j = journey();
@@ -625,64 +707,67 @@
     var host = document.getElementById('pane-now');
     if (!j) { add(pane, el('div', 'empty', 'Loading…')); return replace(host, pane); }
     var q = j.brief.question;
+    var all = homeItems(j);
+    var waiting = all.filter(function (i) { return i.kind === 'decision'; }).length;
     var head = el('div', 'page-head home-head');
     var titleBox = el('div');
-    add(titleBox, el('div', 'meta', 'Analysis ' + state.runId), el('h2', null, q ? q.question : 'No approved question yet'));
+    add(titleBox, el('h2', null, 'Home'), el('p', 'meta', plural(waiting, 'decision') + ' waiting. The workflow moves only when you decide.'),
+      el('p', 'meta', 'Analysis ' + state.runId + (q ? ' · ' + q.question : '')));
+    var keys = el('div', 'keys');
+    keys.setAttribute('aria-label', 'Keyboard shortcuts');
+    add(keys, add(el('span'), el('kbd', null, 'J'), el('kbd', null, 'K'), ' next, previous'));
     var newBtn = el('button', 'btn-primary', 'New analysis');
     newBtn.type = 'button';
     newBtn.addEventListener('click', function () { navigate('new'); });
-    add(head, titleBox, newBtn);
+    add(head, titleBox, add(el('div', 'head-actions'), keys, newBtn));
     pane.appendChild(head);
 
-    var mine = j.queue.filter(function (i) { return i.actor === 'you'; });
-    var ai = j.queue.filter(function (i) { return i.actor === 'ai'; });
-    var first = mine[0] || ai[0];
-    if (first) {
-      var plate = el('section', 'plate');
-      plate.setAttribute('aria-labelledby', 'next-title');
-      var kicker = el('div', 'plate-kicker');
-      add(kicker, actorMark(first.actor), 'Up next · ' + (PHASE_LABEL[first.phase] || ''));
-      var title = el('h2', null, first.title);
-      title.id = 'next-title';
-      var open = el('button', 'btn-primary', first.actor === 'ai' ? 'Open the AI step' : 'Open');
-      open.type = 'button';
-      open.addEventListener('click', function () { go(first.target); });
-      add(plate, kicker, title, el('div', 'meta', first.detail), add(el('div', 'btn-row'), open));
-      pane.appendChild(plate);
-    }
-    if (mine.length) add(pane, add(el('h3', 'group-head'), 'Decisions waiting for you', el('span', 'meta', String(mine.length))), queueList(mine));
-    if (ai.length) add(pane, add(el('h3', 'group-head'), 'AI steps ready to run', el('span', 'meta', String(ai.length))), queueList(ai));
-    if (!first) add(pane, add(el('div', 'empty-state'), el('h3', null, 'Nothing is waiting'), el('p', null, 'Every started step is complete. Open an analysis step or start a new analysis.')));
-    if (j.suggestions.length) {
-      add(pane, add(el('h3', 'group-head'), 'Next options'));
-      var sug = el('ul', 'queue');
-      j.suggestions.forEach(function (s) {
-        var li = el('li');
-        var b = el('button', 'queue-item');
-        b.type = 'button';
-        add(b, el('span', 'title', s.title), el('span', 'meta', s.detail));
-        b.addEventListener('click', function () { go(s.target); });
-        li.appendChild(b);
-        sug.appendChild(li);
+    var visible = homeVisible(j);
+    var selected = visible.filter(function (i) { return i.id === state.homeSel; })[0] || visible[0] || null;
+    state.homeSel = selected ? selected.id : '';
+
+    var inbox = el('div', 'inbox');
+    var listCol = el('div');
+    var filters = el('div', 'filters');
+    filters.setAttribute('role', 'group');
+    filters.setAttribute('aria-label', 'Filter the list');
+    HOME_FILTERS.forEach(function (def) {
+      var n = def[0] === 'all' ? all.length : all.filter(function (i) { return i.kind === def[0]; }).length;
+      var b = el('button', 'chip-btn', def[1]);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', state.homeFilter === def[0] ? 'true' : 'false');
+      add(b, el('span', 'n', n));
+      b.addEventListener('click', function () { state.homeFilter = def[0]; renderNow(); });
+      filters.appendChild(b);
+    });
+    listCol.appendChild(filters);
+    if (visible.length) {
+      var list = el('ul', 'queue');
+      list.setAttribute('aria-label', 'Decisions, AI steps and next options');
+      visible.forEach(function (item) {
+        list.appendChild(queueRow(item.id, item.title, PHASE_LABEL[item.phase] || '', item.detail, itemMark(item), selected && item.id === selected.id, function () { homeSelect(item.id); }));
       });
-      pane.appendChild(sug);
+      listCol.appendChild(list);
+    } else {
+      add(listCol, add(el('div', 'empty-state'), el('h3', null, 'Nothing in this view'), el('p', null, 'Nothing of this kind is waiting. Choose another filter or All.')));
     }
 
     var runs = (state.view.availableRuns || []).map(function (r) { return r.runId; });
     if (runs.indexOf(state.runId) < 0) runs.unshift(state.runId);
-    add(pane, add(el('h3', 'group-head'), 'Analyses', el('span', 'meta', String(runs.length))));
+    add(listCol, add(el('h3', 'group-head'), 'Your analyses ', el('span', 'meta', String(runs.length))));
     var rl = el('ul', 'queue');
+    rl.setAttribute('aria-label', 'Your analyses');
     runs.forEach(function (id) {
-      var li = el('li');
-      var b = el('button', 'queue-item');
-      b.type = 'button';
       var cur = id === state.runId;
-      add(b, el('span', 'title', id), cur ? el('span', 'mark covered', 'Open now') : el('span', 'meta', 'Open'));
-      b.addEventListener('click', function () { if (!cur) switchRun(id); });
-      li.appendChild(b);
-      rl.appendChild(li);
+      rl.appendChild(queueRow('run:' + id, id, '', cur && q ? q.question : '', cur ? el('span', 'mark covered', 'Open now') : el('span', 'meta', 'Open'), false, function () { if (!cur) switchRun(id); }));
     });
-    pane.appendChild(rl);
+    listCol.appendChild(rl);
+
+    var detail = el('section', 'detail');
+    detail.setAttribute('aria-live', 'polite');
+    detail.appendChild(homeDetail(selected, j));
+    add(inbox, listCol, detail);
+    pane.appendChild(inbox);
     replace(host, pane);
   }
 
@@ -766,7 +851,13 @@
       var text = document.getElementById('viewer').textContent;
       navigator.clipboard.writeText(text).catch(function () { /* user can still select the text */ });
     });
-    window.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
+    window.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeSheet();
+      if (state.route !== 'home' || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target && e.target.matches && e.target.matches('input, textarea, select')) return;
+      if (e.key === 'j' || e.key === 'J') { e.preventDefault(); homeMove(1); }
+      if (e.key === 'k' || e.key === 'K') { e.preventDefault(); homeMove(-1); }
+    });
     document.getElementById('main').addEventListener('focusout', function () {
       window.setTimeout(function () { if (state.pendingRender && !isTyping()) render(false); }, 60);
     });
