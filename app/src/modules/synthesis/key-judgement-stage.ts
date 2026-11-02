@@ -1,4 +1,5 @@
 import { err, ok, type Result } from "../../core/result.js";
+import { readModelIdentity, type ModelIdentity } from "../../core/model-identity.js";
 import type { ArtifactBinding } from "../assurance/types.js";
 import {
   canonicalJson,
@@ -96,8 +97,8 @@ export type KeyJudgementRecord = {
   response: ArtifactBinding;
   invocation: {
     id: string;
-    provider: typeof KEY_JUDGEMENT_PROVIDER;
-    model: typeof KEY_JUDGEMENT_MODEL;
+    provider: ModelIdentity["provider"];
+    model: string;
     startedAt: string;
     completedAt: string;
     freshSession: true;
@@ -500,8 +501,7 @@ export const recordKeyJudgementResponse = (input: {
     input.responseValue.schemaVersion !==
       KEY_JUDGEMENT_RESPONSE_SCHEMA_VERSION ||
     input.responseValue.requestId !== input.request.id ||
-    input.responseValue.provider !== KEY_JUDGEMENT_PROVIDER ||
-    input.responseValue.model !== KEY_JUDGEMENT_MODEL
+    !readModelIdentity(input.responseValue)
   ) {
     return err({ code: "INVALID_KEY_JUDGEMENT_RESPONSE" });
   }
@@ -512,7 +512,8 @@ export const recordKeyJudgementResponse = (input: {
   const startedAt = validTime(input.responseValue.startedAt);
   const completedAt = validTime(input.responseValue.completedAt);
   const capturedBy = nonEmptyString(input.responseValue.capturedBy);
-  if (!invocationId || !startedAt || !completedAt || !capturedBy) {
+  const identity = readModelIdentity(input.responseValue);
+  if (!invocationId || !startedAt || !completedAt || !capturedBy || !identity) {
     return err({ code: "INVALID_KEY_JUDGEMENT_RESPONSE" });
   }
   if (
@@ -565,8 +566,7 @@ export const recordKeyJudgementResponse = (input: {
     response: responseArtifact,
     invocation: {
       id: invocationId,
-      provider: KEY_JUDGEMENT_PROVIDER,
-      model: KEY_JUDGEMENT_MODEL,
+      ...identity,
       startedAt,
       completedAt,
       freshSession: true as const,

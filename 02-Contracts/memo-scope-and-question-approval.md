@@ -26,6 +26,12 @@ Question drafting prepares a bounded AI request from the approved thesis and all
 
 Draft requests are stored under `runs/<runId>/research-question-drafts/<requestId>/`; captured responses produce a proposed JSON artifact under `runs/<runId>/research-question-drafts/<questionId>/`. Reviewers can edit that proposal before approval.
 
+The dashboard's **Approve scope and draft with Copilot** action persists explicit named-human scope approval before invoking the local SDK. Its shared Settings model applies to every automatic AI stage. A fresh, tool-disabled session returns the question and rationale; the existing recorder validates them into a proposal, never an approved question. The dashboard permits completion of a scope-approved run only when the submitted thesis and scope still match the approved artifact. Collection still requires separate question and information-requirement approval.
+
+SDK drafts use `research-question-draft-copilot-sdk-response-v1` with an explicit `model` and `provider: "github-copilot-sdk"`. Legacy manual drafts retain `research-question-draft-copilot-response-v1` and unknown model identity. Relevance similarly uses `question-relevance-copilot-sdk-response-v1` to add explicit SDK provenance. Other AI-stage response envelopes already have provider/model fields; their validators accept either the exact legacy identity or an explicit SDK model ID. Existing prepared request metadata remains a legacy transport hint, not a claim about the response's execution. Recorded invocations take their identity from the validated response.
+
+Automatic invocation artifacts retain the raw model output, selected session model, session ID, start/completion times, and request checksum even when output validation fails. The application rejects unavailable models rather than substituting another one. Neither structural validation nor using a named model establishes semantic thesis alignment; that remains part of human question review.
+
 Run from `app/`:
 
 ```powershell

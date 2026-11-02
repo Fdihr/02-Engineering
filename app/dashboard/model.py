@@ -640,6 +640,7 @@ def _build_panel1_view(files: list[FileEntry], json_by_path: dict[str, Any]) -> 
                 "approvedBy": _string_field(value, ["approvedBy"]),
                 "approvedAt": _string_field(value, ["approvedAt"]),
                 "purpose": str(_unwrap_originated(value.get("purpose")) or ""),
+                "researchThesis": str(_unwrap_originated(value.get("researchThesis")) or ""),
                 "threatTopic": str(_unwrap_originated(value.get("threatTopic")) or ""),
                 "audience": str(_unwrap_originated(value.get("audience")) or ""),
                 "geographies": [str(g) for g in geographies] if isinstance(geographies, list) else [],

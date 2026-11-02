@@ -114,7 +114,7 @@ The active boundary is `../02-Contracts/source-document-and-anchors.md`. Focused
 
 ## Implemented slice: Copilot PoC question relevance
 
-One verified canonical source plus its exact approved question -> immutable model-ready request -> one interactive GitHub Copilot JSON proposal -> deterministic schema, lineage, provenance, and exact-anchor validation -> controller-derived routing decision.
+One verified canonical source plus its exact approved question -> immutable model-ready request -> one local Copilot SDK or manual paste-back JSON proposal -> deterministic schema, lineage, provenance, and exact-anchor validation -> controller-derived routing decision.
 
 Run from `app/`:
 
@@ -125,7 +125,7 @@ npm run record:question-relevance -- <question-relevance-request.json> <copilot-
 
 The model-ready request contains the complete canonical source, fixed untrusted-content instructions, the approved question, provenance, limitations, verdict definitions, and exact output requirements. Response validation rejects altered quotes, mismatched questions or requests, unknown prompt policy, duplicate anchors, positive verdicts without support, and extra model-authored fields. Only deterministic code derives `evidence_candidate_proposal`, `audited_exclusion`, or `human_exception_triage`; no route can produce approval.
 
-This is an explicit development bridge, not a production Copilot API. The invocation records `github-copilot-vscode` and `not-exposed-by-host` because VS Code does not expose the underlying model identity to this workflow. An approved Azure AI Foundry deployment is the intended live adapter; it will replace transport without changing the provider-neutral request or assessment validators.
+The dashboard's Settings chooser lists the locally authenticated Copilot account's models and saves one selection for all AI stages. **Run with Copilot** invokes a fresh, tool-disabled SDK session, preserves raw output and explicit session-model provenance, then runs the existing recorder. It does not approve evidence or execute the entire analysis loop. Manual paste-back remains supported with `github-copilot-vscode` / `not-exposed-by-host`; SDK responses record `github-copilot-sdk` with the explicit selected model. See `../app/dashboard/README.md` for local setup, scope-before-drafting, failure handling and retained human gates.
 
 The real NV source completed this path as `partially-relevant` with three exact anchors and destination `evidence_candidate_proposal / pending_human_review`. It reports the visit, possible purposes, Ratcliffe-to-Bortnikov participation, and Baltic hybrid-threat implications, but does not establish that the visit occurred specifically on 27 August or provide explicit cyber implications.
 
@@ -147,7 +147,7 @@ The active boundary is `../02-Contracts/retrieved-source-reintake.md`. Focused t
 
 ## Implemented slice: Panel 2 Extract under a deterministic controller
 
-One approved evidence snapshot + approved information requirements + versioned profile policy -> immutable model-ready request -> one interactive GitHub Copilot proposal -> deterministic checks, exact-span location, and anchor validation -> committed extraction.
+One approved evidence snapshot + approved information requirements + versioned profile policy -> immutable model-ready request -> one local Copilot SDK or manual paste-back proposal -> deterministic checks, exact-span location, and anchor validation -> committed extraction.
 
 Run from `app/`:
 

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { err, ok, type Result } from "../../core/result.js";
+import { readModelIdentity, type ModelIdentity } from "../../core/model-identity.js";
 import type {
   ApprovedMemoScope,
   ResearchQuestionProposal
@@ -182,8 +183,8 @@ export const recordResearchQuestionDraft = (input: {
     proposal: ResearchQuestionProposal;
     invocation: {
       id: string;
-      provider: typeof RESEARCH_QUESTION_DRAFT_PROVIDER;
-      model: typeof RESEARCH_QUESTION_DRAFT_MODEL;
+      provider: ModelIdentity["provider"];
+      model: string;
       startedAt: string;
       completedAt: string;
     };
@@ -209,14 +210,21 @@ export const recordResearchQuestionDraft = (input: {
   ) {
     return err("INVALID_RESEARCH_QUESTION_DRAFT_CHRONOLOGY");
   }
+  const sdkResponse = isRecord(input.responseValue) &&
+    input.responseValue.schemaVersion === "research-question-draft-copilot-sdk-response-v1";
   if (
     !isRecord(input.responseValue) ||
     Object.keys(input.responseValue).sort().join(",") !==
-      "completedAt,invocationId,proposal,provider,requestId,schemaVersion,startedAt"
+      (sdkResponse
+        ? "completedAt,invocationId,model,proposal,provider,requestId,schemaVersion,startedAt"
+        : "completedAt,invocationId,proposal,provider,requestId,schemaVersion,startedAt")
   ) {
     return err("INVALID_RESEARCH_QUESTION_DRAFT_RESPONSE");
   }
   const response = input.responseValue;
+  const identity = readModelIdentity(sdkResponse
+    ? response
+    : { provider: response.provider, model: RESEARCH_QUESTION_DRAFT_MODEL });
   const invocationId = nonEmptyString(response.invocationId);
   const startedAt = validTime(response.startedAt) ? response.startedAt : undefined;
   const completedAt = validTime(response.completedAt)
@@ -229,8 +237,9 @@ export const recordResearchQuestionDraft = (input: {
     ? nonEmptyString(response.proposal.rationale)
     : undefined;
   if (
-    response.schemaVersion !== RESEARCH_QUESTION_DRAFT_RESPONSE_SCHEMA_VERSION ||
-    response.provider !== RESEARCH_QUESTION_DRAFT_PROVIDER ||
+    (!sdkResponse && response.schemaVersion !== RESEARCH_QUESTION_DRAFT_RESPONSE_SCHEMA_VERSION) ||
+    !identity ||
+    (sdkResponse && identity.provider !== "github-copilot-sdk") ||
     response.requestId !== request.id ||
     !invocationId ||
     !startedAt ||
@@ -268,8 +277,7 @@ export const recordResearchQuestionDraft = (input: {
     },
     invocation: {
       id: invocationId,
-      provider: RESEARCH_QUESTION_DRAFT_PROVIDER,
-      model: RESEARCH_QUESTION_DRAFT_MODEL,
+      ...identity,
       startedAt,
       completedAt
     }

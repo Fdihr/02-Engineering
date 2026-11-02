@@ -47,6 +47,7 @@
       <button class="view-tab" type="button" role="tab" id="tab-synthesis" aria-controls="pane-synthesis" aria-selected="false" tabindex="-1" data-tab="synthesis">Synthesis <span class="tab-count" id="count-synthesis"></span></button>
       <button class="view-tab" type="button" role="tab" id="tab-memo" aria-controls="pane-memo" aria-selected="false" tabindex="-1" data-tab="memo">Memo <span class="tab-count" id="count-memo"></span></button>
       <button class="view-tab" type="button" role="tab" id="tab-audit" aria-controls="pane-audit" aria-selected="false" tabindex="-1" data-tab="audit">Audit <span class="tab-count" id="count-audit"></span></button>
+      <button class="view-tab" type="button" role="tab" id="tab-settings" aria-controls="pane-settings" aria-selected="false" tabindex="-1" data-tab="settings">Settings</button>
     </nav>
 
     <div class="tab-pane" id="pane-now" role="tabpanel" aria-labelledby="tab-now"></div>
@@ -56,7 +57,7 @@
 
       <div id="brief-new" hidden>
         <div class="section-head"><h2>New analysis</h2><button class="btn-link" id="btn-cancel-new" type="button">Back to the current analysis</button></div>
-        <p class="meta prose">Frame the question and scope. Nothing is approved until you confirm the summary in the last step.</p>
+        <p class="meta prose">Approve the thesis and scope to draft a question with local Copilot. Review the question and requirements separately before collection.</p>
 
         <div class="brief-step">
           <div class="brief-step-title">1. Working thesis or intelligence question</div>
@@ -107,8 +108,18 @@
         </div>
 
         <div class="brief-step">
-          <div class="brief-step-title">4. Generated plan</div>
-          <p class="meta">Built from your question, scope and lenses. Edit anything before review.</p>
+          <div class="brief-step-title">4. Draft and review the research question</div>
+          <p class="meta">Copilot tests the approved thesis against the scope; it must not assume the thesis is true. Your model in Settings is used for every AI stage.</p>
+          <label class="check"><input type="checkbox" id="scope-confirm">I approve the thesis and scope above, including the purpose and topic below, for question drafting.</label>
+          <div class="btn-row">
+            <button class="btn-primary" id="btn-draft-question" type="button">Approve scope and draft with Copilot</button>
+            <span class="meta" id="draft-question-status" role="status"></span>
+          </div>
+          <div class="form-grid">
+            <div class="field field-wide"><label for="in-generated-question">Research question (review and edit)</label><textarea id="in-generated-question" rows="4" placeholder="Draft with Copilot, or write your own question."></textarea></div>
+            <div class="field field-wide"><label for="in-rationale">Question rationale (review and edit)</label><textarea id="in-rationale" rows="3"></textarea></div>
+          </div>
+          <p class="meta">The requirements and search suggestions below are lens-based templates, not Copilot output. Edit them to match the question.</p>
           <div class="form-grid">
             <div class="field field-wide"><label for="in-irs">Information requirements (one per line)</label><textarea id="in-irs" rows="6"></textarea></div>
             <div class="field field-wide"><label for="in-disc-queries">Seerist searches (one per line, 2–3 words work best)</label><textarea id="in-disc-queries" rows="4"></textarea></div>
@@ -120,7 +131,6 @@
             <div class="drawer-body form-grid">
               <div class="field field-wide"><label for="in-purpose">Purpose</label><input id="in-purpose" type="text"></div>
               <div class="field field-wide"><label for="in-topic">Threat topic</label><input id="in-topic" type="text"></div>
-              <div class="field field-wide"><label for="in-rationale">Why this matters to Vestas</label><textarea id="in-rationale"></textarea></div>
             </div>
           </details>
           <div class="btn-row">
@@ -145,6 +155,25 @@
     <div class="tab-pane" id="pane-synthesis" role="tabpanel" aria-labelledby="tab-synthesis" hidden></div>
     <div class="tab-pane" id="pane-memo" role="tabpanel" aria-labelledby="tab-memo" hidden></div>
     <div class="tab-pane" id="pane-audit" role="tabpanel" aria-labelledby="tab-audit" hidden></div>
+    <div class="tab-pane" id="pane-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+      <section>
+        <div class="section-head"><h2>Local Copilot</h2></div>
+        <p class="meta prose">Runs on this PC through the GitHub Copilot SDK using your local sign-in. One model is used for question drafting, relevance, extraction, synthesis, challenge, key judgements and memo writing. Human approvals remain yours.</p>
+        <div class="form-grid">
+          <div class="field field-wide">
+            <label for="copilot-model">Model for all AI stages</label>
+            <select id="copilot-model" disabled aria-describedby="copilot-setting-status"><option value="">Refresh models to choose</option></select>
+            <span class="hint" id="copilot-saved-model">No model selected.</span>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn-primary" id="btn-save-model" type="button" disabled>Save model</button>
+          <button class="btn-secondary" id="btn-refresh-models" type="button">Refresh models</button>
+          <span class="meta" id="copilot-setting-status" role="status"></span>
+        </div>
+        <p class="meta prose">Only available models from your account are offered. An unavailable saved model is never silently replaced. If sign-in is required, sign in to GitHub Copilot CLI on this PC, then refresh.</p>
+      </section>
+    </div>
   </main>
 
   <aside class="activity" id="activity" hidden aria-live="polite"></aside>

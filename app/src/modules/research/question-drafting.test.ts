@@ -124,3 +124,24 @@ test("rejects a draft request prepared before scope approval", () => {
     { ok: false, error: "INVALID_RESEARCH_QUESTION_DRAFT_REQUEST" }
   );
 });
+
+test("SDK question drafting retains model identity and cannot approve its own proposal", () => {
+  const request = createResearchQuestionDraftRequest(scope, "2026-06-30T11:00:00.000Z");
+  assert.equal(request.ok, true);
+  if (!request.ok) return;
+  const recorded = recordResearchQuestionDraft({
+    request: request.value, scope, questionId: "rq-sdk-1", recordedAt: "2026-06-30T11:03:00.000Z",
+    responseValue: {
+      schemaVersion: "research-question-draft-copilot-sdk-response-v1",
+      provider: "github-copilot-sdk", model: "test-model-1", requestId: request.value.id,
+      invocationId: "session-1", startedAt: "2026-06-30T11:01:00.000Z", completedAt: "2026-06-30T11:02:00.000Z",
+      proposal: { question: "Do dependency attacks cause more disruption than direct attacks?", rationale: "Compare evidence supporting and contradicting the thesis." }
+    }
+  });
+  assert.equal(recorded.ok, true);
+  if (recorded.ok) {
+    assert.equal(recorded.value.invocation.model, "test-model-1");
+    assert.equal(recorded.value.proposal.status, "proposed");
+    assert.equal(recorded.value.proposal.researchThesis, scope.researchThesis?.value);
+  }
+});

@@ -1,4 +1,5 @@
 import { err, ok, type Result } from "../../core/result.js";
+import { readModelIdentity, type ModelIdentity } from "../../core/model-identity.js";
 import type { ApprovedResearchQuestion } from "../../core/types.js";
 import type { ArtifactBinding } from "../assurance/types.js";
 import {
@@ -275,8 +276,8 @@ export type WriterRecord = {
   revalidationAuthorisation?: ArtifactBinding;
   invocation: {
     id: string;
-    provider: typeof WRITER_PROVIDER;
-    model: typeof WRITER_MODEL;
+    provider: ModelIdentity["provider"];
+    model: string;
     startedAt: string;
     completedAt: string;
     freshSession: true;
@@ -999,15 +1000,15 @@ export const recordWriterResponse = (input: {
     ]) ||
     input.responseValue.schemaVersion !== WRITER_RESPONSE_SCHEMA_VERSION ||
     input.responseValue.requestId !== input.request.id ||
-    input.responseValue.provider !== WRITER_PROVIDER ||
-    input.responseValue.model !== WRITER_MODEL
+    !readModelIdentity(input.responseValue)
   ) return err("INVALID_WRITER_RESPONSE");
   if (input.responseValue.freshSession !== true) return err("FRESH_SESSION_NOT_ATTESTED");
   const invocationId = nonEmptyString(input.responseValue.invocationId);
   const startedAt = validTime(input.responseValue.startedAt);
   const completedAt = validTime(input.responseValue.completedAt);
   const capturedBy = nonEmptyString(input.responseValue.capturedBy);
-  if (!invocationId || !startedAt || !completedAt || !capturedBy) {
+  const identity = readModelIdentity(input.responseValue);
+  if (!invocationId || !startedAt || !completedAt || !capturedBy || !identity) {
     return err("INVALID_WRITER_RESPONSE");
   }
   if (
@@ -1323,8 +1324,7 @@ export const recordWriterResponse = (input: {
     ...(revalidationAuthorisation ? { revalidationAuthorisation } : {}),
     invocation: {
       id: invocationId,
-      provider: WRITER_PROVIDER,
-      model: WRITER_MODEL,
+      ...identity,
       startedAt,
       completedAt,
       freshSession: true as const,
