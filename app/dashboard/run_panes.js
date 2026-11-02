@@ -588,7 +588,7 @@
       C.postAction({ action: 'discover-seerist', runId: state.runId, questionId: (b.question || {}).id, minimumScore: Number(score.value || 4), queries: queries.value, rankingTerms: terms.value })
         .then(function (data) { if (data && data.ok) C.go({ tab: 'sources', focus: 'leads' }); });
     }, false, !b.question);
-    add(collect, add(el('div', 'btn-row'), run, el('span', 'meta', 'New leads are added to the Evidence window; nothing is pulled automatically.')));
+    add(collect, add(el('div', 'btn-row'), run, el('span', 'meta', 'New leads remain in Sources, waiting for the RSS-connected list.')));
     aside.appendChild(collect);
 
     add(layout, main, aside);
@@ -609,9 +609,10 @@
   };
 
   /* ================= Sources ================= */
-  var SOURCE_FILTERS = [['action', 'Needs you'], ['progress', 'In progress'], ['done', 'In synthesis'], ['closed', 'Closed'], ['all', 'All']];
+  var SOURCE_FILTERS = [['action', 'Needs you'], ['progress', 'In progress'], ['pending', 'Waiting for RSS'], ['done', 'In synthesis'], ['closed', 'Closed'], ['all', 'All']];
   function category(row) {
     if (row.state === 'action') return 'action';
+    if (row.state === 'pending') return 'pending';
     if (row.state === 'done') return 'done';
     if (row.state === 'closed') return 'closed';
     return 'progress';
@@ -624,6 +625,7 @@
       case 'failed': return el('span', 'mark failed', 'Needs attention');
       case 'ready': return el('span', 'mark', 'Ready for synthesis');
       case 'provisional': return el('span', 'mark attention', 'Provisional review');
+      case 'pending': return el('span', 'mark attention', 'Waiting for RSS');
       default: return el('span', 'mark running', row.current.label);
     }
   }
@@ -640,15 +642,9 @@
       ].filter(Boolean).join('\n');
       var parts = [head];
       if (d.summary) parts.push('SUMMARY\n' + d.summary);
-      parts.push(d.body ? 'FULL TEXT\n' + d.body : 'Seerist provides only a summary for this lead. Pull it to retrieve the full article.');
+      parts.push(d.body ? 'FULL TEXT\n' + d.body : 'Seerist provides only a summary for this lead. It remains pending until the RSS-connected source list is available.');
       C.openSheet(d.title || lead.title, parts.join('\n\n'), true);
     }).catch(function (err) { C.openSheet(lead.title, err.message); });
-  }
-  function pullLead(lead) {
-    return C.postAction({
-      action: 'intake-candidate', runId: state.runId, rawArtifactRef: lead.rawArtifactRef, providerItemId: lead.providerItemId,
-      questionId: lead.researchQuestionId, sourceUrl: lead.sourceUrl
-    }, 'Pulling: ' + lead.title);
   }
   function admitPanel(row) {
     var cand = row.candidate;
@@ -762,6 +758,9 @@
   }
   function actionPanel(row) {
     var action = row.action;
+    if (row.state === 'pending') {
+      return step('Waiting for RSS source list', [el('p', 'meta prose', 'This Seerist lead is retained, but its publisher page will not be fetched. It can enter the evidence workflow when the RSS-connected source list is available.')]);
+    }
     if (!action) {
       var text = row.state === 'done' ? 'Nothing to do. This source supports ' + plural(row.claimCount, 'claim') + ' in the current synthesis round.'
         : row.state === 'closed' ? 'Closed: ' + row.current.detail + '. It will not be used as evidence.'
@@ -772,12 +771,6 @@
     if (action.kind === 'ai-stage') return step('Run the AI extraction', [C.aiTask('stage', action.item)]);
     if (action.kind === 'admit') return admitPanel(row);
     if (action.kind === 'review') return reviewPanel(row);
-    if (action.kind === 'pull' && action.lead) {
-      return step('Retrieval did not complete', [
-        el('p', 'meta prose', row.current.detail + '. Pulling again re-fetches the article; the earlier attempt stays in the audit trail.'),
-        add(el('div', 'btn-row'), C.actButton('Pull again', 'btn-primary', function () { pullLead(action.lead); }))
-      ]);
-    }
     if (row.state === 'ready') return step('Ready for synthesis', [el('p', 'meta prose', 'This source note is not in the current synthesis round yet.'), add(el('div', 'btn-row'), C.linkButton('Go to synthesis', function () { C.go({ tab: 'synthesis', focus: 'gate' }); }))]);
     return step(row.current.label, [el('p', 'meta prose', row.current.detail)]);
   }
@@ -882,21 +875,11 @@
   function leadsSection(j) {
     var sec = el('section');
     sec.id = 'focus-leads';
-    var selected = Object.keys(state.selectedLeads).filter(function (id) { return state.selectedLeads[id]; });
-    var pullSelected = C.actButton('Pull selected (' + selected.length + ')', 'btn-secondary', function () {
-      var ids = Object.keys(state.selectedLeads).filter(function (id) { return state.selectedLeads[id]; });
-      var leads = j.leads.filter(function (l) { return ids.indexOf(l.providerItemId) >= 0; });
-      var chain = Promise.resolve({ ok: true });
-      leads.forEach(function (lead) {
-        chain = chain.then(function (prev) { return prev && prev.ok ? pullLead(lead) : prev; });
-      });
-      chain.then(function () { state.selectedLeads = {}; state.sourceFilter = 'action'; C.render(true); });
-    }, false, !selected.length);
     var seg = el('div', 'segmented');
     seg.setAttribute('role', 'group');
     seg.setAttribute('aria-label', 'Lead filter');
-    var unpulled = j.leads.filter(function (l) { return !l.rowId; }).length;
-    [['open', 'Not pulled', unpulled], ['all', 'All', j.leads.length]].forEach(function (def) {
+    var pending = j.leads.filter(function (l) { return l.pendingRss; }).length;
+    [['pending', 'Waiting for RSS', pending], ['all', 'All', j.leads.length]].forEach(function (def) {
       var b = el('button', 'seg-btn', def[1] + ' ');
       b.type = 'button';
       b.setAttribute('aria-pressed', state.leadFilter === def[0] ? 'true' : 'false');
@@ -904,16 +887,16 @@
       b.addEventListener('click', function () { state.leadFilter = def[0]; C.render(true); });
       seg.appendChild(b);
     });
-    add(sec, C.sectionHead('Seerist leads', 'h2', add(el('div', 'btn-row'), seg, pullSelected)));
-    add(sec, el('p', 'meta prose', 'Grouped by source tier (Control Risks analyst reports first), then by matched terms. Tiers only order the list; every lead Seerist returned is kept. Pulling a lead retrieves the full article and prepares the AI relevance check; nothing becomes evidence without your admission decision.'));
-    var leads = j.leads.filter(function (l) { return state.leadFilter === 'all' || !l.rowId; });
+    add(sec, C.sectionHead('Seerist leads', 'h2', seg));
+    add(sec, el('p', 'meta prose', 'Grouped by source tier (Control Risks analyst reports first), then by matched terms. Tiers only order the list; every lead Seerist returned is kept. Publisher pages are not fetched. Leads remain pending until the RSS-connected source list is available.'));
+    var leads = j.leads.filter(function (l) { return state.leadFilter === 'all' || l.pendingRss; });
     if (!j.leads.length) {
       add(sec, el('p', 'meta', 'No leads yet. '), C.linkButton('Run a Seerist search', function () { C.go({ tab: 'brief', focus: 'collect' }); }));
       return sec;
     }
     var t = el('table', 'leads-table');
     var head = el('tr');
-    ['', 'Score', 'Lead', 'Published', ''].forEach(function (h) { head.appendChild(el('th', null, h)); });
+    ['Score', 'Lead', 'Published', 'Status'].forEach(function (h) { head.appendChild(el('th', null, h)); });
     t.appendChild(head);
     var tierCounts = {};
     leads.forEach(function (lead) { tierCounts[lead.tier] = (tierCounts[lead.tier] || 0) + 1; });
@@ -923,40 +906,24 @@
         lastTier = lead.tier;
         var groupRow = el('tr', 'tier-row');
         var groupCell = el('th', null, (lead.tier < 9 ? 'Tier ' + lead.tier + ' · ' : '') + lead.tierLabel + ' (' + tierCounts[lead.tier] + ')');
-        groupCell.colSpan = 5;
+        groupCell.colSpan = 4;
         groupRow.appendChild(groupCell);
         t.appendChild(groupRow);
       }
       var tr = el('tr', lead.shortlisted ? null : 'below-shortlist');
-      var sel = el('td', 'sel');
-      if (!lead.rowId && lead.sourceUrl) {
-        var cb = el('input');
-        cb.type = 'checkbox';
-        cb.checked = Boolean(state.selectedLeads[lead.providerItemId]);
-        cb.setAttribute('aria-label', 'Select ' + lead.title);
-        cb.addEventListener('change', function () {
-          state.selectedLeads[lead.providerItemId] = cb.checked;
-          var n = Object.keys(state.selectedLeads).filter(function (id) { return state.selectedLeads[id]; }).length;
-          pullSelected.textContent = 'Pull selected (' + n + ')';
-          C.setBlocked(pullSelected, !n);
-        });
-        sel.appendChild(cb);
-      }
       var titleCell = el('td', 'title-cell');
       var readBtn = C.linkButton(lead.title, function () { readLead(lead); });
       readBtn.title = 'Read this lead';
       add(titleCell, readBtn, el('div', 'meta', humanise(lead.sourceType) + (lead.matchedTerms.length ? ' · matched: ' + lead.matchedTerms.join(', ') : '') + (lead.shortlisted ? '' : ' · below score threshold')));
       var act = el('td', 'compact');
-      if (lead.rowId) act.appendChild(C.linkButton('In pipeline →', function () { C.go({ tab: 'sources', row: lead.rowId }); }));
-      else if (!lead.sourceUrl) act.appendChild(el('span', 'meta', 'Read in Seerist; in-app intake not built yet'));
-      else act.appendChild(C.actButton('Pull', 'btn-secondary', function () {
-        pullLead(lead).then(function (data) { if (data && data.ok) C.go({ tab: 'sources', row: lead.providerItemId }); });
-      }));
-      add(tr, sel, el('td', 'num', lead.score), titleCell, el('td', 'compact figures', (lead.providerTimestamp || '').slice(0, 10)), act);
+      if (lead.pendingRss) act.appendChild(el('span', 'mark attention', 'Waiting for RSS'));
+      else if (lead.rowId) act.appendChild(C.linkButton('In pipeline →', function () { C.go({ tab: 'sources', row: lead.rowId }); }));
+      else act.appendChild(el('span', 'meta', 'Read in Seerist'));
+      add(tr, el('td', 'num', lead.score), titleCell, el('td', 'compact figures', (lead.providerTimestamp || '').slice(0, 10)), act);
       t.appendChild(tr);
     });
     add(sec, add(el('div', 'table-wrap'), t));
-    if (!leads.length) add(sec, el('p', 'meta', 'Every lead has been pulled.'));
+    if (!leads.length) add(sec, el('p', 'meta', 'No leads are waiting for the RSS source list.'));
     return sec;
   }
   C.panes.sources = function () {
@@ -987,7 +954,7 @@
     var inbox = el('div', 'inbox');
     var listCol = el('div');
     add(listCol, seg);
-    if (!j.sources.length) add(listCol, el('p', 'meta', 'Nothing pulled yet. Choose leads below.'));
+    if (!j.sources.length) add(listCol, el('p', 'meta', 'No evidence sources are ready yet. Seerist leads remain pending until the RSS-connected source list is available.'));
     else if (!rows.length) add(listCol, el('p', 'meta', 'No sources in this view.'));
     var list = el('ul', 'queue');
     rows.forEach(function (row) { list.appendChild(sourceRow(row)); });
@@ -1970,7 +1937,7 @@
   };
 
   /* ================= Settings ================= */
-  var settingsState = { data: null, loading: false, error: '', openKey: '', formError: '', draft: '', reveal: false, checks: {}, checking: {}, saving: false, note: '' };
+  var settingsState = { data: null, loading: false, error: '', openKey: '', formError: '', draft: '', reveal: false, checks: {}, checking: {}, saving: false, savingConfig: {}, note: '' };
   var ANALYST_KEY = 'cti_reviewer_id';
 
   function settingsRequest(path, body) {
@@ -2042,6 +2009,25 @@
       settingsState.checks[key.name] = { ok: false, message: err.message, checkedAt: new Date().toISOString() };
     }).then(function () {
       settingsState.checking[key.name] = false;
+      renderSettings();
+    });
+  }
+  function saveConfig(item, input) {
+    settingsState.savingConfig[item.name] = true;
+    renderSettings();
+    settingsRequest('/api/settings/config', { name: item.name, value: input.value }).then(function (result) {
+      settingsState.note = item.label + (input.value.trim() ? ' saved.' : ' cleared.') +
+        (result.persisted ? ' Stored in this Windows user account.' : ' Available to this dashboard session only.');
+      if (result.ssoEnabled && item.name.indexOf('ENTRA_') === 0) {
+        window.location.assign('/');
+        return;
+      }
+      return loadSettings();
+    }).catch(function (err) {
+      settingsState.note = err.message;
+      renderSettings();
+    }).then(function () {
+      settingsState.savingConfig[item.name] = false;
       renderSettings();
     });
   }
@@ -2147,6 +2133,57 @@
     add(sec, head, field, add(el('div', 'btn-row'), save, saved));
     return sec;
   }
+  function configField(item, hint) {
+    var row = el('div', 'config-row');
+    var field = el('div', 'config-field');
+    var inputId = 'config-' + item.name.toLowerCase().replace(/_/g, '-');
+    var label = el('label', null, item.label);
+    label.setAttribute('for', inputId);
+    var input = el('input');
+    input.id = inputId;
+    input.type = 'text';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.value = item.value || '';
+    input.placeholder = item.name === 'AZURE_AI_FOUNDRY_ENDPOINT' ? 'https://<resource>.services.ai.azure.com' : '';
+    add(field, label, el('span', 'hint', hint), input);
+    var actions = el('div', 'config-actions');
+    var save = el('button', 'btn-secondary', settingsState.savingConfig[item.name] ? 'Saving…' : 'Save');
+    save.type = 'button';
+    save.disabled = Boolean(settingsState.savingConfig[item.name]);
+    save.addEventListener('click', function () { saveConfig(item, input); });
+    add(actions, save);
+    if (item.configured) {
+      actions.appendChild(C.linkButton('Clear', function () {
+        input.value = '';
+        saveConfig(item, input);
+      }));
+    }
+    add(row, field, actions);
+    return row;
+  }
+  function integrationSection(id, title, description, fields) {
+    var sec = el('section', 'settings-section');
+    sec.setAttribute('aria-labelledby', id);
+    var head = C.sectionHead(title, 'h2');
+    head.firstChild.id = id;
+    add(sec, head, el('p', 'meta config-description', description));
+    fields.forEach(function (item) { sec.appendChild(item); });
+    return sec;
+  }
+  function integrationsSection(config) {
+    var byName = {};
+    config.forEach(function (item) { byName[item.name] = item; });
+    return [
+      integrationSection('h-set-entra', 'Microsoft Entra ID', 'Once both IDs are set, Entra sign-in is required. Register this app as a public client with http://localhost as a redirect URI and delegated User.Read permission. First sign-in provisions workbench access; accounts themselves remain managed in Entra.', [
+        configField(byName.ENTRA_TENANT_ID, 'Tenant identifier or tenant domain.'),
+        configField(byName.ENTRA_CLIENT_ID, 'Application (client) ID from the app registration.')
+      ]),
+      integrationSection('h-set-foundry', 'Azure AI Foundry', 'Configuration only. The endpoint is not yet used for model calls.', [
+        configField(byName.AZURE_AI_FOUNDRY_ENDPOINT, 'HTTPS endpoint for the Foundry resource or project. Query strings and fragments are not accepted.')
+      ])
+    ];
+  }
   function foldersSection(info) {
     var sec = el('section', 'settings-section');
     sec.setAttribute('aria-labelledby', 'h-set-runs');
@@ -2174,11 +2211,13 @@
     if (data) {
       var keys = el('section', 'settings-section');
       keys.setAttribute('aria-labelledby', 'h-set-keys');
-      var head = C.sectionHead('API keys', 'h2', el('span', 'meta', 'Used by collection and source retrieval.'));
+      var head = C.sectionHead('API keys', 'h2', el('span', 'meta', 'Used by approved data collection.'));
       head.firstChild.id = 'h-set-keys';
       add(keys, head);
       data.keys.forEach(function (key) { keys.appendChild(keyRow(key)); });
-      add(frag, keys, analystSection(), foldersSection(data.runsFolder));
+      add(frag, keys);
+      integrationsSection(data.config || []).forEach(function (section) { frag.appendChild(section); });
+      add(frag, analystSection(), foldersSection(data.runsFolder));
     }
     C.replace(host, frag);
   }

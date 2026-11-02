@@ -13,12 +13,18 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, MutableMapping
+from urllib.parse import urlsplit
 
-KEY_NAMES = {"SEERIST_API_KEY": "Seerist", "FIRECRAWL_API_KEY": "Firecrawl"}
+KEY_NAMES = {"SEERIST_API_KEY": "Seerist"}
+CONFIG_NAMES = {
+    "ENTRA_TENANT_ID": "Microsoft Entra tenant ID",
+    "ENTRA_CLIENT_ID": "Microsoft Entra application (client) ID",
+    "AZURE_AI_FOUNDRY_ENDPOINT": "Azure AI Foundry endpoint",
+}
 _KEY_PATTERN = re.compile(r"[\x21-\x7e]{8,512}")
+_GUID_PATTERN = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 CHECK_TIMEOUT_SECONDS = 15
 SEERIST_CHECK_URL = "https://app.seerist.com/hyperionapi/v1/wod?pageSize=1"
-FIRECRAWL_CHECK_URL = "https://api.firecrawl.dev/v2/team/credit-usage"
 
 
 def _persist_user_env(name: str, value: str | None) -> bool:
@@ -84,6 +90,65 @@ def remove_key(name: str, *, persist: Callable[[str, str | None], bool] | None =
     return persisted
 
 
+def config_status(env: Mapping[str, str]) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": name,
+            "label": label,
+            "value": (env.get(name) or "").strip(),
+            "configured": validate_config(name, env.get(name, "")) not in (None, ""),
+        }
+        for name, label in CONFIG_NAMES.items()
+    ]
+
+
+def entra_sso_enabled(env: Mapping[str, str]) -> bool:
+    return all(
+        validate_config(name, env.get(name, ""))
+        for name in ("ENTRA_TENANT_ID", "ENTRA_CLIENT_ID")
+    )
+
+
+def validate_config(name: str, value: Any) -> str | None:
+    if name not in CONFIG_NAMES or not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return ""
+    if name == "AZURE_AI_FOUNDRY_ENDPOINT":
+        try:
+            parsed = urlsplit(cleaned)
+            return cleaned.rstrip("/") if (
+                parsed.scheme == "https"
+                and parsed.hostname
+                and not parsed.username
+                and not parsed.password
+                and parsed.port in (None, 443)
+                and not parsed.query
+                and not parsed.fragment
+            ) else None
+        except ValueError:
+            return None
+    return cleaned if _GUID_PATTERN.fullmatch(cleaned) else None
+
+
+def save_config(name: str, value: str, *, persist: Callable[[str, str | None], bool] | None = None,
+                env: MutableMapping[str, str] | None = None) -> bool:
+    if name not in CONFIG_NAMES:
+        raise ValueError("Unknown configuration name.")
+    cleaned = validate_config(name, value)
+    if cleaned is None:
+        raise ValueError("Invalid configuration value.")
+    target = os.environ if env is None else env
+    if cleaned:
+        persisted = bool((persist or _persist_user_env)(name, cleaned))
+        target[name] = cleaned
+    else:
+        persisted = bool((persist or _persist_user_env)(name, None))
+        target.pop(name, None)
+    return persisted
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -95,12 +160,8 @@ def check_connection(name: str, env: Mapping[str, str], *, opener: Callable[...,
     key = (env.get(name) or "").strip()
     if not key:
         return {"ok": False, "status": None, "message": "No key set", "checkedAt": _now()}
-    if name == "SEERIST_API_KEY":
-        request = urllib.request.Request(SEERIST_CHECK_URL, method="GET",
-                                         headers={"accept": "application/json", "x-api-key": key})
-    else:
-        request = urllib.request.Request(FIRECRAWL_CHECK_URL, method="GET",
-                                         headers={"authorization": "Bearer " + key})
+    request = urllib.request.Request(SEERIST_CHECK_URL, method="GET",
+                                     headers={"accept": "application/json", "x-api-key": key})
     status: int | None
     try:
         with opener(request, timeout=CHECK_TIMEOUT_SECONDS) as response:

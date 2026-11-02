@@ -6,7 +6,7 @@ Status: Active implementation constraints for the current script-first slices.
 
 Keep each script small enough to understand locally while preserving boundaries that can support later providers, batching, persistence, and user interfaces when those needs are demonstrated.
 
-The product is a general evidence-grounded memo tool over the approved Seerist API surface plus OSINT search, discovery, and retrieval. Cyber threat intelligence is the first working profile, not a core-module boundary. Domain modules should therefore express research intent, evidence, context, relevance, claims, and memo output without assuming that every question is cyber-specific or requires Vestas relevance.
+The product is a general evidence-grounded memo tool over the approved Seerist API surface and planned connected source lists. Cyber threat intelligence is the first working profile, not a core-module boundary. Domain modules should therefore express research intent, evidence, context, relevance, claims, and memo output without assuming that every question is cyber-specific or requires Vestas relevance.
 
 All organization-approved Seerist endpoints are target acquisition surfaces, but only observed and tested endpoints belong to the executable baseline. Each new endpoint or OSINT mechanism terminates at a narrow adapter and the existing provider-neutral role and source contracts whenever those contracts remain sufficient.
 
@@ -21,9 +21,8 @@ flowchart LR
     Operation --> Reader[API or artifact reader]
     Reader[API or artifact reader] --> Intake[Provider intake]
     Intake --> Workflow
-    Intake --> RetrievalGate[Validate exact source retrieval]
-    RetrievalGate --> Firecrawl[One fixed Firecrawl scrape]
-    Firecrawl --> Receipt[Untrusted retrieval artifact]
+    Intake --> Pending[Collection lead pending RSS source list]
+    Pending --> Receipt[Future governed source adapter]
     Receipt --> Canonicalize[Lossless source document + stable anchors]
     Canonicalize --> Relevance[AI question-relevance proposal]
     Relevance --> Reintake[Validate pending source candidate]
@@ -97,8 +96,7 @@ approved research question + bound provider operation
   -> validate observed envelope
   -> extract provider-neutral facts
   -> classify as evidence candidate | collection lead | context
-  -> route native captured content to canonicalization, leads to retrieval, and context to context-only handling
-  -> for one approved collection lead, retrieve one exact source URL and stop
+  -> route native captured content to canonicalization, collection leads to pending RSS, and context to context-only handling
   -> losslessly canonicalize captured content into stable content-addressed segments
   -> assess one canonical source against the approved question with a bounded AI call
   -> validate assessment schema, exact anchors, model provenance, and source/question lineage
@@ -112,13 +110,13 @@ Provider credentials and HTTP remain inaccessible until the research-intent gate
 
 Bounded discovery is sequential, capped by explicit query, page, call, and result limits, and preserves each raw page. It is not a general batch runner and does not automatically advance any candidate into intake.
 
-One-source retrieval validates the persisted intake result before reading `FIRECRAWL_API_KEY`. It sends one fixed, Markdown-only `/v2/scrape` request, preserves the bounded raw response, records publisher and access-provider provenance separately, and stops with `approvalStatus: "not_requested"`. Retrieved text is untrusted data.
+Collection leads have no active publisher-page retrieval path. They remain pending until an approved RSS-connected source list and its narrow, tested adapter are implemented. Historical Firecrawl artifacts remain available for compatibility and audit; this does not enable new Firecrawl requests.
 
 The implemented connection first creates the provider-neutral source document defined in `../02-Contracts/source-document-and-anchors.md`, then runs a bounded AI assessment against the exact approved research question. Deterministic code validates the typed assessment, exact anchors, model provenance, and complete artifact lineage before persisting a pending candidate. The AI cannot approve evidence or start `Find`; controller mode applies the approved admission policy, while human mode retains the compatibility evidence gate as an interim stand-in rather than a fifth permanent surface.
 
 Canonicalization changes addressing, not evidence content or quality. Every admitted source still passes through independent `Find`, blind `Sweep`, `Judge`, and `Write` before cross-source synthesis. Scaling uses independent source state streams, reusable adapters, checksum deduplication, and bounded scheduling rather than skipped stages.
 
-Initial native Seerist evidence candidates cannot enter evidence admission. They route through the provider-neutral canonical document and relevance assessment first. The `reintake:source` command accepts a persisted question-relevance assessment, reconstructs its positive verdict and sibling decision, verifies retrieval, canonical-document, model-request, model-response, assessment, and decision checksums, and creates only a pending candidate. The real NV assessment completed the compatibility path on 2026-09-01 and was approved as decision `nv-evidence-review-001`.
+Initial native Seerist evidence candidates cannot enter evidence admission. They route through the provider-neutral canonical document and relevance assessment first. Historical retrieved-source artifacts and validators remain readable for existing runs; no `retrieve:source` or `reintake:source` command is active.
 
 Until an approved Azure AI Foundry deployment exists, GitHub Copilot in VS Code is a manual PoC transport between those two commands. The adapter records that its underlying model is not exposed. It has no filesystem or transition authority through the application, and the deterministic validators and artifact contract remain the future Foundry boundary.
 

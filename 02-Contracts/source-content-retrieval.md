@@ -1,6 +1,6 @@
 # Source Content Retrieval
 
-Status: Active contract for one-hop retrieval of one exact source URL from an approved Seerist collection lead.
+Status: Historical only. The Firecrawl retrieval command and transport have been removed; collection leads currently route to `pending_rss`.
 
 ## Purpose
 

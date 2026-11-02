@@ -620,3 +620,12 @@ kbd { display:inline-flex; align-items:center; justify-content:center; min-width
 #pane-settings .key-form .reason-error { margin-top:6px; color:var(--fn-red); font-size:var(--text-meta); }
 #pane-settings .field { max-width:24rem; }
 #pane-settings .field .hint { display:block; margin:0 0 6px; }
+#pane-settings .config-description { max-width:42rem; margin:0 0 16px; }
+#pane-settings .config-row { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:8px 16px; align-items:end; max-width:42rem; padding:16px 0; border-top:1px solid var(--rule); }
+#pane-settings .config-row:last-child { border-bottom:1px solid var(--rule); }
+#pane-settings .config-field { min-width:0; }
+#pane-settings .config-field label { display:block; margin:0 0 4px; color:var(--ink); font-size:var(--text-ui); font-weight:500; }
+#pane-settings .config-field .hint { display:block; margin:0 0 6px; color:var(--ink-2); font-size:var(--text-meta); }
+#pane-settings .config-field input { width:100%; min-width:0; height:36px; padding:0 12px; color:var(--ink); background:var(--canvas); border:1px solid var(--control); border-radius:var(--radius-control); font:inherit; font-size:var(--text-ui); }
+#pane-settings .config-actions { display:flex; align-items:center; gap:12px; padding-bottom:1px; }
+.shell-account { max-width:14rem; overflow:hidden; color:var(--shell-ink-2); font-size:var(--text-meta); text-overflow:ellipsis; white-space:nowrap; }

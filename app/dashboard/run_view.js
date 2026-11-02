@@ -18,8 +18,7 @@
     sourceFilter: '',
     homeFilter: 'all',
     homeSel: '',
-    leadFilter: 'open',
-    selectedLeads: {},
+    leadFilter: 'pending',
     recent: [],
     dirty: {}
   };
@@ -218,13 +217,11 @@
       'approve:requirements': ['Information requirements approved', f['Requirements'] ? f['Requirements'] + ' requirements' : ''],
       'discover:seerist': ['Seerist leads collected', (f['Candidates'] || '0') + ' ranked leads from ' + (f['API calls'] || '0') + ' API calls'],
       'intake:seerist': [reused ? 'Lead already classified' : 'Lead classified', reused ? 'Reused the existing record' : humanise(f['Role']) + ' → ' + humanise(f['Route'])],
-      'retrieve:source': ['Full article retrieved', f['Outcome'] ? humanise(f['Outcome']) + ' · ' + humanise(f['Reason']) : ''],
       'canonicalize:source': ['Article text prepared', f['Segments'] ? f['Segments'] + ' anchored text segments' : ''],
       'prepare:question-relevance': ['Relevance check prepared', 'Next: paste the AI relevance answer'],
       'review:evidence': ['Admission decision recorded', humanise(f['Decision']) + (f['Reviewer'] ? ' by ' + f['Reviewer'] : '')],
       'check:ai-answer': ['AI answer checked', f['Quotes'] ? 'All ' + f['Quotes'] + ' quotes matched the source exactly' : ''],
       'record:question-relevance': ['AI relevance check recorded', f['Verdict'] ? 'Verdict: ' + humanise(f['Verdict']) : ''],
-      'reintake:source': ['Evidence candidate created', 'Next: your admission decision'],
       'record:assurance-review': ['Source review recorded', humanise(f['Review status']) + (f['Verdicts'] ? ' · ' + f['Verdicts'] + ' verdicts' : '')],
       'assemble:assurance': ['Source note assembled', (f['In-scope observations'] ? f['In-scope observations'] + ' in-scope observations' : '') + (f['Gaps'] ? ' · ' + f['Gaps'] + ' gaps' : '')],
       'measure:assurance': ['Assurance measured', 'Support failure rate ' + (f['Support failure rate'] || 'n/a')],
@@ -493,7 +490,6 @@
     state.lastText = '';
     state.expanded = {};
     state.openRounds = {};
-    state.selectedLeads = {};
     state.sourceFilter = '';
     var url = new URL(window.location.href);
     url.searchParams.set('run', runId);
@@ -843,6 +839,39 @@
     var analystInput = document.getElementById('analyst-id');
     try { analystInput.value = localStorage.getItem('cti_reviewer_id') || ''; } catch (e) { /* storage unavailable */ }
     analystInput.classList.toggle('missing', !analyst());
+    var authAccount = document.getElementById('auth-account');
+    var signOut = document.getElementById('sign-out');
+    function checkAuthSession() {
+      fetch('/api/auth/session', { cache: 'no-store' }).then(function (response) {
+        return response.json().then(function (data) {
+          if (!response.ok) throw new Error(data.error || 'Authentication status could not be checked.');
+          return data;
+        });
+      }).then(function (session) {
+        if (session.enabled && !session.authenticated) {
+          window.location.assign('/');
+          return;
+        }
+        if (session.enabled && session.user) {
+          analystInput.value = session.user.username;
+          analystInput.readOnly = true;
+          analystInput.classList.remove('missing');
+          authAccount.textContent = session.user.displayName;
+          authAccount.hidden = false;
+          signOut.hidden = false;
+        } else {
+          analystInput.readOnly = false;
+          authAccount.hidden = true;
+          signOut.hidden = true;
+        }
+      }).catch(function () {});
+    }
+    checkAuthSession();
+    window.setInterval(checkAuthSession, 60000);
+    signOut.addEventListener('click', function () {
+      fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .then(function () { window.location.assign('/'); });
+    });
     var analystTimer = null;
     analystInput.addEventListener('input', function () {
       try { localStorage.setItem('cti_reviewer_id', analyst()); } catch (e) { /* storage unavailable */ }

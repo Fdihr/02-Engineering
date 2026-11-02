@@ -36,10 +36,8 @@ class SettingsTests(unittest.TestCase):
     def test_key_status_exposes_only_last_four(self):
         rows = settings.key_status({"SEERIST_API_KEY": KEY})
         seerist = next(r for r in rows if r["name"] == "SEERIST_API_KEY")
-        firecrawl = next(r for r in rows if r["name"] == "FIRECRAWL_API_KEY")
         self.assertEqual(seerist, {"name": "SEERIST_API_KEY", "label": "Seerist", "set": True, "last4": "1234"})
-        self.assertEqual(firecrawl["last4"], "")
-        self.assertFalse(firecrawl["set"])
+        self.assertEqual(len(rows), 1)
         self.assertNotIn(KEY, repr(rows))
 
     def test_validate_key(self):
@@ -73,14 +71,12 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_check_connection_outcomes_never_leak_key(self):
-        env = {"SEERIST_API_KEY": KEY, "FIRECRAWL_API_KEY": KEY}
+        env = {"SEERIST_API_KEY": KEY}
         cases = [(200, True, "Connected"), (401, False, "Seerist rejected the key"), (500, False, "Seerist answered with HTTP 500")]
         for status, ok, message in cases:
             result = settings.check_connection("SEERIST_API_KEY", env, opener=opener_returning(status))
             self.assertEqual((result["ok"], result["message"], result["status"]), (ok, message, status))
             self.assertNotIn(KEY, repr(result))
-        self.assertEqual(settings.check_connection("FIRECRAWL_API_KEY", env, opener=opener_returning(403))["message"], "Firecrawl rejected the key")
-
         def failing(request, timeout=None):
             raise URLError("down " + KEY)
 
@@ -91,12 +87,9 @@ class SettingsTests(unittest.TestCase):
     def test_check_connection_sends_expected_request(self):
         opener = opener_returning(200)
         settings.check_connection("SEERIST_API_KEY", {"SEERIST_API_KEY": KEY}, opener=opener)
-        settings.check_connection("FIRECRAWL_API_KEY", {"FIRECRAWL_API_KEY": KEY}, opener=opener)
-        seerist, firecrawl = opener.calls
+        seerist, = opener.calls
         self.assertEqual(seerist.full_url, settings.SEERIST_CHECK_URL)
         self.assertEqual(seerist.get_header("X-api-key"), KEY)
-        self.assertEqual(firecrawl.full_url, settings.FIRECRAWL_CHECK_URL)
-        self.assertEqual(firecrawl.get_header("Authorization"), "Bearer " + KEY)
 
     def test_check_without_key_makes_no_request(self):
         opener = opener_returning(200)
@@ -113,6 +106,42 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(info["analyses"], 2)
         self.assertTrue(info["writable"])
         self.assertTrue(info["path"])
+
+    def test_config_values_are_validated_and_write_only_is_not_assumed(self):
+        self.assertEqual(settings.validate_config("ENTRA_TENANT_ID", "12345678-1234-1234-1234-123456789012"), "12345678-1234-1234-1234-123456789012")
+        self.assertEqual(settings.validate_config("ENTRA_CLIENT_ID", "abcdef12-3456-7890-abcd-ef1234567890"), "abcdef12-3456-7890-abcd-ef1234567890")
+        self.assertEqual(
+            settings.validate_config("AZURE_AI_FOUNDRY_ENDPOINT", " https://resource.services.ai.azure.com/ "),
+            "https://resource.services.ai.azure.com",
+        )
+        self.assertEqual(settings.validate_config("AZURE_AI_FOUNDRY_ENDPOINT", ""), "")
+        for name, value in (
+            ("ENTRA_TENANT_ID", "tenant.onmicrosoft.com"),
+            ("ENTRA_CLIENT_ID", "client id"),
+            ("AZURE_AI_FOUNDRY_ENDPOINT", "http://resource.services.ai.azure.com"),
+            ("AZURE_AI_FOUNDRY_ENDPOINT", "https://user@resource.services.ai.azure.com"),
+            ("AZURE_AI_FOUNDRY_ENDPOINT", "https://resource.services.ai.azure.com?key=value"),
+            ("UNKNOWN", "value"),
+        ):
+            self.assertIsNone(settings.validate_config(name, value), (name, value))
+        invalid_env = {"ENTRA_TENANT_ID": "not-a-tenant-id"}
+        self.assertFalse(settings.entra_sso_enabled(invalid_env))
+        self.assertFalse(settings.config_status(invalid_env)[0]["configured"])
+
+    def test_save_and_clear_config_use_injected_persistence(self):
+        env = {}
+        calls = []
+
+        def persist(name, value):
+            calls.append((name, value))
+            return True
+
+        tenant = "12345678-1234-1234-1234-123456789012"
+        self.assertTrue(settings.save_config("ENTRA_TENANT_ID", tenant, persist=persist, env=env))
+        self.assertEqual(settings.config_status(env)[0]["value"], tenant)
+        self.assertTrue(settings.save_config("ENTRA_TENANT_ID", "", persist=persist, env=env))
+        self.assertNotIn("ENTRA_TENANT_ID", env)
+        self.assertEqual(calls, [("ENTRA_TENANT_ID", tenant), ("ENTRA_TENANT_ID", None)])
 
 
 if __name__ == "__main__":

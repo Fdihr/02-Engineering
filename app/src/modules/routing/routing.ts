@@ -27,10 +27,10 @@ export const decideRoute = (item: ProviderItem): RouteDecision => {
     return {
       providerItemId: item.providerItemId,
       role: item.role,
-      destination: "source_retrieval",
+      destination: "pending_rss",
       approvalStatus: "not_applicable",
-      ruleId: "RULE-LEAD-RETRIEVAL-002",
-      reason: "Lead material requires source resolution or retrieval"
+      ruleId: "RULE-LEAD-PENDING-RSS-001",
+      reason: "Lead material is retained pending the RSS-connected source list"
     };
   }
 

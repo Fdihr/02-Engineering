@@ -199,7 +199,7 @@ class ModelTests(unittest.TestCase):
         self.assertIn("exception queue: 1 open", view["waitingOn"])
         self.assertIn("publication gate: blocked (provisional or synthetic lineage)", view["waitingOn"])
 
-    def test_journey_follows_one_lead_and_ignores_a_duplicate_retrieval(self):
+    def test_journey_keeps_unretrieved_leads_pending_and_ignores_duplicate_retrieval(self):
         docs = {
             "discoveries/dp-1/discovery-results.json": {"researchQuestionId": "rq-1", "candidates": [
                 {"providerItemId": "lead-1", "title": "Grid attack", "score": 7, "rawArtifactRefs": ["runs/r/raw.json"]},
@@ -219,14 +219,17 @@ class ModelTests(unittest.TestCase):
         }
         view = build_run_view("r", [file_entry(p) for p in docs], [{"relPath": p, "value": v} for p, v in docs.items()], [], "t")
         journey = view["journey"]
-        self.assertEqual(len(journey["sources"]), 1)
+        self.assertEqual(len(journey["sources"]), 2)
         row = journey["sources"][0]
         self.assertEqual((row["id"], row["duplicates"], row["state"]), ("lead-1", 1, "action"))
         self.assertEqual(row["current"]["key"], "admit")
         self.assertEqual([s["state"] for s in row["steps"]], ["done", "done", "done", "you", "todo", "todo", "todo"])
         self.assertEqual(journey["queue"][0]["title"], "Decide whether to admit as evidence")
         self.assertEqual(sum(1 for q in journey["queue"] if q["phase"] == "evidence"), 1)
-        self.assertEqual([lead["rowId"] for lead in journey["leads"]], ["lead-1", ""])
+        self.assertEqual((journey["sources"][1]["id"], journey["sources"][1]["state"]), ("lead-2", "pending"))
+        self.assertEqual(journey["funnel"][1], {"key": "pending_rss", "label": "Waiting for RSS", "value": 1})
+        self.assertEqual(journey["pendingRssLeadCount"], 1)
+        self.assertEqual([lead["rowId"] for lead in journey["leads"]], ["lead-1", "lead-2"])
 
     def test_journey_marks_memo_out_of_date_when_a_newer_round_exists(self):
         def build(index, at):

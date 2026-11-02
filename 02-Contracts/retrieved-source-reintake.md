@@ -1,6 +1,6 @@
 # Retrieved Source Relevance and Re-intake
 
-Status: AI assessment and positive evidence-candidate conversion implemented and validated; real NV candidate approved through the compatibility evidence-admission gate
+Status: Historical only. This Firecrawl-dependent assessment/re-intake path is removed; no current source retrieval or re-intake command is available.
 Validated: 2026-09-01
 Implementation: `../app/src/modules/relevance/question-relevance.ts`, `../app/src/modules/intake/retrieved-source-intake.ts`, `../app/src/commands/prepare-question-relevance.ts`, `../app/src/commands/record-question-relevance.ts`, `../app/src/commands/reintake-source.ts`
 
