@@ -27,6 +27,7 @@ export type ResearchQuestionApprovalError =
   | "SCOPE_VERSION_MISMATCH"
   | "QUESTION_GEOGRAPHY_OUTSIDE_SCOPE"
   | "QUESTION_TIME_WINDOW_OUTSIDE_SCOPE"
+  | "THESIS_SCOPE_MISMATCH"
   | MemoScopeError;
 
 type ResearchQuestionDefinition = Omit<
@@ -59,6 +60,7 @@ const readQuestionDefinition = (
 > => {
   const id = nonEmptyString(value.id);
   const runId = nonEmptyString(value.runId);
+  const researchThesis = nonEmptyString(value.researchThesis);
   const question = nonEmptyString(value.question);
   const rationale = nonEmptyString(value.rationale);
   const geographies = nonEmptyStringArray(value.geographies);
@@ -68,6 +70,7 @@ const readQuestionDefinition = (
     typeof value.scopeVersion !== "number" ||
     !Number.isInteger(value.scopeVersion) ||
     value.scopeVersion < 1 ||
+    (value.researchThesis !== undefined && !researchThesis) ||
     !question ||
     !rationale ||
     !geographies ||
@@ -92,6 +95,7 @@ const readQuestionDefinition = (
     id,
     runId,
     scopeVersion: value.scopeVersion,
+    ...(researchThesis ? { researchThesis } : {}),
     question,
     rationale,
     geographies,
@@ -159,6 +163,13 @@ export const approveResearchQuestion = (
   }
   if (scope.value.version !== definition.value.scopeVersion) {
     return err("SCOPE_VERSION_MISMATCH");
+  }
+  const scopeThesis = scope.value.researchThesis?.value;
+  if (
+    (scopeThesis !== undefined || definition.value.researchThesis !== undefined) &&
+    definition.value.researchThesis !== scopeThesis
+  ) {
+    return err("THESIS_SCOPE_MISMATCH");
   }
   const allowedGeographies = new Set(
     scope.value.geographies.value.map((geography) => geography.toLowerCase())

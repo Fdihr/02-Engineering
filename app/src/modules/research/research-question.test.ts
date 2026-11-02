@@ -6,6 +6,8 @@ const proposal = {
   id: "rq-001",
   runId: "research-run-001",
   scopeVersion: 1,
+  researchThesis:
+    "Disruptions are more likely to arise from attacks on third-party operational dependencies.",
   question: "What cyber threats could disrupt wind-farm operations in Northern Europe?",
   rationale: "Bound collection to operationally relevant cyber threats.",
   geographies: ["Northern Europe"],
@@ -21,6 +23,10 @@ const approvedScope = {
   runId: "research-run-001",
   version: 1,
   purpose: { value: "Assess operational continuity risk.", origin: "human" },
+  researchThesis: {
+    value: "Disruptions are more likely to arise from attacks on third-party operational dependencies.",
+    origin: "human"
+  },
   threatTopic: { value: "Cyber threats", origin: "human" },
   audience: { value: "Strategic risk leadership", origin: "human" },
   geographies: { value: ["Northern Europe"], origin: "human" },
@@ -117,5 +123,26 @@ test("question approval cannot expand approved scope", () => {
       "2026-06-30T12:00:00.000Z"
     ),
     { ok: false, error: "QUESTION_TIME_WINDOW_OUTSIDE_SCOPE" }
+  );
+});
+
+test("question approval rejects a thesis that differs from the approved scope", () => {
+  assert.deepEqual(
+    approveResearchQuestion(
+      { ...proposal, researchThesis: "A conflicting research thesis." },
+      approvedScope,
+      "analyst-001",
+      "2026-06-30T12:00:00.000Z"
+    ),
+    { ok: false, error: "THESIS_SCOPE_MISMATCH" }
+  );
+  assert.deepEqual(
+    approveResearchQuestion(
+      { ...proposal, researchThesis: undefined },
+      approvedScope,
+      "analyst-001",
+      "2026-06-30T12:00:00.000Z"
+    ),
+    { ok: false, error: "THESIS_SCOPE_MISMATCH" }
   );
 });

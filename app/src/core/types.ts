@@ -13,6 +13,7 @@ type MemoScopeDefinition = {
   runId: string;
   version: number;
   purpose: OriginatedValue<string>;
+  researchThesis?: OriginatedValue<string>;
   threatTopic: OriginatedValue<string>;
   audience: OriginatedValue<string>;
   geographies: OriginatedValue<string[]>;
@@ -24,6 +25,7 @@ type MemoScopeDefinition = {
 };
 
 export type MemoScopeProposal = MemoScopeDefinition & {
+  researchThesis: OriginatedValue<string>;
   status: "proposed";
 };
 
@@ -49,6 +51,7 @@ type ResearchQuestionDefinition = {
   id: string;
   runId: string;
   scopeVersion: number;
+  researchThesis?: string;
   question: string;
   rationale: string;
   geographies: string[];

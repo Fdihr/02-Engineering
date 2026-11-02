@@ -37,12 +37,14 @@ Run from `app/`:
 
 ```powershell
 npm run approve:scope -- <memo-scope-proposal.json> <reviewer-id>
+npm run prepare:research-question -- <approved-memo-scope.json>
+npm run record:research-question-draft -- <research-question-draft-request.json> <copilot-response.json>
 npm run approve:question -- <research-question-proposal.json> <approved-memo-scope.json> <reviewer-id>
 npm run collect:seerist -- <provider-operation.json> <approved-research-question.json>
 npm run discover:seerist -- <discovery-plan.json> <approved-research-question.json>
 ```
 
-The approval commands write canonical, non-overwritable JSON plus read-only Markdown views. Question approval verifies the exact approved-scope artifact and rejects run, version, geography, or time-window expansion. Collection and discovery require scope lineage, validate question approval and chronology, allow only `GET /v1/wod`, and perform no credential lookup or network operation before both human gates succeed.
+The scope records the research thesis alongside purpose and the other scope fields. The question-drafting commands prepare a bounded Copilot request from the complete approved scope and record only a validated proposal; review and explicit human approval remain required. The approval commands write canonical, non-overwritable JSON plus read-only Markdown views. Question approval verifies the exact approved-scope artifact and rejects thesis mismatch, run, version, geography, or time-window expansion. Collection and discovery require scope lineage, validate question approval and chronology, allow only `GET /v1/wod`, and perform no credential lookup or network operation before both human gates succeed.
 
 The active boundary is `../02-Contracts/research-question-and-provider-operation.md`. The developer probe remains discovery-only and cannot satisfy this contract.
 

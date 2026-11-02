@@ -17,6 +17,10 @@ test("writes one approved memo scope and refuses to overwrite it", async () => {
         runId: "research-run-test",
         version: 1,
         purpose: { value: "Assess operational continuity risk.", origin: "human" },
+        researchThesis: {
+          value: "Disruptions are more likely to arise from attacks on third-party operational dependencies.",
+          origin: "human"
+        },
         threatTopic: { value: "Cyber threats", origin: "human" },
         audience: { value: "Strategic risk leadership", origin: "human" },
         geographies: { value: ["Northern Europe"], origin: "human" },
