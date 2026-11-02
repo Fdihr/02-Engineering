@@ -593,6 +593,13 @@
       if (scope) bits.push((scope.geographies || []).join(', '), (scope.from || '').slice(0, 10) + ' → ' + (scope.to || '').slice(0, 10), scope.audience);
       add(title, el('div', 'meta', bits.filter(Boolean).join(' · ')));
     }
+    if (route === 'review' && j && j.memo) {
+      var keys = el('div', 'keys');
+      keys.setAttribute('aria-label', 'Keyboard shortcuts');
+      add(keys, add(el('span'), el('kbd', null, 'J'), el('kbd', null, 'K'), ' next, previous claim'), add(el('span'), el('kbd', null, 'Esc'), ' deselect'));
+      title.classList.add('head-keys');
+      title.appendChild(keys);
+    }
     head.appendChild(title);
     if (def.run && j) {
       add(head, el('p', 'question-line', q ? q.question : 'No approved question yet'), renderStrip(j));
@@ -853,6 +860,7 @@
     });
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') closeSheet();
+      if (state.route === 'review' && window.CTI.reviewKey && !e.ctrlKey && !e.metaKey && !e.altKey && !(e.target && e.target.matches && e.target.matches('input, textarea, select'))) window.CTI.reviewKey(e);
       if (state.route !== 'home' || e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.target && e.target.matches && e.target.matches('input, textarea, select')) return;
       if (e.key === 'j' || e.key === 'J') { e.preventDefault(); homeMove(1); }

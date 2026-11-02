@@ -868,7 +868,16 @@
     tools.title = 'Runs run:next, which takes a deterministic step if one exists. It never makes a human or model decision.';
     add(tools, runNextButton());
     add(bar, nav, tools);
-    return bar;
+    var out = document.createDocumentFragment();
+    if (j.memo) {
+      var action = el('p', 'strip-action');
+      var open = el('a', 'btn-primary', 'Open publication review');
+      open.href = '#/review';
+      add(action, open);
+      out.appendChild(action);
+    }
+    out.appendChild(bar);
+    return out;
   }
   function leadsSection(j) {
     var sec = el('section');
@@ -1126,8 +1135,8 @@
     var li = el('li');
     add(li, el('p', 'finding-text', claim.statement));
     var marks = el('div', 'finding-marks');
-    add(marks, claimStatusMark(claim.status), el('span', 'meta', capital(claim.confidence || 'unknown') + ' confidence'), el('span', 'meta figures', plural(claim.noteIds.length, 'source')),
-      el('span', 'meta', claim.challenges.length ? plural(claim.challenges.length, 'challenge') + ' raised' : 'No challenges raised'));
+    var parts = [capital(claim.confidence || 'unknown') + ' confidence', plural(claim.noteIds.length, 'source'), claim.challenges.length ? plural(claim.challenges.length, 'challenge') + ' raised' : 'No challenges raised'];
+    add(marks, claimStatusMark(claim.status), el('span', 'meta', parts.join(' · ')));
     li.appendChild(marks);
     return li;
   }
@@ -1141,13 +1150,14 @@
     round.coverage.forEach(function (c) { coverage[c.irId] = c.disposition; });
     var placed = {};
     var sec = el('section', 'finding-section');
-    add(sec, C.sectionHead('Claims by research question', 'h2', el('span', 'meta', 'Round ' + round.index + ' · ' + when(round.recordedAt))));
-    add(sec, el('p', 'meta prose', 'A claim is placed under a question only where the key-judgement selection links them. Other claims from the round follow.'));
+    add(sec, el('p', 'meta', 'Round ' + round.index + ' · ' + when(round.recordedAt)));
+    var n = 0;
     j.brief.requirements.forEach(function (req) {
       var claims = selections.filter(function (s) { return s.requirementId === req.irId && byId[s.claimId]; }).map(function (s) { placed[s.claimId] = true; return byId[s.claimId]; });
       if (!claims.length && !coverage[req.irId]) return;
+      n += 1;
       var group = el('div', 'finding-group');
-      add(group, C.sectionHead(req.text, 'h3', coverageDot(coverage[req.irId])), el('div', 'meta figures', req.irId));
+      add(group, C.sectionHead('Research question ' + n, 'h3', el('span', 'meta', req.text)));
       var list = el('ul', 'rows');
       claims.forEach(function (c) { list.appendChild(claimRow(c)); });
       if (!claims.length) add(list, add(el('li'), el('span', 'meta', 'No claim selected for this question.')));
@@ -1157,7 +1167,7 @@
     var rest = round.claims.filter(function (c) { return !placed[c.claimId]; });
     if (rest.length) {
       var other = el('div', 'finding-group');
-      add(other, C.sectionHead(selections.length || round.coverage.length ? 'Other claims in this round' : 'Claims in this round', 'h3', el('span', 'meta', String(rest.length))));
+      add(other, C.sectionHead(selections.length || round.coverage.length ? 'Other claims' : 'Claims in this round', 'h3', el('span', 'meta', String(rest.length))));
       var ol = el('ul', 'rows');
       rest.forEach(function (c) { ol.appendChild(claimRow(c)); });
       other.appendChild(ol);
@@ -1165,21 +1175,12 @@
     }
     return sec;
   }
-  function publicationLink(j) {
-    if (!j.memo) return null;
-    var wrap = el('p', 'next-step');
-    var a = el('a', 'btn-secondary', 'Open publication review');
-    a.href = '#/review';
-    wrap.appendChild(a);
-    return wrap;
-  }
-
   C.panes.synthesis = function () {
     var j = C.journey();
     var host = $('pane-synthesis');
     if (!j) return;
     var frag = document.createDocumentFragment();
-    add(frag, analysisTabs('synthesis', j), publicationLink(j));
+    add(frag, analysisTabs('synthesis', j), claimGroups(j));
     var r = j.readiness;
     var gate = el('section', 'gate');
     gate.id = 'focus-gate';
@@ -1199,7 +1200,6 @@
       add(gate, add(el('div', 'btn-row'), build, !r.canBuild ? el('span', 'meta', 'Admit and review at least one source first.') : !primary ? el('span', 'meta', 'No new notes since the last round; a rebuild uses the same inputs.') : null));
     }
     frag.appendChild(gate);
-    add(frag, claimGroups(j));
 
     if (!j.rounds.length) {
       add(frag, el('p', 'meta', 'No synthesis round yet.'));
@@ -1292,23 +1292,70 @@
     });
     return worst === 3 ? 'shade-gap' : worst === 2 ? 'shade-partial' : worst === 1 ? 'shade-unclear' : '';
   }
+  function blockedAnchor(anchor, m) {
+    var hasContest = m.blockers.some(function (b) { return b.code === 'OPEN_KEY_JUDGEMENT_CONTEST'; });
+    return hasContest && Boolean(anchor.source) && m.keyJudgments.indexOf(anchor.source) >= 0 && anchor.source.status === 'contested';
+  }
+  function sourceRefs(anchor, ctx) {
+    var nums = [];
+    anchor.claimIds.forEach(function (id) {
+      ((ctx.memo.claims[id] || {}).sources || []).forEach(function (s) {
+        var n = ctx.refs[s.noteId];
+        if (n && nums.indexOf(n) < 0) nums.push(n);
+      });
+    });
+    nums.sort(function (a, b) { return a - b; });
+    return nums;
+  }
   function renderMarkdown(text, ctx) {
     var root = el('div', 'page-inner');
     var container = root;
     var para = [];
     var list = null;
+    var section = '';
+    function matchJudgement(item, m) {
+      var bare = item.replace(/\s*\(\s*[a-z-]+ confidence\s*\)\s*$/i, '').trim();
+      return m.keyJudgments.filter(function (k) { return k.text === bare; })[0] || null;
+    }
     function fill(node, raw) {
       (ctx.anchors ? splitByAnchors(raw, ctx.anchors) : [{ text: raw }]).forEach(function (seg) {
         if (!seg.anchor) return inlineMarkdown(node, seg.text);
         var anchor = seg.anchor;
         ctx.used[anchor.claimIds.join(',')] = true;
+        if (ctx.order) ctx.order.push(anchor);
         var selected = ctx.selected && ctx.selected.text === anchor.text;
-        var btn = el('button', 'claim' + (ctx.mode === 'confidence' ? ' ' + anchorShade(anchor, ctx.memo) : ''));
-        btn.type = 'button';
+        var blocked = blockedAnchor(anchor, ctx.memo);
+        // A span, not a button: buttons render inline-block and will not wrap across lines.
+        var btn = el('span', 'claim' + (blocked ? ' is-blocker' : '') + (ctx.mode === 'confidence' ? ' ' + anchorShade(anchor, ctx.memo) : ''));
+        btn.setAttribute('role', 'button');
+        btn.tabIndex = 0;
         btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
         btn.addEventListener('click', function () { ctx.select(selected ? null : anchor); });
+        btn.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ctx.select(selected ? null : anchor); }
+        });
         inlineMarkdown(btn, seg.text);
+        if (blocked) add(node, add(el('span', 'gutter'), el('span', 'mark failed', 'Blocker')));
         node.appendChild(btn);
+        if (ctx.refs) {
+          var nums = sourceRefs(anchor, ctx);
+          if (nums.length) {
+            var sup = el('sup', 'refs');
+            nums.forEach(function (n) {
+              var r = el('a', null, String(n));
+              r.href = '#/review';
+              r.title = 'Source ' + n + ': ' + ctx.refTitles[n];
+              r.setAttribute('aria-label', 'Source ' + n + ': ' + ctx.refTitles[n]);
+              r.addEventListener('click', function (e) {
+                e.preventDefault();
+                var target = document.getElementById('src-' + n);
+                if (target) target.scrollIntoView({ block: 'nearest' });
+              });
+              sup.appendChild(r);
+            });
+            node.appendChild(sup);
+          }
+        }
       });
     }
     function flush() {
@@ -1316,7 +1363,13 @@
       para = [];
       if (list) {
         var l = el(list.tag);
-        list.items.forEach(function (item) { var li = el('li'); fill(li, item); l.appendChild(li); });
+        list.items.forEach(function (item) {
+          var li = el('li');
+          var judgement = ctx.judgements && section === 'key judgements' ? matchJudgement(item, ctx.memo) : null;
+          fill(li, judgement ? judgement.text : item);
+          if (judgement) add(li, add(el('div', 'meta'), claimStatusMark(judgement.status), judgement.confidence ? el('span', null, 'Confidence: ' + judgement.confidence) : null));
+          l.appendChild(li);
+        });
         container.appendChild(l);
       }
       list = null;
@@ -1326,8 +1379,8 @@
       var li = /^\s*(?:([-*+])|\d+[.)])\s+(.*)$/.exec(line);
       if (h) {
         flush();
-        if (h[1].length === 1) add(root, el('h3', 'doc-title', h[2]));
-        else if (h[1].length === 2) { container = el('section'); add(container, el('h4', null, h[2])); root.appendChild(container); }
+        if (h[1].length === 1) { add(root, el('h3', 'doc-title', h[2])); if (ctx.subtitle) add(root, el('p', 'doc-meta', ctx.subtitle)); }
+        else if (h[1].length === 2) { section = h[2].toLowerCase(); container = el('section'); add(container, el('h4', null, h[2])); root.appendChild(container); }
         else add(container, el('h5', null, h[2]));
       } else if (li) {
         var tag = li[1] ? 'ul' : 'ol';
@@ -1362,10 +1415,10 @@
     add(none, add(el('div', 'btn-row'), C.linkButton('Go to findings', function () { C.navigate('analysis/findings'); })));
     return none;
   }
-  function copyMarkdown(m) {
-    var tools = el('div', 'btn-row');
+  function copyMarkdown(m, compact) {
+    var tools = el('div', compact ? 'file-links' : 'btn-row');
     var status = el('span', 'meta');
-    var copy = el('button', 'btn-secondary', 'Copy as Markdown');
+    var copy = el('button', compact ? 'btn-link' : 'btn-secondary', 'Copy as Markdown');
     copy.type = 'button';
     copy.addEventListener('click', function () {
       fetch('/api/artifact?run=' + encodeURIComponent(state.runId) + '&path=' + encodeURIComponent(m.markdownPath)).then(function (res) {
@@ -1378,19 +1431,31 @@
     add(tools, copy, C.artifactLink(m.markdownPath, 'View memo.md', true), C.artifactLink(m.relPath, 'Memo record', true), status);
     return tools;
   }
-  function memoMeta(m, j) {
+  function memoSubtitle(m, j) {
     var scope = j.brief.scope || {};
-    return ['Memo version ' + m.versions, 'written ' + when(m.createdAt), 'from round ' + m.roundIndex, humanise(m.reviewStatus) + ' sources', m.limitedEvidence ? 'limited evidence' : '', 'for ' + (scope.audience || 'Vestas leadership')].filter(Boolean).join(' · ');
+    var published = m.gate.status === 'published';
+    return [scope.audience || 'Vestas leadership', 'memo v' + m.versions, published ? 'published' : 'draft, not published', 'round ' + m.roundIndex, 'written ' + when(m.createdAt), humanise(m.reviewStatus) + ' sources', m.limitedEvidence ? 'limited evidence' : ''].filter(Boolean).join(' · ');
+  }
+  function memoRefs(m) {
+    var refs = {};
+    var titles = {};
+    var list = [];
+    Object.keys(m.claims).forEach(function (id) {
+      m.claims[id].sources.forEach(function (s) {
+        if (refs[s.noteId]) return;
+        refs[s.noteId] = list.length + 1;
+        titles[list.length + 1] = s.title;
+        list.push(s);
+      });
+    });
+    return { refs: refs, titles: titles, list: list };
   }
 
   /* ----- Publication review: the memo as a page, claim trace in the side panel ----- */
-  var review = { mode: 'text', selected: null };
+  var review = { mode: 'text', selected: null, order: [] };
   function tracePanel(m, j, sel) {
+    if (!sel) return null;
     var sec = el('div', 'panel-sec');
-    if (!sel) {
-      add(sec, el('h3', null, 'Claim trace'), el('p', 'meta', 'Select an underlined claim in the text to see the claims, sources and challenges behind it.'));
-      return sec;
-    }
     add(sec, el('h3', null, 'Claim trace'), el('p', 'panel-claim', sel.text));
     var s = sel.source;
     var marks = el('div', 'panel-marks');
@@ -1425,35 +1490,38 @@
   }
   function reviewSide(m, j, sel) {
     var side = el('div');
-    var gate = el('div', 'panel-sec');
-    add(gate, el('h3', null, 'Publication gate'), add(el('div', 'panel-marks'), gateMark(m.gate), el('span', 'meta', m.gate.humanApprovalAvailable ? 'Human approval is available.' : 'Human approval is not available.')));
-    var approve = el('button', 'btn-primary', 'Approve for publication');
-    approve.type = 'button';
-    approve.disabled = true;
-    approve.setAttribute('aria-describedby', 'approve-reason');
-    var reason = el('p', 'meta', 'Publication approval is not a workflow action yet. Gate: ' + (m.gate.status || 'not checked') + '.');
-    reason.id = 'approve-reason';
-    add(gate, approve, reason);
-    side.appendChild(gate);
-
-    var bl = el('div', 'panel-sec');
-    add(bl, el('h3', null, 'Blockers (' + m.blockers.length + ')'));
-    if (!m.blockers.length) add(bl, el('p', 'meta', 'No publication blockers recorded.'));
+    var counts = { accepted: 0, contested: 0, rejected: 0, other: 0 };
+    var ids = Object.keys(m.claims);
+    ids.forEach(function (id) { var s = m.claims[id].status; counts[s in counts ? s : 'other']++; });
+    var review1 = el('div', 'panel-sec');
+    add(review1, C.sectionHead('Review', 'h3', el('span', 'meta', 'memo')));
+    add(review1, el('p', 'meta', 'Accepted ' + counts.accepted + ' · contested ' + counts.contested + ' · rejected ' + counts.rejected + ' · not adjudicated ' + counts.other + ' of ' + plural(ids.length, 'claim') + '. Select a claim in the page to see its evidence.'));
+    if (!m.blockers.length) add(review1, el('p', 'meta', 'No publication blockers recorded.'));
     var bl2 = el('ul', 'rows-list');
     m.blockers.forEach(function (b) {
       var li = el('li');
       var box = el('div', 'resolved-row');
       var route = blockerRoute(b.code);
       var text = el('div');
-      add(text, el('div', null, b.label), el('div', 'meta', b.explanation || b.code), route ? C.linkButton(route[1], function () { C.navigate(route[0]); }) : el('div', 'meta', 'Not resolved by a workflow action in this workbench.'));
-      add(box, el('span', 'mark attention', ''), text);
+      add(text, el('div', 'row-title', b.label), el('div', 'meta', b.explanation || b.code), route ? C.linkButton(route[1], function () { C.navigate(route[0]); }) : el('div', 'meta', 'Not resolved by a workflow action in this workbench.'));
+      add(box, el('span', 'mark failed', 'Blocker'), text);
       li.appendChild(box);
       bl2.appendChild(li);
     });
-    if (m.blockers.length) bl.appendChild(bl2);
-    side.appendChild(bl);
+    if (m.blockers.length) review1.appendChild(bl2);
+    side.appendChild(review1);
 
-    side.appendChild(tracePanel(m, j, sel));
+    var gate = el('div', 'panel-sec');
+    var approve = el('button', 'btn-primary', 'Approve for publication');
+    approve.type = 'button';
+    approve.disabled = true;
+    approve.setAttribute('aria-describedby', 'approve-reason');
+    var reason = el('p', 'meta', (m.blockers.length ? 'Resolve ' + plural(m.blockers.length, 'blocker') + ' first. ' : '') + 'Publication approval is not a workflow action yet. Gate: ' + (m.gate.status || 'not checked') + '.' + (m.gate.humanApprovalAvailable ? '' : ' Human approval is not available.'));
+    reason.id = 'approve-reason';
+    add(gate, approve, reason);
+    side.appendChild(gate);
+
+    add(side, tracePanel(m, j, sel));
 
     var ver = el('div', 'panel-sec');
     add(ver, el('h3', null, 'Verification'), el('p', 'meta', 'Content ' + (m.verification.contentVerdict || 'not run') + ' · publication ' + (m.verification.publicationVerdict || 'not run')));
@@ -1465,6 +1533,9 @@
     if (m.verification.checks.length) ver.appendChild(vl);
     else add(ver, el('p', 'meta', 'No checks recorded.'));
     side.appendChild(ver);
+    var files = el('div', 'panel-sec');
+    add(files, el('h3', null, 'Files'), copyMarkdown(m, true));
+    side.appendChild(files);
     return side;
   }
   function reviewPage(m, j) {
@@ -1482,12 +1553,26 @@
     canvas.id = 'doc';
     var page = el('div', 'page');
     var used = {};
+    var refInfo = memoRefs(m);
+    review.order = [];
     if (md.state === 'ready') {
       page.appendChild(renderMarkdown(md.text, {
-        memo: m, anchors: anchors, used: used, mode: review.mode, selected: sel,
+        memo: m, anchors: anchors, used: used, mode: review.mode, selected: sel, order: review.order,
+        refs: refInfo.refs, refTitles: refInfo.titles, subtitle: memoSubtitle(m, j),
         select: function (anchor) { review.selected = anchor; C.render(true); }
       }));
-      add(page, el('p', 'doc-meta', memoMeta(m, j)));
+      if (refInfo.list.length) {
+        var notes = el('section');
+        var ol = el('ol', 'endnotes');
+        refInfo.list.forEach(function (s, i) {
+          var li = el('li');
+          li.id = 'src-' + (i + 1);
+          add(li, s.url ? C.externalLink(s.url, s.title) : document.createTextNode(s.title), el('span', 'meta', [s.publisher, s.reviewStatus === 'provisional' ? 'provisional' : ''].filter(Boolean).join(' · ')));
+          ol.appendChild(li);
+        });
+        add(notes, el('h4', null, 'Sources'), ol);
+        page.firstChild.appendChild(notes);
+      }
     } else if (md.state === 'loading') {
       var wait = el('div', 'doc-empty');
       add(wait, el('p', null, 'Loading the memo text…'));
@@ -1526,13 +1611,24 @@
     var out = (j.brief.scope && j.brief.scope.requestedOutput) || 'memo';
     var bar = el('div', 'output-bar');
     var tabs = el('div', 'view-tabs');
-    var tab = el('button', 'view-tab', capital(out));
+    var tab = el('button', 'view-tab', capital(out) + ' ');
     tab.type = 'button';
     tab.setAttribute('role', 'tab');
     tab.setAttribute('aria-selected', 'true');
+    if (m.blockers.length) add(tab, el('span', 'tab-count hot', plural(m.blockers.length, 'blocker')));
     tabs.setAttribute('role', 'tablist');
-    tabs.setAttribute('aria-label', 'Requested output');
+    tabs.setAttribute('aria-label', 'Outputs');
     tabs.appendChild(tab);
+    [['Brief'], ['Assessment']].forEach(function (def) {
+      var off = el('button', 'view-tab is-off', def[0] + ' ');
+      off.type = 'button';
+      off.setAttribute('role', 'tab');
+      off.setAttribute('aria-selected', 'false');
+      off.setAttribute('aria-disabled', 'true');
+      off.tabIndex = -1;
+      add(off, el('span', 'tab-count', 'not written'));
+      tabs.appendChild(off);
+    });
     var modes = el('div', 'modes');
     modes.setAttribute('role', 'group');
     modes.setAttribute('aria-label', 'Show');
@@ -1553,12 +1649,32 @@
       add(old, el('span', null, 'Out of date: written from round ' + (m.roundIndex || '?') + '. Round ' + m.currentRound + ' is newer.'), C.linkButton('Go to round ' + m.currentRound, function () { C.go({ tab: 'synthesis', round: m.currentRound }); }));
       frag.appendChild(old);
     }
-    add(frag, add(el('div', 'btn-row'), copyMarkdown(m)));
     frag.appendChild(reviewPage(m, j));
     return frag;
   }
+  C.reviewKey = function (e) {
+    var order = review.order || [];
+    if (e.key === 'Escape') {
+      if (review.selected) { review.selected = null; C.render(true); }
+      return;
+    }
+    var step = e.key === 'j' || e.key === 'J' ? 1 : e.key === 'k' || e.key === 'K' ? -1 : 0;
+    if (!step || !order.length) return;
+    e.preventDefault();
+    var at = -1;
+    order.forEach(function (a, i) { if (review.selected && a.text === review.selected.text && at < 0) at = i; });
+    var next = at < 0 ? (step > 0 ? 0 : order.length - 1) : Math.max(0, Math.min(order.length - 1, at + step));
+    review.selected = order[next];
+    C.render(true);
+    var node = document.querySelector('.page .claim[aria-pressed="true"]');
+    if (node && node.scrollIntoView) node.scrollIntoView({ block: 'nearest' });
+  };
 
   /* ----- Output: the memo read-only, versions and audit trail ----- */
+  var EVENT_LABELS = { 'scope.approved': 'Intent approved', 'discovery.completed': 'Leads collected', 'evidence.admission.approved': 'Source admitted', 'synthesis.build.recorded': 'Synthesis round recorded', 'memo.recorded': 'Memo written' };
+  function eventLabel(type) {
+    return EVENT_LABELS[type] || capital(String(type || '').replace(/\./g, ' ').replace(/[_-]+/g, ' ').trim());
+  }
   function outputWindow(m, j) {
     var frag = document.createDocumentFragment();
     var published = m.gate.status === 'published';
@@ -1566,7 +1682,7 @@
     var article = el('article', 'output-article');
     article.setAttribute('aria-label', 'Memo');
     var md = loadMarkdown(m);
-    if (md.state === 'ready') article.appendChild(renderMarkdown(md.text, { memo: m, anchors: null, used: {}, mode: 'text', selected: null }));
+    if (md.state === 'ready') article.appendChild(renderMarkdown(md.text, { memo: m, anchors: null, used: {}, mode: 'text', selected: null, judgements: true }));
     else add(article, el('p', 'meta', md.state === 'loading' ? 'Loading the memo text…' : 'The memo text could not be loaded. Open the memo record instead.'));
     var aside = el('aside', 'output-aside');
     aside.setAttribute('aria-label', 'Export, versions and audit');
@@ -1581,8 +1697,10 @@
     all.reverse().forEach(function (v, i) {
       var current = v.path === m.relPath;
       var li = el('li');
-      add(li, C.artifactLink(v.path, 'Memo from round ' + v.round, true), ' ', current ? el('span', 'mark attention', published ? 'Published' : 'Latest draft') : el('span', 'mark closed', 'Superseded'));
-      if (current) add(li, el('div', 'when', 'Written ' + when(m.createdAt)));
+      var label = el('strong');
+      label.appendChild(C.artifactLink(v.path, 'v' + (all.length - i), true));
+      add(li, label, ' ', current ? el('span', 'mark ' + (published ? 'done' : 'attention'), published ? 'Published' : 'Latest draft') : el('span', 'mark closed', 'Superseded'));
+      add(li, el('div', 'when', current ? 'Written ' + when(m.createdAt) + ' · round ' + v.round : 'Round ' + v.round));
       vl.appendChild(li);
     });
     if (!all.length) add(vl, add(el('li'), el('span', 'meta', 'Only the current memo record is available.')));
@@ -1596,12 +1714,12 @@
     var tl = el('ul', 'rows');
     events.slice(0, 8).forEach(function (e) {
       var li = el('li');
-      add(li, humanise(e.type), el('div', 'when', [when(e.at), e.actor ? 'by ' + e.actor : ''].filter(Boolean).join(' · ')));
+      add(li, eventLabel(e.type), el('div', 'when', [when(e.at), e.actor ? 'by ' + e.actor : ''].filter(Boolean).join(' · ')));
       tl.appendChild(li);
     });
     if (!events.length) add(tl, add(el('li'), el('span', 'meta', 'No events recorded.')));
     trail.appendChild(tl);
-    add(aside, status, versions, ran, trail);
+    add(aside, status, versions, trail, ran);
     add(layout, article, aside);
     frag.appendChild(layout);
     return frag;
