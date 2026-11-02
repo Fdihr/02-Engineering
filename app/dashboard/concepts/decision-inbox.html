@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Decisions · CTI workbench (concept 1)</title>
+  <!--
+    THESIS: The analyst's whole job is a short list of human decisions; run:next already knows them. One queue, one decision open at a time. Refuses the artefact-tree dashboard with tabs per stage.
+    OWN-WORLD: ECS "weather window". Night Sky top bar, white canvas, ruled rows, one Night Sky plate for the decision under review, marks plus words, one accent.
+    STORY: The analyst sees what waits for them, in run:next priority order (exceptions, intent, publication, governance), reads what confirming changes and what stays, and decides with a recorded reason. Machine work is visible but asks nothing.
+    FIRST VIEWPORT: Title and filters with counts; queue on the left (5 fr); plate with the open decision on the right (7 fr), its quote on a 1px white bar, then the "Confirming" sentence and the white primary action.
+    FORM: User-pinned concept 1 (Decision Inbox). List-detail staging. No seed.
+  -->
+  <script src="/concepts/concepts.js"></script>
+  <link rel="stylesheet" href="/design_system.css">
+  <link rel="stylesheet" href="/run_view.css">
+  <link rel="stylesheet" href="/concepts/concepts.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-left">
+        <div class="brand">
+          <img src="/assets/vestas/Vestas_White.svg" alt="Vestas">
+          <h1>CTI workbench</h1>
+        </div>
+        <nav class="topnav" aria-label="Main">
+          <a href="/concepts/decision-inbox.html" aria-current="page">Decisions <span class="n" id="nav-count">7</span></a>
+          <a href="/concepts/claim-trace.html">Memo review</a>
+        </nav>
+      </div>
+      <div class="topbar-actions">
+        <span class="signed">Signed in as <strong>FDIHR</strong></span>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Dark theme</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <div>
+        <h2>Decisions waiting for you</h2>
+        <p class="meta">Across 3 analyses. The workflow moves only when you decide. Concept with illustrative data.</p>
+      </div>
+      <div class="keys" aria-label="Keyboard shortcuts">
+        <span><kbd>J</kbd><kbd>K</kbd> next, previous</span>
+        <span><kbd>R</kbd> write a reason</span>
+      </div>
+    </div>
+
+    <div class="inbox">
+      <div>
+        <div class="filters" role="group" aria-label="Filter decisions" id="filters"></div>
+        <ul class="queue" id="queue" aria-label="Decisions"></ul>
+        <div class="empty-state" id="queue-empty" hidden>
+          <h3>Nothing in this view</h3>
+          <p>No decision of this kind is waiting. Choose another filter or All.</p>
+        </div>
+
+        <h3 class="group-head">Machine work <span class="meta">asks nothing of you</span></h3>
+        <div id="machine"></div>
+      </div>
+
+      <section class="detail" aria-live="polite" aria-labelledby="detail-title">
+        <div class="detail-body" id="detail"></div>
+      </section>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+  (function () {
+    var KINDS = [
+      { id: 'all', label: 'All' },
+      { id: 'exceptions', label: 'Exceptions' },
+      { id: 'intent', label: 'Intent' },
+      { id: 'publication', label: 'Publication' },
+      { id: 'governance', label: 'Governance' }
+    ];
+
+    var items = [
+      {
+        id: 'exc-anchor', kind: 'exceptions', kindLabel: 'Exception', run: 'qti-2026-q3', age: '2 h',
+        state: ['attention', 'Attention'],
+        title: 'Anchor no longer matches the source text',
+        raised: 'Raised by source assurance (measure) at 08:47',
+        quote: 'Operators observed repeated authentication attempts against remote-access gateways serving wind generation sites.',
+        confirm: 'Confirming re-anchors the extract to the publisher\u2019s current wording and keeps both versions on record. The admission decision stays; the source is re-checked before synthesis uses it.',
+        primary: 'Re-anchor to current text', secondary: 'Keep the original capture', danger: 'Withdraw this source',
+        facts: [
+          ['Source', 'Utility OT advisory, national CERT'],
+          ['Tier', 'Tier 2, official'],
+          ['Anchor', '<code>seg-014</code> bytes <span class="figures">2210\u20132388</span>'],
+          ['Retrieved', '<span class="figures">31 Oct 2026, 14:02</span> through Firecrawl, publisher kept'],
+          ['Policy', 'Geopolitical source assurance v4']
+        ],
+        evidenceTitle: 'What changed on the page',
+        evidence: '<p><span class="label">Captured 31 Oct</span>\u2026remote-access gateways serving <del>wind</del> generation sites.</p><p><span class="label">Publisher today</span>\u2026remote-access gateways serving <ins>renewable</ins> generation sites.</p>',
+        tech: 'command: measure:assurance\nexception: anchor_checksum_mismatch\nrun: runs/qti-2026-q3/assurance/nv-src-007/\nexpected sha256: 9f2c\u2026e41a\nobserved sha256: 1b07\u202680dd'
+      },
+      {
+        id: 'exc-redirect', kind: 'exceptions', kindLabel: 'Exception', run: 'qti-2026-q3', age: '5 h',
+        state: ['failed', 'Retrieval stopped'],
+        title: 'Publisher redirected to a different domain',
+        raised: 'Raised by source retrieval at 05:31',
+        quote: 'Requested: https://news.example-ministry.eu/press/2026/10/subsea-cable \u2192 redirected to https://www.example-gov.eu/newsroom/subsea-cable',
+        confirm: 'Confirming retrieves once from the new address and records it as a new lead under the same question. The original lead stays marked unresolved.',
+        primary: 'Retrieve from the new address', secondary: 'Mark as unavailable', danger: null,
+        facts: [
+          ['Lead', 'Ministry statement on subsea cable damage'],
+          ['Tier', 'Tier 2, official'],
+          ['Rule', 'Cross-origin redirects are refused without your approval'],
+          ['Budget', '<span class="figures">1</span> retrieval, <span class="figures">5</span> MiB limit']
+        ],
+        evidenceTitle: null, evidence: null,
+        tech: 'command: retrieve:source\noutcome: unresolved\nreason: cross_origin_redirect\nhttp: 301'
+      },
+      {
+        id: 'exc-conflict', kind: 'exceptions', kindLabel: 'Exception', run: 'qti-2026-q3', age: '1 d',
+        state: ['attention', 'Attention'],
+        title: 'Two admitted sources disagree on attribution',
+        raised: 'Raised by synthesis challenge, round 2',
+        quote: 'Source A attributes the intrusion to a state-linked group. Source B calls the attribution premature and cites no shared infrastructure.',
+        confirm: 'Confirming sends the disagreement to adjudication and holds key judgement 3 until it is settled. Both sources stay admitted.',
+        primary: 'Send to adjudication', secondary: 'Record as a stated disagreement', danger: null,
+        facts: [
+          ['Source A', 'Specialist security media, tier 3'],
+          ['Source B', 'National CERT bulletin, tier 2'],
+          ['Affects', 'Key judgement 3 in memo v3']
+        ],
+        evidenceTitle: 'The two passages',
+        evidence: '<p><span class="label">Source A</span>\u201cInvestigators linked the activity to a state-aligned cluster known for targeting European utilities.\u201d</p><p><span class="label">Source B</span>\u201cAttribution at this stage would be premature; no shared infrastructure has been identified.\u201d</p>',
+        tech: 'command: record:synthesis-challenge\nfinding: contradiction\nclaims: kj-3'
+      },
+      {
+        id: 'intent-nb', kind: 'intent', kindLabel: 'Intent', run: 'nordic-baltic-2026-11', age: '20 min',
+        state: ['', 'Waiting for you'],
+        title: 'Approve the question for Nordic and Baltic sabotage',
+        raised: 'Drafted by Maria L. at 10:28',
+        quote: 'How likely is physical or cyber sabotage against energy and logistics infrastructure in the Nordic and Baltic region to disrupt wind turbine transport or installation over the next six months?',
+        confirm: 'Confirming approves this scope and question as version 1 and lets bounded Seerist discovery run: 4 searches, up to 3 pages each, 1 Sep to 31 Oct 2026. Nothing is collected before you confirm.',
+        primary: 'Approve and start discovery', secondary: 'Ask for a revision', danger: 'Reject',
+        facts: [
+          ['Geography', 'Denmark, Sweden, Finland, Estonia, Latvia, Lithuania'],
+          ['Window', '<span class="figures">1 Sep \u2013 31 Oct 2026</span>'],
+          ['Audience', 'Vestas leadership'],
+          ['Lenses', 'Hybrid sabotage and logistics corridors; wind farm OT, SCADA and grid']
+        ],
+        evidenceTitle: null, evidence: null,
+        tech: 'command: approve:scope, then approve:question\nartefacts: runs/nordic-baltic-2026-11/intent/'
+      },
+      {
+        id: 'pub-q4', kind: 'publication', kindLabel: 'Publication', run: 'qti-2026-q3', age: '18 h',
+        state: ['attention', '2 blockers'],
+        title: 'Approve the Q4 Europe memo for publication',
+        raised: 'Memo v3 written at 16:20 yesterday',
+        quote: 'State-linked pre-positioning in European utility OT networks is likely to continue through Q1 2027; disruptive action against wind assets remains unlikely without a wider escalation.',
+        confirm: 'Publication is decided in memo review, where each claim shows its sources. Two blockers remain: one single-source key judgement and one provisional assurance.',
+        primary: 'Open memo review', href: '/concepts/claim-trace.html', secondary: null, danger: null,
+        facts: [
+          ['Memo', 'Europe cyber and geopolitical outlook, Q4 2026, v3'],
+          ['Claims', '<span class="figures">9</span>, of which <span class="figures">5</span> covered'],
+          ['Standard', 'Memo standard v1']
+        ],
+        evidenceTitle: null, evidence: null,
+        tech: 'gate: runs/qti-2026-q3/memo/publication-check.json'
+      },
+      {
+        id: 'gov-policy', kind: 'governance', kindLabel: 'Governance', run: 'all analyses', age: '2 d',
+        state: ['', 'Waiting for you'],
+        title: 'Approve source assurance requirements v4',
+        raised: 'Proposed by the assurance owner on 31 Oct',
+        quote: 'Adds: an official source must name its issuing body. Changes: social posts can support context only. Removes: nothing.',
+        confirm: 'Confirming makes v4 the active policy for new assurance attempts. Attempts already recorded under v3 keep their results.',
+        primary: 'Approve v4', secondary: 'Ask for a revision', danger: null,
+        facts: [
+          ['Replaces', 'Geopolitical source assurance v3'],
+          ['Affects', '<span class="figures">3</span> pending attempts in qti-2026-q3']
+        ],
+        evidenceTitle: null, evidence: null,
+        tech: 'command: approve:requirements\npolicy: geopolitical-source-assurance-v4.json'
+      },
+      {
+        id: 'gov-auth', kind: 'governance', kindLabel: 'Governance', run: 'qti-2026-q3', age: '2 d',
+        state: ['', 'Waiting for you'],
+        title: 'Authorise 3 source assurance attempts',
+        raised: 'Requested by run:next at 09:12',
+        quote: 'Utility OT advisory, national CERT. Ministry statement on subsea cable damage. Industry ISAC weekly summary.',
+        confirm: 'Confirming authorises one assurance attempt for each of the 3 admitted sources under the active policy. No other source is touched.',
+        primary: 'Authorise 3 attempts', secondary: 'Authorise later', danger: null,
+        facts: [
+          ['Policy', 'Active assurance policy at the time of the attempt'],
+          ['Model', 'One extract and one review per source']
+        ],
+        evidenceTitle: null, evidence: null,
+        tech: 'command: authorise:assurance-attempt'
+      }
+    ];
+
+    var machine = [
+      { title: 'Synthesis build, round 3', meta: 'qti-2026-q3 \u00b7 request prepared 09:41 \u00b7 waiting for a model answer', mark: ['running', 'Running'] },
+      { title: 'Seerist discovery', meta: 'nordic-baltic-2026-11 \u00b7 starts when you approve the question', mark: ['', 'Waiting'] },
+      { title: 'Memo writer v2', meta: 'qti-2026-q3 \u00b7 draft v3 written yesterday at 16:20', mark: ['covered', 'Finished'] }
+    ];
+
+    var filter = 'all';
+    var currentId = items[0].id;
+
+    var $ = function (id) { return document.getElementById(id); };
+    var esc = window.escapeHtml;
+    var visible = function () { return items.filter(function (i) { return filter === 'all' || i.kind === filter; }); };
+
+    function renderFilters() {
+      $('filters').innerHTML = KINDS.map(function (k) {
+        var n = k.id === 'all' ? items.length : items.filter(function (i) { return i.kind === k.id; }).length;
+        return '<button class="chip-btn" type="button" data-filter="' + k.id + '" aria-pressed="' + (filter === k.id) + '">' + k.label + '<span class="n">' + n + '</span></button>';
+      }).join('');
+      $('nav-count').textContent = items.length;
+    }
+
+    function renderQueue() {
+      var list = visible();
+      $('queue').innerHTML = list.map(function (i) {
+        return '<li data-id="' + i.id + '"><button class="queue-item" type="button" data-id="' + i.id + '" aria-current="' + (i.id === currentId) + '">' +
+          '<span class="q-title">' + esc(i.title) + '</span>' +
+          '<span class="q-age">' + esc(i.age) + '</span>' +
+          '<span class="q-meta"><span>' + esc(i.kindLabel) + '</span><span>' + esc(i.run) + '</span></span>' +
+          '<span class="q-state"><span class="mark ' + i.state[0] + '">' + esc(i.state[1]) + '</span></span>' +
+          '</button></li>';
+      }).join('');
+      $('queue').hidden = list.length === 0;
+      $('queue-empty').hidden = list.length !== 0 || items.length === 0;
+    }
+
+    function renderMachine() {
+      $('machine').innerHTML = machine.map(function (m) {
+        return '<div class="machine-row"><span class="title">' + esc(m.title) + '</span><span class="mark ' + m.mark[0] + '">' + esc(m.mark[1]) + '</span><span class="meta">' + esc(m.meta) + '</span></div>';
+      }).join('');
+    }
+
+    function renderDetail() {
+      var i = items.filter(function (x) { return x.id === currentId; })[0];
+      if (!i) {
+        $('detail').innerHTML = items.length === 0
+          ? '<div class="empty-state"><h3 id="detail-title">Nothing waits for you</h3><p>Every decision is made. Machine work continues on its own; new decisions appear here.</p></div>'
+          : '<div class="empty-state"><h3 id="detail-title">Choose a decision</h3><p>Select a row on the left, or press J.</p></div>';
+        return;
+      }
+      var primary = i.href
+        ? '<a class="btn-primary btn-link-primary" href="' + i.href + '">' + esc(i.primary) + '</a>'
+        : '<button class="btn-primary" type="button" data-act="primary">' + esc(i.primary) + '</button>';
+      var reason = i.href ? '' :
+        '<div class="reason-field"><label for="reason">Reason, recorded with your decision</label>' +
+        '<input id="reason" type="text" autocomplete="off" placeholder="For example: publisher edit is wording only">' +
+        '<div class="reason-error" id="reason-error" hidden>Add a reason first. It is stored with the decision and shown in the audit trail.</div></div>';
+      var html =
+        '<div class="plate">' +
+          '<div class="plate-kicker"><span class="mark ' + i.state[0] + '">' + esc(i.state[1]) + '</span><span>' + esc(i.kindLabel) + ' \u00b7 ' + esc(i.run) + '</span></div>' +
+          '<h3 class="plate-title" id="detail-title">' + esc(i.title) + '</h3>' +
+          '<div class="plate-meta">' + esc(i.raised) + '</div>' +
+          '<blockquote class="plate-quote">' + esc(i.quote) + '</blockquote>' +
+          '<p class="plate-confirm">' + esc(i.confirm) + '</p>' +
+          reason +
+          '<div class="btn-row">' + primary +
+            (i.secondary ? '<button class="btn-inverse" type="button" data-act="secondary">' + esc(i.secondary) + '</button>' : '') +
+            (i.danger ? '<button class="btn-inverse danger" type="button" data-act="danger">' + esc(i.danger) + '</button>' : '') +
+          '</div>' +
+        '</div>' +
+        '<section><div class="section-head"><h3>Facts</h3></div><dl class="facts">' +
+          i.facts.map(function (f) { return '<dt>' + f[0] + '</dt><dd>' + f[1] + '</dd>'; }).join('') +
+        '</dl></section>' +
+        (i.evidence ? '<section><div class="section-head"><h3>' + esc(i.evidenceTitle) + '</h3></div><div class="diff">' + i.evidence + '</div></section>' : '') +
+        '<details class="drawer"><summary>Technical details</summary><div class="drawer-body"><pre>' + esc(i.tech) + '</pre></div></details>';
+
+      var body = $('detail');
+      body.classList.add('swapping');
+      requestAnimationFrame(function () {
+        body.innerHTML = html;
+        requestAnimationFrame(function () { body.classList.remove('swapping'); });
+      });
+    }
+
+    function select(id) {
+      currentId = id;
+      renderQueue();
+      renderDetail();
+    }
+
+    function move(step) {
+      var list = visible();
+      if (!list.length) return;
+      var idx = list.map(function (x) { return x.id; }).indexOf(currentId);
+      var next = list[Math.max(0, Math.min(list.length - 1, idx + step))] || list[0];
+      select(next.id);
+      var btn = document.querySelector('.queue-item[data-id="' + next.id + '"]');
+      if (btn) btn.focus({ preventScroll: false });
+    }
+
+    function decide(act) {
+      var i = items.filter(function (x) { return x.id === currentId; })[0];
+      if (!i) return;
+      var field = $('reason');
+      if (field && !field.value.trim()) {
+        $('reason-error').hidden = false;
+        field.setAttribute('aria-invalid', 'true');
+        field.focus();
+        return;
+      }
+      var label = act === 'primary' ? i.primary : act === 'secondary' ? i.secondary : i.danger;
+      var list = visible();
+      var idx = list.indexOf(i);
+      var after = list[idx + 1] || list[idx - 1];
+      var row = document.querySelector('#queue li[data-id="' + i.id + '"]');
+      if (row) row.classList.add('leaving');
+      setTimeout(function () {
+        items = items.filter(function (x) { return x.id !== i.id; });
+        currentId = after ? after.id : null;
+        renderFilters();
+        renderQueue();
+        renderDetail();
+        window.showToast(label + ': done. Recorded as FDIHR.');
+      }, 320);
+    }
+
+    $('filters').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-filter]');
+      if (!b) return;
+      filter = b.getAttribute('data-filter');
+      var list = visible();
+      if (list.length && !list.some(function (x) { return x.id === currentId; })) currentId = list[0].id;
+      renderFilters();
+      renderQueue();
+      renderDetail();
+    });
+    $('queue').addEventListener('click', function (e) {
+      var b = e.target.closest('.queue-item');
+      if (b) select(b.getAttribute('data-id'));
+    });
+    $('detail').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-act]');
+      if (b) decide(b.getAttribute('data-act'));
+    });
+    $('detail').addEventListener('input', function (e) {
+      if (e.target.id === 'reason') { $('reason-error').hidden = true; e.target.removeAttribute('aria-invalid'); }
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.target.matches('input, textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === 'j') { e.preventDefault(); move(1); }
+      if (e.key === 'k') { e.preventDefault(); move(-1); }
+      if (e.key === 'r' && $('reason')) { e.preventDefault(); $('reason').focus(); }
+    });
+
+    renderFilters();
+    renderQueue();
+    renderMachine();
+    renderDetail();
+  })();
+  </script>
+</body>
+</html>
