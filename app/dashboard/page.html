@@ -19,15 +19,20 @@
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="topbar">
     <div class="topbar-inner">
-      <div class="brand">
-        <img src="/assets/vestas/Vestas_White.svg" alt="Vestas">
-        <h1>CTI workbench</h1>
+      <div class="brand-left">
+        <div class="brand">
+          <img src="/assets/vestas/Vestas_White.svg" alt="Vestas">
+          <h1>CTI workbench</h1>
+        </div>
+        <nav class="topnav" aria-label="Workbench">
+          <a href="#/home" id="nav-home">Home <span class="n" id="count-home"></span></a>
+          <a href="#/audit" id="nav-audit">Audit <span class="n" id="count-audit"></span></a>
+        </nav>
       </div>
       <div class="topbar-actions">
         <label class="shell-field" for="run-select">Analysis
           <select class="run-select" id="run-select"></select>
         </label>
-        <button class="theme-toggle" id="btn-new" type="button">New analysis</button>
         <label class="shell-field" for="analyst-id">Analyst
           <input class="shell-input" id="analyst-id" type="text" placeholder="Your ID" autocomplete="off" spellcheck="false">
         </label>
@@ -38,30 +43,18 @@
 
   <main id="main">
     <div class="run-head" id="run-head"><div class="empty">Loading analysis…</div></div>
-    <ol class="phasebar" id="phasebar" aria-label="Analysis progress"></ol>
 
-    <nav class="view-tabs" role="tablist" aria-label="Workspace">
-      <button class="view-tab" type="button" role="tab" id="tab-now" aria-controls="pane-now" aria-selected="true" data-tab="now">Now <span class="tab-count" id="count-now"></span></button>
-      <button class="view-tab" type="button" role="tab" id="tab-brief" aria-controls="pane-brief" aria-selected="false" tabindex="-1" data-tab="brief">Brief</button>
-      <button class="view-tab" type="button" role="tab" id="tab-sources" aria-controls="pane-sources" aria-selected="false" tabindex="-1" data-tab="sources">Sources <span class="tab-count" id="count-sources"></span></button>
-      <button class="view-tab" type="button" role="tab" id="tab-synthesis" aria-controls="pane-synthesis" aria-selected="false" tabindex="-1" data-tab="synthesis">Synthesis <span class="tab-count" id="count-synthesis"></span></button>
-      <button class="view-tab" type="button" role="tab" id="tab-memo" aria-controls="pane-memo" aria-selected="false" tabindex="-1" data-tab="memo">Memo <span class="tab-count" id="count-memo"></span></button>
-      <button class="view-tab" type="button" role="tab" id="tab-audit" aria-controls="pane-audit" aria-selected="false" tabindex="-1" data-tab="audit">Audit <span class="tab-count" id="count-audit"></span></button>
-    </nav>
+    <div class="tab-pane" id="pane-now"></div>
 
-    <div class="tab-pane" id="pane-now" role="tabpanel" aria-labelledby="tab-now"></div>
-
-    <div class="tab-pane" id="pane-brief" role="tabpanel" aria-labelledby="tab-brief" hidden>
+    <div class="tab-pane" id="pane-brief" hidden>
       <div id="brief-run"></div>
 
-      <div id="brief-new" hidden>
-        <div class="section-head"><h2>New analysis</h2><button class="btn-link" id="btn-cancel-new" type="button">Back to the current analysis</button></div>
-        <p class="meta prose">Frame the question and scope. Nothing is approved until you confirm the summary in the last step.</p>
-
-        <div class="brief-step">
-          <div class="brief-step-title">1. Working thesis or intelligence question</div>
-          <p class="meta">State the hypothesis to test, or the question to answer.</p>
-          <textarea class="thesis-box" id="in-question" aria-label="Working thesis or intelligence question"></textarea>
+      <form class="new-form" id="brief-new" hidden novalidate>
+        <div class="field">
+          <label for="in-question">Your question</label>
+          <p class="meta" id="question-hint">Ask it the way you would ask a colleague, or state the hypothesis to test.</p>
+          <textarea id="in-question" rows="4" required aria-describedby="question-hint question-error" placeholder="For example: how are state-linked actors targeting Nordic and Baltic energy infrastructure?"></textarea>
+          <div class="reason-error" id="question-error" hidden>Add your question first. The research plan is drafted from it.</div>
           <div class="chip-row">
             <span class="meta">Start from:</span>
             <button class="chip-btn" type="button" data-preset="europe">Europe cyber and geopolitical</button>
@@ -70,81 +63,80 @@
           </div>
         </div>
 
-        <div class="brief-step">
-          <div class="brief-step-title">2. Scope</div>
-          <div class="form-grid">
-            <div class="field"><label for="in-geo">Geographies (comma-separated)</label><input id="in-geo" type="text" value="Europe"></div>
-            <div class="field"><label for="in-from">From</label><input id="in-from" type="date"></div>
-            <div class="field"><label for="in-to">To</label><input id="in-to" type="date"></div>
-            <div class="field"><label for="in-audience">Audience</label><input id="in-audience" type="text" value="Vestas leadership"></div>
-            <div class="field">
-              <label for="in-output">Deliverable</label>
-              <select id="in-output"><option value="memo" selected>Intelligence memo</option><option value="brief">Executive brief</option><option value="assessment">Strategic assessment</option></select>
-            </div>
-            <div class="field">
-              <label for="in-run-id">Analysis ID</label>
-              <input id="in-run-id" type="text" spellcheck="false">
-              <span class="hint" id="run-id-hint">Letters, digits, dots, dashes. Must be new.</span>
-            </div>
+        <div class="field">
+          <label for="in-output">What you need back</label>
+          <p class="meta">Pick the form that fits how it will be used.</p>
+          <select id="in-output"><option value="memo" selected>Intelligence memo</option><option value="brief">Executive brief</option><option value="assessment">Strategic assessment</option></select>
+        </div>
+
+        <div class="field">
+          <label for="in-audience">Audience</label>
+          <p class="meta">Who will read the result.</p>
+          <input id="in-audience" type="text" autocomplete="off" value="Vestas leadership">
+        </div>
+
+        <div class="field">
+          <label for="in-geo">Geography</label>
+          <p class="meta">Countries or regions in scope, separated by commas.</p>
+          <input id="in-geo" type="text" autocomplete="off" value="Europe">
+        </div>
+
+        <fieldset class="field">
+          <legend>Time window</legend>
+          <p class="meta">The period the evidence should cover.</p>
+          <div class="date-pair">
+            <input id="in-from" type="date" aria-label="From">
+            <span class="meta">to</span>
+            <input id="in-to" type="date" aria-label="To">
           </div>
           <div class="chip-row">
-            <span class="meta">Window:</span>
             <button class="chip-btn" type="button" data-window-days="30">Last 30 days</button>
             <button class="chip-btn" type="button" data-window-days="60" aria-pressed="true">Last 2 months</button>
             <button class="chip-btn" type="button" data-window-days="90">Last 90 days</button>
           </div>
-        </div>
+        </fieldset>
 
-        <div class="brief-step">
-          <div class="brief-step-title">3. Vestas exposure lenses</div>
-          <p class="meta">Each lens adds an information requirement and Seerist searches.</p>
+        <fieldset class="field">
+          <legend>Vestas exposure lenses</legend>
+          <p class="meta">Each lens adds a research question and Seerist searches to the plan.</p>
           <div class="lens-grid">
             <label class="lens-item"><input type="checkbox" class="vestas-lens" value="ot" checked><span class="lens-label"><strong>Wind farm OT, SCADA and grid</strong><span>State-linked pre-positioning, utility OT intrusion, substation telemetry</span></span></label>
             <label class="lens-item"><input type="checkbox" class="vestas-lens" value="mfg" checked><span class="lens-label"><strong>Manufacturing and turbine assembly</strong><span>Ransomware or extortion disrupting industrial production</span></span></label>
             <label class="lens-item"><input type="checkbox" class="vestas-lens" value="supply" checked><span class="lens-label"><strong>OT vendor and software supply chain</strong><span>Compromised remote access, firmware, components or software</span></span></label>
             <label class="lens-item"><input type="checkbox" class="vestas-lens" value="hybrid" checked><span class="lens-label"><strong>Hybrid sabotage and logistics corridors</strong><span>Subsea cables, ports, rail and wind transport routes</span></span></label>
           </div>
+        </fieldset>
+
+        <div class="field">
+          <label for="in-run-id">Analysis ID</label>
+          <p class="meta">Letters, digits, dots and dashes. Must be new.</p>
+          <input id="in-run-id" type="text" spellcheck="false" autocomplete="off">
+          <span class="hint" id="run-id-hint"></span>
         </div>
 
-        <div class="brief-step">
-          <div class="brief-step-title">4. Generated plan</div>
-          <p class="meta">Built from your question, scope and lenses. Edit anything before review.</p>
-          <div class="form-grid">
-            <div class="field field-wide"><label for="in-irs">Information requirements (one per line)</label><textarea id="in-irs" rows="6"></textarea></div>
-            <div class="field field-wide"><label for="in-disc-queries">Seerist searches (one per line, 2–3 words work best)</label><textarea id="in-disc-queries" rows="4"></textarea></div>
-            <div class="field field-wide"><label for="in-disc-terms">Ranking terms (comma-separated)</label><input id="in-disc-terms" type="text"></div>
-            <div class="field"><label for="in-disc-score">Minimum lead score</label><input id="in-disc-score" type="number" min="1" max="20" value="4"></div>
-          </div>
-          <details class="drawer">
-            <summary>Scope wording</summary>
-            <div class="drawer-body form-grid">
-              <div class="field field-wide"><label for="in-purpose">Purpose</label><input id="in-purpose" type="text"></div>
-              <div class="field field-wide"><label for="in-topic">Threat topic</label><input id="in-topic" type="text"></div>
-              <div class="field field-wide"><label for="in-rationale">Why this matters to Vestas</label><textarea id="in-rationale"></textarea></div>
-            </div>
-          </details>
-          <div class="btn-row">
-            <button class="btn-primary" id="btn-review-intent" type="button">Review before approval</button>
-            <span class="meta fail" id="intent-problem"></span>
-          </div>
-        </div>
+        <p class="caution">Anything you leave to the plan is drafted as an assumption. You check every assumption in the next step before anything is collected.</p>
 
-        <section id="approval-review" hidden aria-labelledby="approval-title">
-          <div class="section-head"><h2 id="approval-title">5. You are approving</h2><button class="btn-link" id="btn-edit-intent" type="button">Edit</button></div>
-          <div id="approval-summary"></div>
-          <label class="check"><input type="checkbox" id="approve-confirm"> <span id="approve-confirm-text">I approve this scope, question and these requirements.</span></label>
-          <div class="btn-row">
-            <button class="btn-primary" id="btn-approve-collect" type="button" disabled>Approve and collect leads</button>
-            <button class="btn-secondary" id="btn-approve-only" type="button" disabled>Approve without collecting</button>
-          </div>
-        </section>
+        <div class="submit-row">
+          <button class="btn-primary" id="btn-propose" type="submit">Propose research plan</button>
+        </div>
+      </form>
+
+      <div id="brief-draft" hidden></div>
+
+      <div id="plan-store" hidden>
+        <textarea id="in-irs" aria-label="Research questions"></textarea>
+        <textarea id="in-disc-queries" aria-label="Seerist searches"></textarea>
+        <input id="in-disc-terms" type="text" aria-label="Ranking terms">
+        <input id="in-disc-score" type="number" min="1" max="20" value="4" aria-label="Minimum lead score">
+        <input id="in-purpose" type="text" aria-label="Purpose">
+        <input id="in-topic" type="text" aria-label="Threat topic">
+        <textarea id="in-rationale" aria-label="Why this matters to Vestas"></textarea>
       </div>
     </div>
-
-    <div class="tab-pane" id="pane-sources" role="tabpanel" aria-labelledby="tab-sources" hidden></div>
-    <div class="tab-pane" id="pane-synthesis" role="tabpanel" aria-labelledby="tab-synthesis" hidden></div>
-    <div class="tab-pane" id="pane-memo" role="tabpanel" aria-labelledby="tab-memo" hidden></div>
-    <div class="tab-pane" id="pane-audit" role="tabpanel" aria-labelledby="tab-audit" hidden></div>
+    <div class="tab-pane" id="pane-sources" hidden></div>
+    <div class="tab-pane" id="pane-synthesis" hidden></div>
+    <div class="tab-pane" id="pane-memo" hidden></div>
+    <div class="tab-pane" id="pane-audit" hidden></div>
   </main>
 
   <aside class="activity" id="activity" hidden aria-live="polite"></aside>

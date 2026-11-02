@@ -23,3 +23,15 @@ The workbench is organised around the analyst's job, not the artefact tree. `jou
 `POST /api/action` supports explicit intent approval for a new run, bounded Seerist discovery, candidate intake/retrieval, the analyst decisions and pasted AI answers for each stage, re-preparing a key-judgement or memo-writer request when the automatic chain did not, and `run:next`. These actions can write artifacts or make provider calls. They delegate validation and approval recording to the TypeScript commands; they do not automate the full analysis loop. Existing runs cannot be overwritten by intent submission. Partial command failures retain completed artifacts and must be inspected before retrying.
 
 Action requests require JSON and a local same-origin host. Keep the localhost binding. Artifact reads remain confined to the selected run, and scans are bounded. Source assurance still uses the documented interim review process; Vestas context ingestion and full model execution remain future work.
+
+
+## Navigation and demo run
+
+The page is a hash-routed shell: `#/home` (default), `#/new`, `#/intent`, `#/analysis/evidence`, `#/analysis/findings`, `#/review`, `#/output` and `#/audit`. Home lists the decisions waiting for you and the AI steps ready to run; run windows show the question and an activity strip. The static concepts in `concepts/` use their own frozen `concepts/legacy-run_view.css`.
+
+`make_demo_run.py` builds a synthetic run for viewing and testing the dashboard without Seerist or model calls (plus a sibling `-framed` run so the analysis list has two entries). It refuses to overwrite a directory that lacks its `.demo-run` marker.
+
+```powershell
+py -m dashboard.make_demo_run
+py -m dashboard.server "$env:TEMP\cti-demo-runs\demo-run" --port 4317
+```

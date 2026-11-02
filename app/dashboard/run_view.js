@@ -10,6 +10,7 @@
     busy: false,
     pendingRender: false,
     newMode: false,
+    draft: false,
     expanded: {},
     openRounds: {},
     drafts: {},
@@ -434,35 +435,54 @@
   }
 
   /* ---------- Navigation ---------- */
-  function selectTab(tab, focusTab) {
-    if (TABS.indexOf(tab) < 0) tab = 'now';
-    state.tab = tab;
-    TABS.forEach(function (name) {
-      var button = document.getElementById('tab-' + name);
-      var selected = name === tab;
-      button.setAttribute('aria-selected', selected ? 'true' : 'false');
-      button.tabIndex = selected ? 0 : -1;
-      document.getElementById('pane-' + name).hidden = !selected;
+  var ROUTES = {
+    'home': { pane: 'now' },
+    'new': { pane: 'brief', title: 'New analysis', sub: 'Nothing is collected until you approve the research plan.' },
+    'intent': { pane: 'brief', title: 'Intent review', run: true },
+    'analysis/evidence': { pane: 'sources', title: 'Evidence', run: true },
+    'analysis/findings': { pane: 'synthesis', title: 'Findings', run: true },
+    'review': { pane: 'memo', title: 'Publication review', run: true },
+    'output': { pane: 'memo', title: 'Output', run: true },
+    'audit': { pane: 'audit', title: 'Audit' }
+  };
+  var TAB_ROUTE = { now: 'home', brief: 'intent', sources: 'analysis/evidence', synthesis: 'analysis/findings', memo: 'review', audit: 'audit' };
+  function currentRoute() {
+    var route = (window.location.hash || '').replace(/^#\/?/, '');
+    return ROUTES[route] ? route : 'home';
+  }
+  function applyRoute() {
+    var route = currentRoute();
+    var previous = state.route;
+    state.route = route;
+    state.newMode = route === 'new';
+    if (route !== 'new' && route !== 'intent') state.draft = false;
+    state.tab = ROUTES[route].pane;
+    TABS.forEach(function (name) { document.getElementById('pane-' + name).hidden = name !== state.tab; });
+    document.getElementById('nav-home').setAttribute('aria-current', route === 'home' ? 'page' : 'false');
+    document.getElementById('nav-audit').setAttribute('aria-current', route === 'audit' ? 'page' : 'false');
+    if (route === 'new' && previous !== 'new' && window.CTI.startNew) window.CTI.startNew();
+    render(true);
+    var target = state.pendingScroll;
+    state.pendingScroll = null;
+    window.requestAnimationFrame(function () {
+      var id = target && (target.row ? 'src-' + target.row : target.round ? 'round-' + target.round : target.focus ? 'focus-' + target.focus : '');
+      var node = id ? document.getElementById(id) : null;
+      if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      else if (previous !== route) window.scrollTo({ top: 0 });
     });
-    if (focusTab) document.getElementById('tab-' + tab).focus();
-    var url = new URL(window.location.href);
-    url.hash = tab === 'now' ? '' : tab;
-    window.history.replaceState({}, '', url.toString());
+  }
+  function navigate(route, target) {
+    state.pendingScroll = target || null;
+    if (currentRoute() === route && (window.location.hash || '') === '#/' + route) return applyRoute();
+    window.location.hash = '#/' + route;
   }
   function go(target) {
     if (!target) return;
-    if (target.row) { state.expanded[target.row] = true; state.sourceFilter = 'all'; }
+    if (target.row) { state.expanded[target.row] = true; state.sourceFilter = 'all'; state.selectedSource = target.row; }
     if (target.round) state.openRounds[target.round] = true;
-    if (target.tab === 'brief') state.newMode = false;
-    selectTab(target.tab || 'now');
-    render(true);
-    window.requestAnimationFrame(function () {
-      var id = target.row ? 'src-' + target.row : target.round ? 'round-' + target.round : target.focus ? 'focus-' + target.focus : '';
-      var node = id ? document.getElementById(id) : null;
-      if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      else window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
+    navigate(TAB_ROUTE[target.tab || 'now'] || 'home', target);
   }
+  function selectTab(tab) { go({ tab: tab }); }
   function switchRun(runId) {
     if (!runId || runId === state.runId) return;
     state.runId = runId;
@@ -478,155 +498,192 @@
     refresh();
   }
 
-  /* ---------- Header, progress and counts ---------- */
-  var PHASE_WORDS = { done: ['reviewed', 'Done'], active: ['in-progress', 'In progress'], ready: ['pending', 'Ready'], stale: ['provisional', 'Out of date'], attention: ['failed', 'Needs attention'], todo: ['pending', 'Not started'] };
-  var PHASE_TARGET = { frame: { tab: 'brief' }, collect: { tab: 'brief', focus: 'collect' }, evidence: { tab: 'sources' }, assure: { tab: 'sources' }, synthesise: { tab: 'synthesis' }, memo: { tab: 'memo' } };
+  /* ---------- Run window header and activity strip ---------- */
+  var PHASE_LABEL = { frame: 'Intent', collect: 'Evidence', evidence: 'Evidence', assure: 'Evidence', synthesise: 'Findings', memo: 'Writing' };
+  var STAGES = [
+    { label: 'Intent', phases: ['frame'] },
+    { label: 'Evidence', phases: ['collect', 'evidence', 'assure'] },
+    { label: 'Findings', phases: ['synthesise'] },
+    { label: 'Writing', phases: ['memo'] },
+    { label: 'Publication', phases: [] }
+  ];
+  var LIVE = { active: 1, ready: 1, stale: 1, attention: 1 };
+  function stageStates(j) {
+    var byKey = {};
+    j.phases.forEach(function (p) { byKey[p.key] = p.state; });
+    return STAGES.map(function (stage) {
+      var states = stage.phases.map(function (k) { return byKey[k] || 'todo'; });
+      if (!stage.phases.length) {
+        var gate = j.memo && j.memo.gate;
+        if (!gate) return 'todo';
+        return gate.humanApprovalAvailable ? 'ready' : 'attention';
+      }
+      if (states.every(function (s) { return s === 'done'; })) return 'done';
+      return states.some(function (s) { return LIVE[s]; }) ? 'ready' : 'todo';
+    });
+  }
+  function renderStrip(j) {
+    var strip = el('div', 'activity-strip');
+    strip.setAttribute('role', 'group');
+    strip.setAttribute('aria-label', 'Analysis progress');
+    var states = stageStates(j);
+    var current = states.findIndex(function (s) { return s !== 'done'; });
+    var now = el('span', 'now');
+    var mine = j.queue.filter(function (q) { return q.actor === 'you'; })[0];
+    var next = mine || j.queue[0];
+    if (!next) {
+      add(now, el('span', 'mark done', 'Nothing is waiting'));
+    } else if (next.actor === 'you') {
+      add(now, el('span', 'mark attention', 'Waiting for you'), next.title);
+    } else {
+      add(now, el('span', 'ai-mark', 'AI step ready'), next.title);
+    }
+    var list = el('ol', 'stages');
+    STAGES.forEach(function (stage, i) {
+      var li = el('li');
+      if (i === current) li.setAttribute('aria-current', 'step');
+      var cls = states[i] === 'done' ? 'mark done' : states[i] === 'attention' ? 'mark attention' : i === current ? 'mark running' : 'mark';
+      add(li, el('span', cls, stage.label));
+      list.appendChild(li);
+    });
+    add(strip, now, list);
+    if (next) add(strip, add(el('span', 'yours'), linkButton(next.actor === 'you' ? 'Open your next step' : 'Open the AI step', function () { go(next.target); })));
+    return strip;
+  }
+  function renderDraftStrip() {
+    var strip = el('div', 'activity-strip');
+    strip.setAttribute('role', 'group');
+    strip.setAttribute('aria-label', 'Analysis progress');
+    add(strip, add(el('span', 'now'), el('span', 'mark attention', 'Waiting for you'), 'Research plan drafted. Nothing has been collected.'));
+    var list = el('ol', 'stages');
+    STAGES.forEach(function (stage, i) {
+      var li = el('li');
+      if (i === 0) li.setAttribute('aria-current', 'step');
+      add(li, el('span', i === 0 ? 'mark attention' : 'mark', stage.label));
+      list.appendChild(li);
+    });
+    add(strip, list, add(el('span', 'yours'), linkButton('Edit the question', function () { navigate('new'); })));
+    return strip;
+  }
   function renderHead() {
     var j = journey();
+    var route = state.route || currentRoute();
+    var def = ROUTES[route];
     var head = document.createDocumentFragment();
-    var q = j && j.brief.question;
+    if (route === 'home') return replace(document.getElementById('run-head'), head);
+    var crumb = el('a', 'parent-link', 'Home');
+    crumb.href = '#/home';
+    var title = el('div', 'page-head');
+    add(title, crumb, el('h2', null, def.title));
+    if (def.sub) add(title, el('div', 'meta', def.sub));
+    if (route === 'intent' && state.draft) {
+      var dq = document.getElementById('in-question').value.trim();
+      var dg = document.getElementById('in-geo').value.trim();
+      add(title, el('div', 'meta', ['Draft analysis ' + document.getElementById('in-run-id').value.trim(), dg, document.getElementById('in-audience').value.trim()].filter(Boolean).join(' · ') + '. Nothing has been collected.'));
+      head.appendChild(title);
+      add(head, el('p', 'question-line', dq || 'No question yet'), renderDraftStrip());
+      return replace(document.getElementById('run-head'), head);
+    }
     var scope = j && j.brief.scope;
-    add(head, el('div', 'meta', 'Analysis ' + state.runId));
-    add(head, el('h2', 'run-question', q ? q.question : 'No approved question yet'));
-    if (scope) {
-      var facts = el('div', 'run-facts');
-      [['Geographies', (scope.geographies || []).join(', ')], ['Window', (scope.from || '').slice(0, 10) + ' → ' + (scope.to || '').slice(0, 10)], ['Audience', scope.audience], ['Approved by', scope.approvedBy]].forEach(function (pair) {
-        if (!pair[1]) return;
-        var span = el('span');
-        add(span, pair[0] + ': ', el('strong', null, pair[1]));
-        facts.appendChild(span);
-      });
-      head.appendChild(facts);
+    var q = j && j.brief.question;
+    if (def.run) {
+      var bits = ['Analysis ' + state.runId];
+      if (scope) bits.push((scope.geographies || []).join(', '), (scope.from || '').slice(0, 10) + ' → ' + (scope.to || '').slice(0, 10), scope.audience);
+      add(title, el('div', 'meta', bits.filter(Boolean).join(' · ')));
+    }
+    head.appendChild(title);
+    if (def.run && j) {
+      add(head, el('p', 'question-line', q ? q.question : 'No approved question yet'), renderStrip(j));
     }
     replace(document.getElementById('run-head'), head);
-
-    var bar = document.createDocumentFragment();
-    (j ? j.phases : []).forEach(function (phase) {
-      var li = el('li', 'phase ' + phase.state);
-      var b = el('button');
-      b.type = 'button';
-      var word = PHASE_WORDS[phase.state] || ['pending', phase.state];
-      var waiting = [];
-      if (phase.waiting.you) waiting.push(phase.waiting.you + ' for you');
-      if (phase.waiting.ai) waiting.push(phase.waiting.ai + ' AI');
-      add(b, el('span', 'phase-label', phase.label), statusMark(word[0], word[1] + (waiting.length ? ' · ' + waiting.join(' · ') : '')), phase.summary ? el('span', 'phase-summary', phase.summary) : null);
-      b.addEventListener('click', function () { go(PHASE_TARGET[phase.key]); });
-      li.appendChild(b);
-      bar.appendChild(li);
-    });
-    replace(document.getElementById('phasebar'), bar);
-
-    function count(id, text, hot) {
-      var node = document.getElementById(id);
-      node.textContent = text;
-      node.className = 'tab-count' + (hot ? ' hot' : '');
-    }
+  }
+  function renderCounts() {
+    var j = journey();
     if (!j) return;
-    var actionRows = j.sources.filter(function (r) { return r.state === 'action'; }).length;
-    var roundWork = j.queue.filter(function (q) { return q.target.tab === 'synthesis'; }).length;
-    count('count-now', j.queue.length ? String(j.queue.length) : '', j.queue.length > 0);
-    count('count-sources', actionRows ? actionRows + ' / ' + j.sources.length : String(j.sources.length || ''), actionRows > 0);
-    count('count-synthesis', roundWork ? String(roundWork) : (j.rounds.length ? 'R' + j.rounds.length : ''), roundWork > 0);
-    count('count-memo', j.memo ? (j.memo.isCurrent ? 'draft' : 'out of date') : '', Boolean(j.memo && !j.memo.isCurrent));
-    var openEx = (state.view.counts && state.view.counts.openExceptions) || 0;
-    count('count-audit', openEx ? String(openEx) : '', openEx > 0);
+    function count(id, n) { document.getElementById(id).textContent = n ? String(n) : ''; }
+    count('count-home', j.queue.filter(function (q) { return q.actor === 'you'; }).length);
+    count('count-audit', (state.view.counts && state.view.counts.openExceptions) || 0);
   }
 
-  /* ---------- Now ---------- */
-  var PHASE_LABEL = { frame: 'Frame', collect: 'Collect', evidence: 'Admit evidence', assure: 'Assure sources', synthesise: 'Synthesise', memo: 'Memo' };
+  /* ---------- Home ---------- */
+  function queueList(items) {
+    var list = el('ul', 'queue');
+    items.forEach(function (item) {
+      var li = el('li');
+      var b = el('button', 'queue-item');
+      b.type = 'button';
+      add(b, el('span', 'title', item.title), item.actor === 'you' ? el('span', 'mark attention', 'Waiting for you') : el('span', 'ai-mark', 'AI step ready'), el('span', 'meta', (PHASE_LABEL[item.phase] || '') + ' · ' + item.detail));
+      b.addEventListener('click', function () { go(item.target); });
+      li.appendChild(b);
+      list.appendChild(li);
+    });
+    return list;
+  }
   function renderNow() {
     var j = journey();
     var pane = document.createDocumentFragment();
-    if (!j) { add(pane, el('div', 'empty', 'Loading…')); return replace(document.getElementById('pane-now'), pane); }
-    var split = el('div', 'split');
-    var left = el('div');
-    var right = el('div');
+    var host = document.getElementById('pane-now');
+    if (!j) { add(pane, el('div', 'empty', 'Loading…')); return replace(host, pane); }
+    var q = j.brief.question;
+    var head = el('div', 'page-head home-head');
+    var titleBox = el('div');
+    add(titleBox, el('div', 'meta', 'Analysis ' + state.runId), el('h2', null, q ? q.question : 'No approved question yet'));
+    var newBtn = el('button', 'btn-primary', 'New analysis');
+    newBtn.type = 'button';
+    newBtn.addEventListener('click', function () { navigate('new'); });
+    add(head, titleBox, newBtn);
+    pane.appendChild(head);
 
-    if (j.queue.length) {
-      var first = j.queue[0];
+    var mine = j.queue.filter(function (i) { return i.actor === 'you'; });
+    var ai = j.queue.filter(function (i) { return i.actor === 'ai'; });
+    var first = mine[0] || ai[0];
+    if (first) {
       var plate = el('section', 'plate');
       plate.setAttribute('aria-labelledby', 'next-title');
       var kicker = el('div', 'plate-kicker');
-      add(kicker, actorMark(first.actor), 'Up next · ' + PHASE_LABEL[first.phase]);
+      add(kicker, actorMark(first.actor), 'Up next · ' + (PHASE_LABEL[first.phase] || ''));
       var title = el('h2', null, first.title);
       title.id = 'next-title';
-      var go1 = el('button', 'btn-primary', first.actor === 'ai' ? 'Open the AI step' : 'Open');
-      go1.type = 'button';
-      go1.addEventListener('click', function () { go(first.target); });
-      add(plate, kicker, title, el('div', 'meta', first.detail), add(el('div', 'btn-row'), go1));
-      left.appendChild(plate);
-      if (j.queue.length > 1) {
-        var also = el('section');
-        add(also, sectionHead('Also waiting (' + (j.queue.length - 1) + ')'));
-        var list = el('ul', 'rows');
-        j.queue.slice(1).forEach(function (item) {
-          var li = el('li', 'queue-row');
-          add(li, actorMark(item.actor), el('span', 'title', item.title), linkButton('Open', function () { go(item.target); }), el('span', 'meta', PHASE_LABEL[item.phase] + ' · ' + item.detail));
-          list.appendChild(li);
-        });
-        also.appendChild(list);
-        left.appendChild(also);
-      }
-    } else {
-      var idle = el('section');
-      add(idle, sectionHead('Nothing is waiting on you'), el('p', 'meta prose', 'Every started step is complete. Choose what to do next.'));
-      left.appendChild(idle);
+      var open = el('button', 'btn-primary', first.actor === 'ai' ? 'Open the AI step' : 'Open');
+      open.type = 'button';
+      open.addEventListener('click', function () { go(first.target); });
+      add(plate, kicker, title, el('div', 'meta', first.detail), add(el('div', 'btn-row'), open));
+      pane.appendChild(plate);
     }
+    if (mine.length) add(pane, add(el('h3', 'group-head'), 'Decisions waiting for you', el('span', 'meta', String(mine.length))), queueList(mine));
+    if (ai.length) add(pane, add(el('h3', 'group-head'), 'AI steps ready to run', el('span', 'meta', String(ai.length))), queueList(ai));
+    if (!first) add(pane, add(el('div', 'empty-state'), el('h3', null, 'Nothing is waiting'), el('p', null, 'Every started step is complete. Open an analysis step or start a new analysis.')));
     if (j.suggestions.length) {
-      var sug = el('section');
-      add(sug, sectionHead(j.queue.length ? 'When that is done' : 'Next options'));
-      var sl = el('ul', 'rows');
+      add(pane, add(el('h3', 'group-head'), 'Next options'));
+      var sug = el('ul', 'queue');
       j.suggestions.forEach(function (s) {
-        var li = el('li', 'queue-row');
-        add(li, el('span'), el('span', 'title', s.title), linkButton('Open', function () { go(s.target); }), el('span', 'meta', s.detail));
-        sl.appendChild(li);
+        var li = el('li');
+        var b = el('button', 'queue-item');
+        b.type = 'button';
+        add(b, el('span', 'title', s.title), el('span', 'meta', s.detail));
+        b.addEventListener('click', function () { go(s.target); });
+        li.appendChild(b);
+        sug.appendChild(li);
       });
-      sug.appendChild(sl);
-      left.appendChild(sug);
+      pane.appendChild(sug);
     }
 
-    var progress = el('section');
-    add(progress, sectionHead('Evidence funnel', 'h2'));
-    var funnel = el('p', 'funnel');
-    j.funnel.forEach(function (f, idx) {
-      if (idx) add(funnel, el('span', 'arrow', '→'));
-      add(funnel, el('span', 'n', f.value), el('span', 'l', f.label.toLowerCase()));
-    });
-    add(progress, funnel, el('p', 'meta', 'Leads come from Seerist ranking. Only admitted, reviewed sources can support claims in the memo.'));
-    right.appendChild(progress);
-
-    var memoBox = el('section');
-    add(memoBox, sectionHead('Memo', 'h2', j.memo ? linkButton('Read', function () { go({ tab: 'memo' }); }) : null));
-    if (j.memo) {
-      var m = j.memo;
-      add(memoBox, statusMark(m.isCurrent ? 'reviewed' : 'provisional', m.isCurrent ? 'Current draft (round ' + m.roundIndex + ')' : 'Out of date: written from round ' + (m.roundIndex || '?') + ', latest is round ' + m.currentRound));
-      add(memoBox, el('div', 'meta', plural(m.keyJudgments.length, 'key judgement') + ' · ' + when(m.createdAt)));
-      if (m.blockers.length) add(memoBox, el('div', 'meta', 'Not publishable: ' + m.blockers.map(function (b) { return b.label.toLowerCase(); }).join('; ')));
-    } else {
-      add(memoBox, el('p', 'meta', 'No memo yet. It is written after the synthesis round and key-judgement selection.'));
-    }
-    right.appendChild(memoBox);
-
-    var recent = el('section');
-    add(recent, sectionHead('Recent activity', 'h2', linkButton('All events', function () { go({ tab: 'audit', focus: 'events' }); })));
-    var rl = el('ul', 'rows activity-list');
-    state.recent.forEach(function (r) {
+    var runs = (state.view.availableRuns || []).map(function (r) { return r.runId; });
+    if (runs.indexOf(state.runId) < 0) runs.unshift(state.runId);
+    add(pane, add(el('h3', 'group-head'), 'Analyses', el('span', 'meta', String(runs.length))));
+    var rl = el('ul', 'queue');
+    runs.forEach(function (id) {
       var li = el('li');
-      add(li, el('span', 'meta figures', when(r.at)), statusMark(r.ok ? 'reviewed' : 'failed', r.title));
+      var b = el('button', 'queue-item');
+      b.type = 'button';
+      var cur = id === state.runId;
+      add(b, el('span', 'title', id), cur ? el('span', 'mark covered', 'Open now') : el('span', 'meta', 'Open'));
+      b.addEventListener('click', function () { if (!cur) switchRun(id); });
+      li.appendChild(b);
       rl.appendChild(li);
     });
-    (state.view.events || []).slice(0, 8).forEach(function (ev) {
-      var li = el('li');
-      add(li, el('span', 'meta figures', when(ev.at)), el('span', null, capital(humanise(String(ev.type).replace(/\./g, ' '))) + (ev.actor === 'human' ? ' (you)' : '')));
-      rl.appendChild(li);
-    });
-    if (!rl.firstChild) add(rl, add(el('li'), el('span', 'meta', 'No activity yet.')));
-    recent.appendChild(rl);
-    right.appendChild(recent);
-
-    add(split, left, right);
-    pane.appendChild(split);
-    replace(document.getElementById('pane-now'), pane);
+    pane.appendChild(rl);
+    replace(host, pane);
   }
 
   /* Brief, Sources, Synthesis, Memo and Audit register themselves from run_panes.js. */
@@ -643,6 +700,7 @@
     state.pendingRender = false;
     syncRunSelect();
     renderHead();
+    renderCounts();
     renderNow();
     Object.keys(panes).forEach(function (name) { panes[name](); });
     setBusy(state.busy);
@@ -682,7 +740,7 @@
     analyst: analyst, journey: journey, statusMark: statusMark, actorMark: actorMark, lifecycle: lifecycle, artifactLink: artifactLink,
     linkButton: linkButton, actButton: actButton, setBlocked: setBlocked, sectionHead: sectionHead, kv: kv, externalLink: externalLink, bindDraft: bindDraft,
     dropDrafts: dropDrafts, field: field, selectInput: selectInput, textInput: textInput, openSheet: openSheet, viewArtifact: viewArtifact,
-    postAction: postAction, aiTask: aiTask, go: go, selectTab: selectTab, switchRun: switchRun, render: render, refresh: refresh, panes: panes,
+    postAction: postAction, aiTask: aiTask, go: go, navigate: navigate, selectTab: selectTab, switchRun: switchRun, render: render, refresh: refresh, panes: panes,
     STEP_MARK: STEP_MARK
   };
 
@@ -701,24 +759,7 @@
     });
 
     document.getElementById('run-select').addEventListener('change', function (e) { switchRun(e.target.value); });
-    document.getElementById('btn-new').addEventListener('click', function () {
-      state.newMode = true;
-      selectTab('brief');
-      render(true);
-      if (window.CTI.startNew) window.CTI.startNew();
-    });
-    TABS.forEach(function (name, idx) {
-      var tab = document.getElementById('tab-' + name);
-      tab.addEventListener('click', function () { if (name === 'brief') state.newMode = state.newMode && state.tab === 'brief'; selectTab(name); render(true); });
-      tab.addEventListener('keydown', function (e) {
-        var delta = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-        if (e.key === 'Home') { e.preventDefault(); selectTab(TABS[0], true); return; }
-        if (e.key === 'End') { e.preventDefault(); selectTab(TABS[TABS.length - 1], true); return; }
-        if (!delta) return;
-        e.preventDefault();
-        selectTab(TABS[(idx + delta + TABS.length) % TABS.length], true);
-      });
-    });
+    window.addEventListener('hashchange', applyRoute);
     document.getElementById('btn-close-sheet').addEventListener('click', closeSheet);
     document.getElementById('sheet-backdrop').addEventListener('click', closeSheet);
     document.getElementById('btn-copy-sheet').addEventListener('click', function () {
@@ -745,7 +786,12 @@
     syncTheme();
 
     if (window.CTI.initBrief) window.CTI.initBrief();
-    selectTab((window.location.hash || '').replace('#', '') || 'now');
+    state.route = currentRoute();
+    state.newMode = state.route === 'new';
+    state.tab = ROUTES[state.route].pane;
+    TABS.forEach(function (name) { document.getElementById('pane-' + name).hidden = name !== state.tab; });
+    document.getElementById('nav-home').setAttribute('aria-current', state.route === 'home' ? 'page' : 'false');
+    document.getElementById('nav-audit').setAttribute('aria-current', state.route === 'audit' ? 'page' : 'false');
     refresh();
     window.setInterval(function () { if (!document.hidden && !state.busy) refresh(); }, pollMs);
   });

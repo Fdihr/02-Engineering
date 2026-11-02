@@ -156,16 +156,6 @@
     suggestRunId(preset.slug);
     invalidateReview();
   }
-  function invalidateReview() {
-    $('approval-review').hidden = true;
-    $('approve-confirm').checked = false;
-    syncApproveButtons();
-  }
-  function syncApproveButtons() {
-    var enabled = $('approve-confirm').checked && !state.busy && Boolean(C.analyst());
-    $('btn-approve-collect').disabled = !enabled;
-    $('btn-approve-only').disabled = !enabled;
-  }
   function intentPayload(runDiscovery) {
     return {
       action: 'approve-intent',
@@ -188,52 +178,55 @@
     };
   }
   function lines(text) { return String(text || '').split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean); }
-  function reviewIntent() {
+  function invalidateReview() { state.drafts['intent:confirm'] = ''; }
+  function intentProblems() {
     var p = intentPayload(true);
     var irs = lines(p.requirements);
     var problems = [];
     if (!C.analyst()) problems.push('Enter your analyst ID in the top bar.');
     if (!p.question.trim()) problems.push('Write the question.');
     if (!validateRunId()) problems.push('Fix the analysis ID.');
-    if (!p.from || !p.to || p.from > p.to) problems.push('Set a valid window.');
-    if (!irs.length || irs.length > 24 || irs.some(function (l) { return l.length > 400; })) problems.push('Give 1–24 requirements of at most 400 characters.');
-    if (!p.purpose.trim() || !p.threatTopic.trim() || !p.rationale.trim()) problems.push('Complete the scope wording.');
-    $('intent-problem').textContent = problems.join(' ');
-    if (problems.length) return;
-    var summary = document.createDocumentFragment();
-    add(summary, C.kv([
-      ['Analysis ID', p.runId], ['Approver', C.analyst()], ['Question', p.question], ['Why it matters', p.rationale],
-      ['Purpose', p.purpose], ['Threat topic', p.threatTopic], ['Audience', p.audience], ['Geographies', p.geographies],
-      ['Window', p.from + ' → ' + p.to], ['Deliverable', $('in-output').selectedOptions[0].textContent]
-    ]));
-    add(summary, el('div', 'form-label', 'Information requirements (' + irs.length + ')'));
-    var ol = el('ol', 'approval-list');
-    irs.forEach(function (ir) { ol.appendChild(el('li', null, ir)); });
-    summary.appendChild(ol);
-    add(summary, el('div', 'form-label', 'Seerist collection if you choose “Approve and collect leads”'));
-    add(summary, C.kv([['Searches', lines(p.queries).join(' · ')], ['Ranking terms', p.rankingTerms], ['Minimum score', String(p.minimumScore)]]));
-    C.replace($('approval-summary'), summary);
-    $('approve-confirm-text').textContent = 'I, ' + C.analyst() + ', approve this scope, question and ' + plural(irs.length, 'requirement') + '.';
-    $('approval-review').hidden = false;
-    $('approve-confirm').checked = false;
-    syncApproveButtons();
-    $('approval-review').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!p.from || !p.to || p.from > p.to) problems.push('Set a valid time window.');
+    if (!irs.length || irs.length > 24 || irs.some(function (l) { return l.length > 400; })) problems.push('Give 1–24 research questions of at most 400 characters.');
+    if (!p.purpose.trim() || !p.threatTopic.trim() || !p.rationale.trim()) problems.push('Complete the purpose, threat topic and why it matters.');
+    return problems;
+  }
+  function irList() { var text = $('in-irs').value; return text ? text.split(/\r?\n/) : []; }
+  function setIrs(list) { $('in-irs').value = list.join('\n'); state.dirty['in-irs'] = true; invalidateReview(); }
+
+  function propose() {
+    var question = $('in-question');
+    if (!question.value.trim()) {
+      $('question-error').hidden = false;
+      question.setAttribute('aria-invalid', 'true');
+      question.focus();
+      return;
+    }
+    if (!$('in-from').value || !$('in-to').value) setWindow(60);
+    if (!$('in-run-id').value.trim()) suggestRunId('analysis');
+    syncDerivations();
+    draftEdit = { row: '', ir: -1, plan: false };
+    invalidateReview();
+    state.draft = true;
+    C.navigate('intent');
   }
   function approve(runDiscovery) {
     var payload = intentPayload(runDiscovery);
     C.postAction(payload, runDiscovery ? 'Approving and collecting leads' : 'Approving the analysis').then(function (data) {
       if (!data || !data.ok) return;
-      state.newMode = false;
+      state.draft = false;
       state.dirty = {};
       invalidateReview();
       $('in-question').value = '';
+      $('in-run-id').value = '';
       C.switchRun(data.runId || payload.runId);
-      C.go(runDiscovery ? { tab: 'sources', focus: 'leads' } : { tab: 'brief' });
+      C.go({ tab: 'sources', focus: 'leads' });
     });
   }
   C.startNew = function () {
-    if (!$('in-question').value.trim()) applyPreset('europe');
     if (!$('in-to').value) setWindow(60);
+    if (!$('in-question').value.trim()) { state.dirty = {}; syncDerivations(); }
+    if (!$('in-run-id').value.trim()) suggestRunId('analysis');
     validateRunId();
     $('in-question').focus();
   };
@@ -241,56 +234,301 @@
     setWindow(60);
     document.querySelectorAll('[data-preset]').forEach(function (b) { b.addEventListener('click', function () { applyPreset(b.getAttribute('data-preset')); }); });
     document.querySelectorAll('[data-window-days]').forEach(function (b) { b.addEventListener('click', function () { setWindow(Number(b.getAttribute('data-window-days'))); invalidateReview(); }); });
-    GENERATED.forEach(function (id) { $(id).addEventListener('input', function () { state.dirty[id] = true; }); });
-    $('in-question').addEventListener('input', syncDerivations);
+    $('in-question').addEventListener('input', function () {
+      $('question-error').hidden = true;
+      $('in-question').removeAttribute('aria-invalid');
+      syncDerivations();
+    });
     $('in-geo').addEventListener('input', syncDerivations);
     document.querySelectorAll('.vestas-lens').forEach(function (cb) { cb.addEventListener('change', syncDerivations); });
     $('in-run-id').addEventListener('input', validateRunId);
-    $('brief-new').addEventListener('input', function (e) { if (e.target.id !== 'approve-confirm') invalidateReview(); });
-    $('brief-new').addEventListener('change', function (e) { if (e.target.id !== 'approve-confirm') invalidateReview(); });
-    $('btn-review-intent').addEventListener('click', reviewIntent);
-    $('btn-edit-intent').addEventListener('click', function () { invalidateReview(); $('in-question').focus(); });
-    $('approve-confirm').addEventListener('change', syncApproveButtons);
-    $('btn-approve-collect').addEventListener('click', function () { approve(true); });
-    $('btn-approve-only').addEventListener('click', function () { approve(false); });
-    $('btn-cancel-new').addEventListener('click', function () { state.newMode = false; C.render(true); });
+    $('brief-new').addEventListener('input', invalidateReview);
+    $('brief-new').addEventListener('change', invalidateReview);
+    $('brief-new').addEventListener('submit', function (e) { e.preventDefault(); propose(); });
   };
 
-  C.panes.brief = function () {
+  /* ---------- Intent review: draft plan before approval ---------- */
+  var draftEdit = { row: '', ir: -1, plan: false };
+  var SCOPE_ROWS = [
+    { key: 'run', label: 'Analysis ID', ids: ['in-run-id'], kind: 'text' },
+    { key: 'purpose', label: 'Purpose', ids: ['in-purpose'], kind: 'text', why: 'Drafted from your question.' },
+    { key: 'audience', label: 'Audience', ids: ['in-audience'], kind: 'text' },
+    { key: 'geo', label: 'Geography', ids: ['in-geo'], kind: 'text' },
+    { key: 'window', label: 'Time window', ids: ['in-from', 'in-to'], kind: 'dates' },
+    { key: 'output', label: 'Deliverable', ids: ['in-output'], kind: 'output' },
+    { key: 'topic', label: 'Threat topic', ids: ['in-topic'], kind: 'text', why: 'Drafted from your question, geography and exposure lenses.' },
+    { key: 'rationale', label: 'Why it matters to Vestas', ids: ['in-rationale'], kind: 'text', why: 'Drafted from your geography and exposure lenses.' }
+  ];
+  function isAssumed(row) { return Boolean(row.why) && !row.ids.some(function (id) { return state.dirty[id]; }); }
+  function rowValue(row) {
+    if (row.kind === 'dates') return $('in-from').value + ' → ' + $('in-to').value;
+    if (row.kind === 'output') return $('in-output').selectedOptions[0].textContent;
+    return $(row.ids[0]).value;
+  }
+  function liveInput(source, cls) {
+    var input = el('input', cls);
+    input.type = source.type === 'date' ? 'date' : 'text';
+    input.value = source.value;
+    input.addEventListener('input', function () {
+      source.value = input.value;
+      state.dirty[source.id] = true;
+      invalidateReview();
+      if (source.id === 'in-run-id') validateRunId();
+    });
+    return input;
+  }
+  function scopeEditor(row) {
+    var wrap = el('div', 'row-edit');
+    if (row.kind === 'dates') {
+      var a = liveInput($('in-from'));
+      var b = liveInput($('in-to'));
+      a.setAttribute('aria-label', 'From');
+      b.setAttribute('aria-label', 'To');
+      add(wrap, a, el('span', 'meta', 'to'), b);
+    } else if (row.kind === 'output') {
+      var sel = el('select');
+      Array.prototype.forEach.call($('in-output').options, function (o) {
+        var opt = el('option', null, o.textContent);
+        opt.value = o.value;
+        opt.selected = o.value === $('in-output').value;
+        sel.appendChild(opt);
+      });
+      sel.setAttribute('aria-label', row.label);
+      sel.addEventListener('change', function () { $('in-output').value = sel.value; invalidateReview(); });
+      wrap.appendChild(sel);
+    } else {
+      var input = liveInput($(row.ids[0]));
+      input.setAttribute('aria-label', row.label);
+      wrap.appendChild(input);
+    }
+    return wrap;
+  }
+  function toggleLink(label, onClick) { return C.linkButton(label, onClick); }
+  function focusEditor() {
+    window.requestAnimationFrame(function () {
+      var node = $('brief-draft').querySelector('.row-edit input, .row-edit select, .row-edit textarea');
+      if (node) node.focus();
+    });
+  }
+  function scopeSection() {
+    var sec = el('section');
+    sec.setAttribute('aria-labelledby', 'h-scope');
+    var assumed = SCOPE_ROWS.filter(isAssumed).length;
+    var head = el('div', 'section-head');
+    var title = el('h3', null, 'Scope');
+    title.id = 'h-scope';
+    add(head, title, el('span', 'meta', assumed ? plural(assumed, 'row') + ' of ' + SCOPE_ROWS.length + (assumed === 1 ? ' is assumed' : ' are assumed') + '. Check ' + (assumed === 1 ? 'it' : 'them') + ' before you approve.' : 'Every row comes from you.'));
+    sec.appendChild(head);
+    var table = el('table', 'scope-table');
+    var thead = el('thead');
+    var hr = el('tr');
+    ['Field', 'Value', 'Origin', 'Action'].forEach(function (h) { hr.appendChild(el('th', null, h)); });
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    var tbody = el('tbody');
+    SCOPE_ROWS.forEach(function (row) {
+      var tr = el('tr');
+      var editing = draftEdit.row === row.key;
+      var th = el('th', null, row.label);
+      th.scope = 'row';
+      var value = el('td');
+      if (editing) {
+        value.appendChild(scopeEditor(row));
+      } else {
+        add(value, rowValue(row));
+        if (isAssumed(row)) add(value, el('p', 'meta', row.why));
+      }
+      var origin = el('td');
+      origin.appendChild(isAssumed(row) ? el('span', 'mark attention', 'Assumed') : el('span', 'mark covered', 'Stated by you'));
+      var act = el('td');
+      act.appendChild(toggleLink(editing ? 'Done' : 'Edit', function () {
+        draftEdit.row = editing ? '' : row.key;
+        renderDraft();
+        if (!editing) focusEditor();
+      }));
+      add(tr, th, value, origin, act);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    add(sec, add(el('div', 'table-wrap'), table));
+    return sec;
+  }
+  function questionsSection() {
+    var irs = irList();
+    var sec = el('section');
+    sec.setAttribute('aria-labelledby', 'h-rq');
+    var head = el('div', 'section-head');
+    var title = el('h3', null, 'Research questions');
+    title.id = 'h-rq';
+    add(head, title, add(el('span', 'meta'), add(el('span', 'figures'), String(lines(irs.join('\n')).length)), ' questions'));
+    sec.appendChild(head);
+    var list = el('ul', 'rows rq-list');
+    irs.forEach(function (text, i) {
+      var li = el('li');
+      var editing = draftEdit.ir === i;
+      var main = el('div');
+      if (editing) {
+        var wrap = el('div', 'row-edit');
+        var input = el('textarea');
+        input.rows = 2;
+        input.value = text;
+        input.setAttribute('aria-label', 'Research question ' + (i + 1));
+        input.addEventListener('input', function () { var next = irList(); next[i] = input.value; setIrs(next); });
+        wrap.appendChild(input);
+        main.appendChild(wrap);
+      } else {
+        main.appendChild(el('strong', null, text || 'Empty question'));
+      }
+      var actions = el('span', 'rq-actions');
+      add(actions, toggleLink(editing ? 'Done' : 'Edit', function () {
+        draftEdit.ir = editing ? -1 : i;
+        renderDraft();
+        if (!editing) focusEditor();
+      }), toggleLink('Remove', function () {
+        var next = irList();
+        next.splice(i, 1);
+        setIrs(next);
+        draftEdit.ir = -1;
+        renderDraft();
+      }));
+      add(li, main, actions);
+      list.appendChild(li);
+    });
+    sec.appendChild(list);
+    var addBtn = el('button', 'btn-secondary', 'Add a question');
+    addBtn.type = 'button';
+    addBtn.addEventListener('click', function () {
+      var next = irList();
+      next.push('');
+      setIrs(next);
+      draftEdit.ir = next.length - 1;
+      renderDraft();
+      focusEditor();
+    });
+    add(sec, add(el('p', 'rq-note'), addBtn), el('p', 'meta rq-note', 'Each question is one information requirement. Collection and evidence checks are scored against them.'));
+    return sec;
+  }
+  function searchesSection() {
+    var sec = el('section');
+    sec.setAttribute('aria-labelledby', 'h-search');
+    var head = el('div', 'section-head');
+    var title = el('h3', null, 'Seerist searches');
+    title.id = 'h-search';
+    var editing = draftEdit.plan;
+    add(head, title, toggleLink(editing ? 'Done' : 'Edit', function () { draftEdit.plan = !editing; renderDraft(); if (!editing) focusEditor(); }));
+    sec.appendChild(head);
+    var facts = el('dl', 'facts');
+    function fact(label, content) { add(facts, el('dt', null, label), add(el('dd'), content)); }
+    if (editing) {
+      var queries = el('textarea');
+      queries.rows = 4;
+      queries.value = $('in-disc-queries').value;
+      queries.setAttribute('aria-label', 'Seerist searches, one per line');
+      var terms = liveInput($('in-disc-terms'));
+      terms.setAttribute('aria-label', 'Ranking terms');
+      var score = el('input');
+      score.type = 'number';
+      score.min = '1';
+      score.max = '20';
+      score.value = $('in-disc-score').value;
+      score.setAttribute('aria-label', 'Minimum lead score');
+      queries.addEventListener('input', function () { $('in-disc-queries').value = queries.value; invalidateReview(); });
+      score.addEventListener('input', function () { $('in-disc-score').value = score.value; invalidateReview(); });
+      fact('Searches', add(el('div', 'row-edit'), queries, el('p', 'meta', 'One per line. Two or three words work best; Seerist treats words as AND.')));
+      fact('Ranking terms', add(el('div', 'row-edit'), terms));
+      fact('Minimum lead score', add(el('div', 'row-edit'), score));
+    } else {
+      var searches = el('ul', 'bullets');
+      lines($('in-disc-queries').value).forEach(function (q) { searches.appendChild(el('li', null, q)); });
+      fact('Searches', searches);
+      fact('Ranking terms', $('in-disc-terms').value);
+      fact('Minimum lead score', $('in-disc-score').value);
+    }
+    sec.appendChild(facts);
+    add(sec, el('p', 'meta rq-note', 'Runs only if you choose “Approve and collect leads”. Raw responses stay in the run folder and are not committed.'));
+    return sec;
+  }
+  function decisionPlate() {
+    var p = intentPayload(true);
+    var irs = lines(p.requirements);
+    var problems = intentProblems();
+    var plate = el('section', 'plate');
+    plate.setAttribute('aria-labelledby', 'h-decision');
+    var kicker = el('div', 'plate-kicker');
+    add(kicker, el('span', 'mark attention', 'Waiting for you'), el('span', null, 'Intent decision'));
+    var title = el('h3', 'plate-title', 'Approve the research plan');
+    title.id = 'h-decision';
+    add(plate, kicker, title, el('div', 'plate-meta', irs.length + ' research questions · ' + lines(p.queries).length + ' Seerist searches'));
+    add(plate, el('p', 'plate-confirm', 'Approving records the scope, question and research questions under your analyst ID. Nothing is collected unless you choose to collect leads.'));
+    if (problems.length) {
+      var list = el('ul', 'plate-problems');
+      problems.forEach(function (text) { list.appendChild(el('li', null, text)); });
+      plate.appendChild(list);
+    }
+    var confirm = el('input');
+    confirm.type = 'checkbox';
+    C.bindDraft(confirm, 'intent:confirm', false);
+    var label = el('label', 'check');
+    add(label, confirm, el('span', null, (C.analyst() ? 'I, ' + C.analyst() + ', approve' : 'I approve') + ' this scope, question and ' + plural(irs.length, 'research question') + '.'));
+    plate.appendChild(label);
+    var collect = C.actButton('Approve and collect leads', 'btn-primary', function () { approve(true); }, true, problems.length || !confirm.checked);
+    var only = C.actButton('Approve without collecting', 'btn-inverse', function () { approve(false); }, true, problems.length || !confirm.checked);
+    confirm.addEventListener('change', function () {
+      var blocked = intentProblems().length || !confirm.checked;
+      C.setBlocked(collect, blocked);
+      C.setBlocked(only, blocked);
+    });
+    add(plate, add(el('div', 'btn-row'), collect, only));
+    return plate;
+  }
+  function renderDraft() {
+    var host = $('brief-draft');
+    var frag = document.createDocumentFragment();
+    var layout = el('div', 'review');
+    var main = el('div', 'intent-main');
+    add(main, scopeSection(), questionsSection(), searchesSection());
+    var aside = el('aside', 'trace-pane plate-pane');
+    aside.setAttribute('aria-label', 'Intent decision');
+    aside.appendChild(decisionPlate());
+    add(layout, main, aside);
+    frag.appendChild(layout);
+    C.replace(host, frag);
+  }
+
+  /* ---------- Intent review: approved brief of an existing analysis ---------- */
+  function renderApproved() {
     var j = C.journey();
-    $('brief-new').hidden = !state.newMode;
-    $('brief-run').hidden = state.newMode;
-    syncApproveButtons();
-    if (state.newMode) { validateRunId(); return; }
     var host = $('brief-run');
     var frag = document.createDocumentFragment();
     if (!j || !j.brief.scope) {
       var none = el('section');
-      add(none, C.sectionHead('This analysis has no approved scope'), el('p', 'meta prose', 'Start a new analysis to frame a question, set the scope and approve the information requirements.'));
+      add(none, C.sectionHead('This analysis has no approved scope'), el('p', 'meta prose', 'Start a new analysis to frame a question, set the scope and approve the research questions.'));
       var start = el('button', 'btn-primary', 'Start a new analysis');
       start.type = 'button';
-      start.addEventListener('click', function () { $('btn-new').click(); });
+      start.addEventListener('click', function () { C.navigate('new'); });
       add(none, add(el('div', 'btn-row'), start));
       frag.appendChild(none);
       return C.replace(host, frag);
     }
     var b = j.brief;
-    var split = el('div', 'split');
-    var left = el('div');
-    var right = el('div');
+    var s = b.scope;
+    var layout = el('div', 'review');
+    var main = el('div', 'intent-main');
 
-    var q = el('section');
-    add(q, C.sectionHead('Research question', 'h2', b.question ? C.artifactLink(b.question.relPath, 'Approved record', true) : null));
-    if (b.question) {
-      add(q, el('p', 'prose', b.question.question), el('p', 'meta prose', b.question.rationale), el('div', 'meta', 'Approved by ' + (b.question.approvedBy || 'analyst')));
-    } else {
-      add(q, el('p', 'meta', 'No approved question.'));
-    }
-    left.appendChild(q);
+    var scope = el('section');
+    add(scope, C.sectionHead('Approved scope', 'h3', C.artifactLink(s.relPath, 'Approved record', true)));
+    add(scope, C.kv([
+      ['Purpose', s.purpose], ['Threat topic', s.threatTopic], ['Audience', s.audience], ['Geographies', (s.geographies || []).join(', ')],
+      ['Time window', (s.from || '').slice(0, 10) + ' → ' + (s.to || '').slice(0, 10)], ['Deliverable', capital(s.requestedOutput)],
+      ['Why it matters', b.question ? b.question.rationale : ''],
+      ['Approved', (s.approvedBy || '') + (s.approvedAt ? ' · ' + when(s.approvedAt) : '')]
+    ]));
+    scope.lastChild.className = 'facts';
+    main.appendChild(scope);
 
     var reqs = el('section');
     var latest = j.rounds.length ? j.rounds[j.rounds.length - 1].index : 0;
-    add(reqs, C.sectionHead('Information requirements', 'h2', el('span', 'meta', latest ? 'Coverage from synthesis round ' + latest : 'Coverage appears after the first synthesis round')));
+    add(reqs, C.sectionHead('Research questions', 'h3', el('span', 'meta', latest ? 'Coverage from synthesis round ' + latest : 'Coverage appears after the first synthesis round')));
     var list = el('ul', 'rows');
     b.requirements.forEach(function (r) {
       var li = el('li', 'queue-row');
@@ -298,22 +536,25 @@
       list.appendChild(li);
     });
     reqs.appendChild(list);
-    if (!b.requirements.length) add(reqs, el('p', 'meta prose', 'No approved information requirements. Extraction cannot be prepared until they are recorded (npm run approve:requirements).'));
-    left.appendChild(reqs);
+    if (!b.requirements.length) add(reqs, el('p', 'meta prose', 'No approved research questions. Extraction cannot be prepared until they are recorded (npm run approve:requirements).'));
+    main.appendChild(reqs);
 
-    var scope = el('section');
-    var s = b.scope;
-    add(scope, C.sectionHead('Approved scope', 'h2', C.artifactLink(s.relPath, 'Approved record', true)));
-    add(scope, C.kv([
-      ['Purpose', s.purpose], ['Threat topic', s.threatTopic], ['Audience', s.audience], ['Geographies', (s.geographies || []).join(', ')],
-      ['Window', (s.from || '').slice(0, 10) + ' → ' + (s.to || '').slice(0, 10)], ['Deliverable', capital(s.requestedOutput)],
-      ['Approved', (s.approvedBy || '') + (s.approvedAt ? ' · ' + when(s.approvedAt) : '')]
-    ]));
-    left.appendChild(scope);
+    var aside = el('aside', 'trace-pane');
+    aside.setAttribute('aria-label', 'Intent decision');
+    var done = el('div', 'caution is-done');
+    add(done, el('span', 'mark done', 'Approved'), el('span', null, (b.question ? 'Approved by ' + (b.question.approvedBy || 'analyst') + '. ' : '') + 'This brief is read-only.'));
+    aside.appendChild(done);
+    if (b.question) add(aside, el('p', 'meta', 'Question record: '), null);
+    if (b.question) aside.lastChild.appendChild(C.artifactLink(b.question.relPath, 'Approved record', true));
+    var nextStep = el('p', 'next-step');
+    var open = el('a', 'btn-primary', 'Open the evidence');
+    open.href = '#/analysis/evidence';
+    nextStep.appendChild(open);
+    aside.appendChild(nextStep);
 
     var collect = el('section');
     collect.id = 'focus-collect';
-    add(collect, C.sectionHead('Collect leads', 'h2'));
+    add(collect, C.sectionHead('Collect leads', 'h3'));
     if (b.discoveries.length) {
       var t = el('table');
       var head = el('tr');
@@ -340,16 +581,28 @@
     var form = el('div', 'form-grid');
     add(form, C.field('Searches (2–3 words each; Seerist treats words as AND)', queries, true), C.field('Ranking terms', terms, true), C.field('Minimum lead score', score));
     collect.appendChild(form);
-    var run = C.actButton('Run Seerist search', 'btn-primary', function () {
-      C.postAction({ action: 'discover-seerist', runId: state.runId, questionId: b.question.id, minimumScore: Number(score.value || 4), queries: queries.value, rankingTerms: terms.value })
+    var run = C.actButton('Run Seerist search', 'btn-secondary', function () {
+      C.postAction({ action: 'discover-seerist', runId: state.runId, questionId: (b.question || {}).id, minimumScore: Number(score.value || 4), queries: queries.value, rankingTerms: terms.value })
         .then(function (data) { if (data && data.ok) C.go({ tab: 'sources', focus: 'leads' }); });
     }, false, !b.question);
-    add(collect, add(el('div', 'btn-row'), run, el('span', 'meta', 'New leads are added to the Sources tab; nothing is pulled automatically.')));
-    right.appendChild(collect);
+    add(collect, add(el('div', 'btn-row'), run, el('span', 'meta', 'New leads are added to the Evidence window; nothing is pulled automatically.')));
+    aside.appendChild(collect);
 
-    add(split, left, right);
-    frag.appendChild(split);
+    add(layout, main, aside);
+    frag.appendChild(layout);
     C.replace(host, frag);
+  }
+
+  C.panes.brief = function () {
+    var route = state.route;
+    if (route !== 'new' && route !== 'intent') return;
+    var drafting = route === 'intent' && Boolean(state.draft);
+    $('brief-new').hidden = route !== 'new';
+    $('brief-draft').hidden = !drafting;
+    $('brief-run').hidden = route === 'new' || drafting;
+    if (route === 'new') { validateRunId(); return; }
+    if (drafting) return renderDraft();
+    renderApproved();
   };
 
   /* ================= Sources ================= */
@@ -557,24 +810,62 @@
   function sourceRow(row) {
     var li = el('li', 'source-row');
     li.id = 'src-' + row.id;
-    var open = Boolean(state.expanded[row.id]);
+    var open = state.selectedSource === row.id;
     var btn = el('button', 'source-summary');
     btn.type = 'button';
-    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) btn.setAttribute('aria-current', 'true');
     var left = el('div');
     var meta = [row.publisher, row.lead ? 'Seerist score ' + row.lead.score : 'added directly'].filter(Boolean).join(' · ');
-    add(left, el('div', 'source-title', row.title), el('div', 'meta', meta), C.lifecycle(row.steps));
+    add(left, el('div', 'source-title', row.title), el('div', 'meta', meta));
     var right = el('div', 'source-next');
-    add(right, nextMark(row), row.state === 'action' ? el('span', 'meta', row.current.detail) : null);
+    add(right, nextMark(row));
     add(btn, left, right);
-    btn.addEventListener('click', function () { state.expanded[row.id] = !open; C.render(true); });
+    btn.addEventListener('click', function () { state.selectedSource = row.id; C.render(true); });
     li.appendChild(btn);
-    if (open) {
-      var detail = el('div', 'source-detail');
-      add(detail, add(el('div', 'detail-grid'), actionPanel(row), sourceFacts(row)));
-      li.appendChild(detail);
-    }
     return li;
+  }
+  function sourceDetail(row) {
+    var d = el('section', 'detail');
+    d.id = 'detail-' + row.id;
+    add(d, C.sectionHead(row.title, 'h2'), el('p', 'meta', [row.publisher, row.lead && row.lead.providerTimestamp ? 'published ' + row.lead.providerTimestamp.slice(0, 10) : ''].filter(Boolean).join(' · ')));
+    add(d, el('h4', null, 'Next step'), actionPanel(row));
+    var quotes = [];
+    if (row.review && row.review.observations) {
+      row.review.observations.forEach(function (o) { if (o && o.quote) quotes.push({ quote: o.quote, note: o.attribution || '' }); });
+    }
+    if (quotes.length) add(d, el('h4', null, 'Quotes recorded in source review'), quoteList(quotes));
+    add(d, el('h4', null, 'Source facts'), sourceFacts(row));
+    return d;
+  }
+  function runNextButton() {
+    return C.actButton('Check next step', 'btn-secondary', function () { C.postAction({ action: 'run-next', runId: state.runId }); });
+  }
+  function analysisTabs(active, j) {
+    var bar = el('div', 'output-bar');
+    var nav = el('div', 'view-tabs');
+    nav.setAttribute('role', 'tablist');
+    [['sources', 'Evidence', j.sources.length], ['synthesis', 'Findings', j.rounds.length ? j.rounds[j.rounds.length - 1].claims.length : 0]].forEach(function (t) {
+      var b = el('button', 'view-tab', t[1] + ' ');
+      b.type = 'button';
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', active === t[0] ? 'true' : 'false');
+      add(b, el('span', 'tab-count', t[2]));
+      b.addEventListener('click', function () { if (active !== t[0]) C.go({ tab: t[0] }); });
+      nav.appendChild(b);
+    });
+    var tools = el('div', 'modes');
+    tools.title = 'Runs run:next, which takes a deterministic step if one exists. It never makes a human or model decision.';
+    add(tools, runNextButton());
+    add(bar, nav, tools);
+    return bar;
+  }
+  function publicationLink(j) {
+    if (!j.memo) return null;
+    var wrap = el('p', 'next-step');
+    var a = el('a', 'btn-secondary', 'Open publication review');
+    a.href = '#/review';
+    wrap.appendChild(a);
+    return wrap;
   }
   function leadsSection(j) {
     var sec = el('section');
@@ -664,28 +955,35 @@
     var counts = {};
     j.sources.forEach(function (r) { var c = category(r); counts[c] = (counts[c] || 0) + 1; });
     if (!state.sourceFilter || (state.sourceFilter === 'action' && !counts.action)) state.sourceFilter = counts.action ? 'action' : 'all';
+    var tabs = analysisTabs('sources', j);
     var sec = el('section');
-    var seg = el('div', 'segmented');
+    var seg = el('div', 'filters');
     seg.setAttribute('role', 'group');
     seg.setAttribute('aria-label', 'Source filter');
     SOURCE_FILTERS.forEach(function (def) {
       var n = def[0] === 'all' ? j.sources.length : (counts[def[0]] || 0);
-      var b = el('button', 'seg-btn', def[1] + ' ');
+      var b = el('button', 'chip-btn', def[1]);
       b.type = 'button';
       b.setAttribute('aria-pressed', state.sourceFilter === def[0] ? 'true' : 'false');
-      add(b, el('span', 'tab-count', n));
+      add(b, el('span', 'n', n));
       b.addEventListener('click', function () { state.sourceFilter = def[0]; C.render(true); });
       seg.appendChild(b);
     });
-    add(sec, C.sectionHead('Sources in the pipeline', 'h2', seg));
-    add(sec, el('p', 'meta prose', 'Each pulled lead moves through retrieval, an AI relevance check, your admission decision, AI extraction and your review before it can support a claim. Open a source to do its next step.'));
     var rows = j.sources.filter(function (r) { return state.sourceFilter === 'all' || category(r) === state.sourceFilter; });
-    if (!j.sources.length) add(sec, el('p', 'meta', 'Nothing pulled yet. Choose leads below.'));
-    else if (!rows.length) add(sec, el('p', 'meta', 'No sources in this view.'));
+    var selected = j.sources.filter(function (r) { return r.id === state.selectedSource; })[0];
+    if (!selected || (rows.length && rows.indexOf(selected) < 0)) selected = rows[0] || null;
+    state.selectedSource = selected ? selected.id : '';
+    var inbox = el('div', 'inbox');
+    var listCol = el('div');
+    add(listCol, seg);
+    if (!j.sources.length) add(listCol, el('p', 'meta', 'Nothing pulled yet. Choose leads below.'));
+    else if (!rows.length) add(listCol, el('p', 'meta', 'No sources in this view.'));
     var list = el('ul', 'rows');
     rows.forEach(function (row) { list.appendChild(sourceRow(row)); });
-    sec.appendChild(list);
-    frag.appendChild(sec);
+    listCol.appendChild(list);
+    add(inbox, listCol, selected ? sourceDetail(selected) : el('div'));
+    add(sec, C.sectionHead('Sources in the pipeline', 'h2'), el('p', 'meta prose', 'Each pulled lead moves through retrieval, an AI relevance check, your admission decision, AI extraction and your review before it can support a claim. Pick a source to do its next step.'), inbox);
+    add(frag, tabs, publicationLink(j), sec);
     frag.appendChild(leadsSection(j));
     C.replace(host, frag);
   };
@@ -817,11 +1115,60 @@
     body.appendChild(recs);
     return body;
   }
+  function coverageDot(disposition) {
+    var map = { covered: ['covered', 'Covered'], partial: ['partial', 'Partial'], gap: ['gap', 'No evidence'], silent: ['gap', 'No evidence'], contradicted: ['failed', 'Contradicted'] };
+    var entry = map[disposition] || ['unclear', 'Not assessed yet'];
+    return el('span', 'mark ' + entry[0], entry[1]);
+  }
+  function claimRow(claim) {
+    var li = el('li');
+    add(li, el('p', 'finding-text', claim.statement));
+    var marks = el('div', 'finding-marks');
+    add(marks, claimStatusMark(claim.status), el('span', 'meta', capital(claim.confidence || 'unknown') + ' confidence'), el('span', 'meta figures', plural(claim.noteIds.length, 'source')),
+      el('span', 'meta', claim.challenges.length ? plural(claim.challenges.length, 'challenge') + ' raised' : 'No challenges raised'));
+    li.appendChild(marks);
+    return li;
+  }
+  function claimGroups(j) {
+    var round = j.rounds[j.rounds.length - 1];
+    if (!round || !round.claims.length) return null;
+    var byId = {};
+    round.claims.forEach(function (c) { byId[c.claimId] = c; });
+    var selections = round.keyJudgements ? round.keyJudgements.selections : [];
+    var coverage = {};
+    round.coverage.forEach(function (c) { coverage[c.irId] = c.disposition; });
+    var placed = {};
+    var sec = el('section', 'finding-section');
+    add(sec, C.sectionHead('Claims by research question', 'h2', el('span', 'meta', 'Round ' + round.index + ' · ' + when(round.recordedAt))));
+    add(sec, el('p', 'meta prose', 'A claim is placed under a question only where the key-judgement selection links them. Other claims from the round follow.'));
+    j.brief.requirements.forEach(function (req) {
+      var claims = selections.filter(function (s) { return s.requirementId === req.irId && byId[s.claimId]; }).map(function (s) { placed[s.claimId] = true; return byId[s.claimId]; });
+      if (!claims.length && !coverage[req.irId]) return;
+      var group = el('div', 'finding-group');
+      add(group, C.sectionHead(req.text, 'h3', coverageDot(coverage[req.irId])), el('div', 'meta figures', req.irId));
+      var list = el('ul', 'rows');
+      claims.forEach(function (c) { list.appendChild(claimRow(c)); });
+      if (!claims.length) add(list, add(el('li'), el('span', 'meta', 'No claim selected for this question.')));
+      group.appendChild(list);
+      sec.appendChild(group);
+    });
+    var rest = round.claims.filter(function (c) { return !placed[c.claimId]; });
+    if (rest.length) {
+      var other = el('div', 'finding-group');
+      add(other, C.sectionHead(selections.length || round.coverage.length ? 'Other claims in this round' : 'Claims in this round', 'h3', el('span', 'meta', String(rest.length))));
+      var ol = el('ul', 'rows');
+      rest.forEach(function (c) { ol.appendChild(claimRow(c)); });
+      other.appendChild(ol);
+      sec.appendChild(other);
+    }
+    return sec;
+  }
   C.panes.synthesis = function () {
     var j = C.journey();
     var host = $('pane-synthesis');
     if (!j) return;
     var frag = document.createDocumentFragment();
+    add(frag, analysisTabs('synthesis', j), publicationLink(j));
     var r = j.readiness;
     var gate = el('section', 'gate');
     gate.id = 'focus-gate';
@@ -841,6 +1188,7 @@
       add(gate, add(el('div', 'btn-row'), build, !r.canBuild ? el('span', 'meta', 'Admit and review at least one source first.') : !primary ? el('span', 'meta', 'No new notes since the last round; a rebuild uses the same inputs.') : null));
     }
     frag.appendChild(gate);
+    add(frag, claimGroups(j));
 
     if (!j.rounds.length) {
       add(frag, el('p', 'meta', 'No synthesis round yet.'));
@@ -870,72 +1218,142 @@
   };
 
   /* ================= Memo ================= */
-  function trace(claimIds, memo) {
-    if (!claimIds.length) return null;
-    var det = el('details', 'trace');
-    var sourceCount = {};
-    claimIds.forEach(function (id) { ((memo.claims[id] || {}).sources || []).forEach(function (s) { sourceCount[s.noteId] = 1; }); });
-    add(det, el('summary', null, 'Evidence: ' + plural(claimIds.length, 'claim') + ', ' + plural(Object.keys(sourceCount).length, 'source')));
-    claimIds.forEach(function (id) {
-      var claim = memo.claims[id];
-      var box = el('div', 'trace-claim');
-      if (!claim) { add(box, el('div', 'meta', id + ' (not in the memo round)')); det.appendChild(box); return; }
-      add(box, el('div', null, claim.statement), el('div', 'meta', [claim.alias, capital(humanise(claim.kind)), (claim.confidence || 'unknown') + ' confidence', claim.status, claim.singleSource ? 'single source' : ''].filter(Boolean).join(' · ')));
-      claim.sources.forEach(function (s) {
-        var src = el('div');
-        add(src, s.url ? C.externalLink(s.url, s.title) : el('span', null, s.title), el('span', 'meta', ' · ' + (s.publisher || '') + (s.reviewStatus === 'provisional' ? ' · provisional' : '')));
-        box.appendChild(src);
-        if (s.quotes.length) box.appendChild(quoteList(s.quotes.map(function (q) { return { quote: q.quote, note: q.text }; })));
+  var MD_CACHE = {};
+  function loadMarkdown(memo) {
+    var key = state.runId + '|' + memo.markdownPath + '|' + memo.createdAt;
+    if (MD_CACHE[key]) return MD_CACHE[key];
+    var entry = MD_CACHE[key] = { state: 'loading', text: '' };
+    fetch('/api/artifact?run=' + encodeURIComponent(state.runId) + '&path=' + encodeURIComponent(memo.markdownPath)).then(function (res) {
+      if (!res.ok) throw new Error('Markdown not available');
+      return res.text();
+    }).then(function (text) { entry.state = 'ready'; entry.text = text; }, function () { entry.state = 'failed'; }).then(function () { C.render(false); });
+    return entry;
+  }
+  function inlineMarkdown(parent, text) {
+    var re = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*)/g;
+    var last = 0;
+    var m;
+    while ((m = re.exec(text))) {
+      if (m.index > last) parent.appendChild(document.createTextNode(text.slice(last, m.index)));
+      var tok = m[0];
+      if (tok.charAt(0) === '`') add(parent, el('code', null, tok.slice(1, -1)));
+      else if (tok.slice(0, 2) === '**') add(parent, el('strong', null, tok.slice(2, -2)));
+      else add(parent, el('em', null, tok.slice(1, -1)));
+      last = m.index + tok.length;
+    }
+    if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+  }
+  function memoAnchors(m) {
+    var list = [];
+    function push(text, claimIds, source) {
+      if (text && text.length > 12 && claimIds.length) list.push({ text: text, claimIds: claimIds, source: source });
+    }
+    ['bluf', 'keyJudgments', 'analysis', 'uncertainties', 'indicators'].forEach(function (k) { m[k].forEach(function (s) { push(s.text, s.claimIds, s); }); });
+    m.competing.forEach(function (c) { push(c.text, c.claimId ? [c.claimId] : [], c); });
+    Object.keys(m.claims).forEach(function (id) { push(m.claims[id].statement, [id], null); });
+    return list.sort(function (a, b) { return b.text.length - a.text.length; });
+  }
+  function splitByAnchors(text, anchors) {
+    var out = [];
+    var pos = 0;
+    for (;;) {
+      var best = null;
+      var bestAt = -1;
+      anchors.forEach(function (a) {
+        var at = text.indexOf(a.text, pos);
+        if (at >= 0 && (best === null || at < bestAt)) { best = a; bestAt = at; }
       });
-      det.appendChild(box);
+      if (!best) break;
+      if (bestAt > pos) out.push({ text: text.slice(pos, bestAt) });
+      out.push({ text: best.text, anchor: best });
+      pos = bestAt + best.text.length;
+    }
+    if (pos < text.length) out.push({ text: text.slice(pos) });
+    return out;
+  }
+  var CLAIM_RANK = { accepted: 0, contested: 2, rejected: 3 };
+  function anchorShade(anchor, m) {
+    var worst = 0;
+    anchor.claimIds.forEach(function (id) {
+      var status = (m.claims[id] || {}).status;
+      var rank = status in CLAIM_RANK ? CLAIM_RANK[status] : 1;
+      if (rank > worst) worst = rank;
     });
-    return det;
+    return worst === 3 ? 'shade-gap' : worst === 2 ? 'shade-partial' : worst === 1 ? 'shade-unclear' : '';
   }
-  function statementBlock(s, memo, showConfidence) {
-    var block = el('div', 'memo-stmt');
-    add(block, el('p', null, s.text));
-    var meta = [];
-    if (showConfidence && s.confidence) meta.push(capital(s.confidence) + ' confidence' + (s.ceiling && s.ceiling !== s.confidence ? ' (ceiling ' + s.ceiling + ')' : ''));
-    if (s.status && s.status !== 'accepted') meta.push(capital(s.status));
-    if (s.openChallengeIds.length) meta.push(plural(s.openChallengeIds.length, 'open challenge'));
-    if (meta.length) add(block, el('div', 'meta', meta.join(' · ')));
-    if (showConfidence && s.confidenceRationale) add(block, el('div', 'meta', s.confidenceRationale));
-    add(block, trace(s.claimIds, memo));
-    return block;
-  }
-  function memoSection(title, items, memo, showConfidence) {
-    if (!items.length) return null;
-    var sec = el('section', 'memo-section');
-    add(sec, el('h3', null, title));
-    items.forEach(function (s) { sec.appendChild(statementBlock(s, memo, showConfidence)); });
-    return sec;
-  }
-  C.panes.memo = function () {
-    var j = C.journey();
-    var host = $('pane-memo');
-    if (!j) return;
-    var frag = document.createDocumentFragment();
-    var m = j.memo;
-    if (!m) {
-      var none = el('section');
-      add(none, C.sectionHead('No memo yet'), el('p', 'meta prose', 'The memo is written by the AI memo writer from the key judgements you get at the end of a synthesis round. It only uses claims that came from admitted, reviewed sources.'));
-      add(none, add(el('div', 'btn-row'), C.linkButton('Go to synthesis', function () { C.go({ tab: 'synthesis' }); })));
-      frag.appendChild(none);
-      return C.replace(host, frag);
+  function renderMarkdown(text, ctx) {
+    var root = el('div', 'page-inner');
+    var container = root;
+    var para = [];
+    var list = null;
+    function fill(node, raw) {
+      (ctx.anchors ? splitByAnchors(raw, ctx.anchors) : [{ text: raw }]).forEach(function (seg) {
+        if (!seg.anchor) return inlineMarkdown(node, seg.text);
+        var anchor = seg.anchor;
+        ctx.used[anchor.claimIds.join(',')] = true;
+        var selected = ctx.selected && ctx.selected.text === anchor.text;
+        var btn = el('button', 'claim' + (ctx.mode === 'confidence' ? ' ' + anchorShade(anchor, ctx.memo) : ''));
+        btn.type = 'button';
+        btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
+        btn.addEventListener('click', function () { ctx.select(selected ? null : anchor); });
+        inlineMarkdown(btn, seg.text);
+        node.appendChild(btn);
+      });
     }
-    var banner = el('div', 'memo-banner');
-    if (!m.isCurrent) {
-      add(banner, el('span', null, 'Out of date: written from round ' + (m.roundIndex || '?') + '. Round ' + m.currentRound + ' is newer. Finish round ' + m.currentRound + ' to write a current memo.'), C.linkButton('Go to round ' + m.currentRound, function () { C.go({ tab: 'synthesis', round: m.currentRound }); }));
-    } else if (m.blockers.length) {
-      add(banner, el('span', null, 'Not for publication: ' + m.blockers.map(function (b) { return b.label.toLowerCase(); }).join('; ') + '. Fine to read and share internally as a draft.'));
-    } else {
-      banner.className = 'memo-banner dark-text';
-      add(banner, el('span', null, 'No publication blockers recorded.'));
+    function flush() {
+      if (para.length) { var p = el('p'); fill(p, para.join(' ')); container.appendChild(p); }
+      para = [];
+      if (list) {
+        var l = el(list.tag);
+        list.items.forEach(function (item) { var li = el('li'); fill(li, item); l.appendChild(li); });
+        container.appendChild(l);
+      }
+      list = null;
     }
-    frag.appendChild(banner);
-
+    text.replace(/\r\n?/g, '\n').split('\n').forEach(function (line) {
+      var h = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);
+      var li = /^\s*(?:([-*+])|\d+[.)])\s+(.*)$/.exec(line);
+      if (h) {
+        flush();
+        if (h[1].length === 1) add(root, el('h3', 'doc-title', h[2]));
+        else if (h[1].length === 2) { container = el('section'); add(container, el('h4', null, h[2])); root.appendChild(container); }
+        else add(container, el('h5', null, h[2]));
+      } else if (li) {
+        var tag = li[1] ? 'ul' : 'ol';
+        if (para.length || (list && list.tag !== tag)) flush();
+        if (!list) list = { tag: tag, items: [] };
+        list.items.push(li[2]);
+      } else if (!line.trim()) {
+        flush();
+      } else if (list && /^\s+\S/.test(line)) {
+        list.items[list.items.length - 1] += ' ' + line.trim();
+      } else {
+        if (list) flush();
+        para.push(line.trim());
+      }
+    });
+    flush();
+    return root;
+  }
+  function blockerRoute(code) {
+    return { OPEN_KEY_JUDGEMENT_CONTEST: ['analysis/findings', 'Open findings'], PROVISIONAL_SOURCE_LINEAGE: ['analysis/evidence', 'Open evidence'], LEGACY_SCOPE_LINEAGE_UNAVAILABLE: ['intent', 'Open intent'] }[code] || null;
+  }
+  function claimStatusMark(status) {
+    var kind = status === 'accepted' ? 'covered' : status === 'rejected' ? 'failed' : status === 'contested' ? 'partial' : 'unclear';
+    return el('span', 'mark ' + kind, status ? capital(status) : 'Not adjudicated');
+  }
+  function gateMark(gate) {
+    return el('span', 'mark ' + (gate.status === 'blocked' ? 'attention' : gate.status ? 'covered' : 'unclear'), gate.status ? capital(humanise(gate.status)) : 'Not checked');
+  }
+  function noMemo() {
+    var none = el('section');
+    add(none, C.sectionHead('No memo yet', 'h2'), el('p', 'meta prose', 'The memo is written by the AI memo writer from the key judgements you get at the end of a synthesis round. It only uses claims that came from admitted, reviewed sources.'));
+    add(none, add(el('div', 'btn-row'), C.linkButton('Go to findings', function () { C.navigate('analysis/findings'); })));
+    return none;
+  }
+  function copyMarkdown(m) {
     var tools = el('div', 'btn-row');
-    var copyStatus = el('span', 'meta');
+    var status = el('span', 'meta');
     var copy = el('button', 'btn-secondary', 'Copy as Markdown');
     copy.type = 'button';
     copy.addEventListener('click', function () {
@@ -943,82 +1361,247 @@
         if (!res.ok) throw new Error('Markdown not available');
         return res.text();
       }).then(function (text) {
-        return navigator.clipboard.writeText(text).then(function () { copyStatus.textContent = 'Copied.'; }, function () { C.openSheet('memo.md', text); });
-      }).catch(function (err) { copyStatus.textContent = err.message; });
+        return navigator.clipboard.writeText(text).then(function () { status.textContent = 'Copied.'; }, function () { C.openSheet('memo.md', text); });
+      }).catch(function (err) { status.textContent = err.message; });
     });
-    add(tools, copy, C.artifactLink(m.markdownPath, 'View memo.md', true), C.artifactLink(m.relPath, 'Memo record', true), copyStatus,
-      el('span', 'meta', 'Version ' + m.versions + ' · ' + when(m.createdAt) + ' · round ' + m.roundIndex));
-    frag.appendChild(tools);
-
-    var doc = el('article', 'memo-doc');
-    var q = j.brief.question;
+    add(tools, copy, C.artifactLink(m.markdownPath, 'View memo.md', true), C.artifactLink(m.relPath, 'Memo record', true), status);
+    return tools;
+  }
+  function memoMeta(m, j) {
     var scope = j.brief.scope || {};
-    add(doc, el('div', 'meta', 'Intelligence memo · ' + humanise(m.status) + ' · ' + humanise(m.reviewStatus) + ' sources' + (m.limitedEvidence ? ' · limited evidence' : '')));
-    add(doc, el('h2', null, q ? q.question : state.runId));
-    add(doc, el('div', 'run-facts', (scope.geographies || []).join(', ') + ' · ' + (scope.from || '').slice(0, 10) + ' → ' + (scope.to || '').slice(0, 10) + ' · for ' + (scope.audience || 'Vestas leadership')));
-    if (m.bluf.length) {
-      var bl = el('section', 'memo-section');
-      add(bl, el('h3', null, 'Bottom line'));
-      var blBox = el('div', 'memo-bluf');
-      m.bluf.forEach(function (s) { blBox.appendChild(statementBlock(s, m, false)); });
-      bl.appendChild(blBox);
-      doc.appendChild(bl);
+    return ['Memo version ' + m.versions, 'written ' + when(m.createdAt), 'from round ' + m.roundIndex, humanise(m.reviewStatus) + ' sources', m.limitedEvidence ? 'limited evidence' : '', 'for ' + (scope.audience || 'Vestas leadership')].filter(Boolean).join(' · ');
+  }
+
+  /* ----- Publication review: the memo as a page, claim trace in the side panel ----- */
+  var review = { mode: 'text', selected: null };
+  function tracePanel(m, j, sel) {
+    var sec = el('div', 'panel-sec');
+    if (!sel) {
+      add(sec, el('h3', null, 'Claim trace'), el('p', 'meta', 'Select an underlined claim in the text to see the claims, sources and challenges behind it.'));
+      return sec;
     }
-    add(doc,
-      memoSection('Key judgements', m.keyJudgments, m, true),
-      memoSection('Analysis', m.analysis, m, false));
-    if (m.competing.length) {
-      var ce = el('section', 'memo-section');
-      add(ce, el('h3', null, 'Competing explanations'));
-      m.competing.forEach(function (c) { ce.appendChild(statementBlock({ text: c.text, claimIds: c.claimId ? [c.claimId] : [], status: c.status, openChallengeIds: [] }, m, false)); });
-      doc.appendChild(ce);
-    }
-    add(doc, memoSection('Uncertainties', m.uncertainties, m, false), memoSection('Indicators to watch', m.indicators, m, false));
-    if (m.gaps.length) {
-      var gaps = el('section', 'memo-section');
-      add(gaps, el('h3', null, 'Intelligence gaps'));
-      var gl = el('ul', 'rows');
-      m.gaps.forEach(function (g) {
-        var li = el('li', 'queue-row');
-        add(li, el('span', 'figures meta', g.irId), el('span', null, g.text || g.irId), coverageMark(g.disposition));
-        gl.appendChild(li);
+    add(sec, el('h3', null, 'Claim trace'), el('p', 'panel-claim', sel.text));
+    var s = sel.source;
+    var marks = el('div', 'panel-marks');
+    if (s && s.status) marks.appendChild(claimStatusMark(s.status));
+    if (s && s.confidence) marks.appendChild(el('span', 'meta', capital(s.confidence) + ' confidence' + (s.ceiling && s.ceiling !== s.confidence ? ' (ceiling ' + s.ceiling + ')' : '')));
+    if (s && s.openChallengeIds && s.openChallengeIds.length) marks.appendChild(el('span', 'meta', plural(s.openChallengeIds.length, 'open challenge')));
+    sec.appendChild(marks);
+    if (s && s.confidenceRationale) add(sec, el('p', 'meta', s.confidenceRationale));
+    var round = j.rounds.filter(function (r) { return r.index === m.roundIndex; })[0];
+    sel.claimIds.forEach(function (id) {
+      var claim = m.claims[id];
+      var roundClaim = round ? round.claims.filter(function (c) { return c.claimId === id; })[0] : null;
+      var box = el('div', 'trace-claim');
+      if (!claim) { add(box, el('div', 'meta', id + ' is not in the memo round.')); sec.appendChild(box); return; }
+      add(box, el('div', null, claim.statement));
+      var line = el('div', 'panel-marks');
+      add(line, claimStatusMark(claim.status), el('span', 'meta', [claim.alias, capital(humanise(claim.kind)), (claim.confidence || 'unknown') + ' confidence', claim.singleSource ? 'single source' : ''].filter(Boolean).join(' · ')));
+      box.appendChild(line);
+      claim.sources.forEach(function (src) {
+        var row = el('div');
+        add(row, src.url ? C.externalLink(src.url, src.title) : el('span', null, src.title), el('span', 'meta', ' · ' + (src.publisher || '') + (src.reviewStatus === 'provisional' ? ' · provisional' : '')));
+        box.appendChild(row);
+        if (src.quotes.length) box.appendChild(quoteList(src.quotes.map(function (q) { return { quote: q.quote, note: q.text }; })));
       });
-      gaps.appendChild(gl);
-      doc.appendChild(gaps);
-    }
-    var src = el('section', 'memo-section');
-    add(src, el('h3', null, 'Sourcing'), el('p', null, m.sourcing.text));
-    if (m.sourcing.singleSourceDependent) add(src, el('p', 'meta', 'At least one judgement depends on a single source.'));
-    if (m.sourcing.dependencies.length) add(src, bullets(m.sourcing.dependencies));
-    doc.appendChild(src);
-    if (m.limitations.length) {
-      var lim = el('section', 'memo-section');
-      add(lim, el('h3', null, 'Limitations'), bullets(m.limitations));
-      doc.appendChild(lim);
-    }
-    var pub = el('section', 'memo-section');
-    add(pub, el('h3', null, 'Publication status'));
-    add(pub, C.statusMark(m.gate.status === 'blocked' ? 'provisional' : 'reviewed', m.gate.status === 'blocked' ? 'Blocked from publication' : capital(m.gate.status || 'not checked')));
-    var bl2 = el('ul', 'rows');
+      if (roundClaim && roundClaim.challenges.length) {
+        roundClaim.challenges.forEach(function (ch) { add(box, add(el('div', 'challenge'), el('div', 'meta', capital(humanise(ch.check)) + ': ' + ch.rationale))); });
+        if (round.adjudicationPath) box.appendChild(C.artifactLink(round.adjudicationPath, 'Adjudication record'));
+      } else if (roundClaim) add(box, el('div', 'meta', 'No challenges raised.'));
+      sec.appendChild(box);
+    });
+    return sec;
+  }
+  function reviewSide(m, j, sel) {
+    var side = el('div');
+    var gate = el('div', 'panel-sec');
+    add(gate, el('h3', null, 'Publication gate'), add(el('div', 'panel-marks'), gateMark(m.gate), el('span', 'meta', m.gate.humanApprovalAvailable ? 'Human approval is available.' : 'Human approval is not available.')));
+    var approve = el('button', 'btn-primary', 'Approve for publication');
+    approve.type = 'button';
+    approve.disabled = true;
+    approve.setAttribute('aria-describedby', 'approve-reason');
+    var reason = el('p', 'meta', 'Publication approval is not a workflow action yet. Gate: ' + (m.gate.status || 'not checked') + '.');
+    reason.id = 'approve-reason';
+    add(gate, approve, reason);
+    side.appendChild(gate);
+
+    var bl = el('div', 'panel-sec');
+    add(bl, el('h3', null, 'Blockers (' + m.blockers.length + ')'));
+    if (!m.blockers.length) add(bl, el('p', 'meta', 'No publication blockers recorded.'));
+    var bl2 = el('ul', 'rows-list');
     m.blockers.forEach(function (b) {
       var li = el('li');
-      add(li, el('div', null, b.label), el('div', 'meta', b.explanation || b.code));
+      var box = el('div', 'resolved-row');
+      var route = blockerRoute(b.code);
+      var text = el('div');
+      add(text, el('div', null, b.label), el('div', 'meta', b.explanation || b.code), route ? C.linkButton(route[1], function () { C.navigate(route[0]); }) : el('div', 'meta', 'Not resolved by a workflow action in this workbench.'));
+      add(box, el('span', 'mark attention', ''), text);
+      li.appendChild(box);
       bl2.appendChild(li);
     });
-    if (m.blockers.length) pub.appendChild(bl2);
-    if (m.verification.checks.length) {
-      var ver = el('details', 'trace');
-      add(ver, el('summary', null, 'Deterministic verification: content ' + (m.verification.contentVerdict || 'not run') + ' (' + plural(m.verification.checks.length, 'check') + ')'));
-      var vl = el('ul', 'rows');
-      m.verification.checks.forEach(function (c) {
-        vl.appendChild(add(el('li'), C.statusMark(c.status === 'pass' ? 'reviewed' : c.status === 'fail' ? 'failed' : 'pending', capital(humanise(c.check)) + ': ' + c.status)));
-      });
-      ver.appendChild(vl);
-      pub.appendChild(ver);
+    if (m.blockers.length) bl.appendChild(bl2);
+    side.appendChild(bl);
+
+    side.appendChild(tracePanel(m, j, sel));
+
+    var ver = el('div', 'panel-sec');
+    add(ver, el('h3', null, 'Verification'), el('p', 'meta', 'Content ' + (m.verification.contentVerdict || 'not run') + ' · publication ' + (m.verification.publicationVerdict || 'not run')));
+    var vl = el('ul', 'rows-list');
+    m.verification.checks.forEach(function (c) {
+      var kind = c.status === 'pass' ? 'covered' : c.status === 'fail' ? 'failed' : 'unclear';
+      add(vl, add(el('li'), add(el('div', 'resolved-row'), el('span', 'mark ' + kind, capital(c.status)), el('span', null, capital(humanise(c.check))))));
+    });
+    if (m.verification.checks.length) ver.appendChild(vl);
+    else add(ver, el('p', 'meta', 'No checks recorded.'));
+    side.appendChild(ver);
+    return side;
+  }
+  function reviewPage(m, j) {
+    var layout = el('div', 'doc-layout');
+    var left = el('div');
+    var anchors = memoAnchors(m);
+    var md = loadMarkdown(m);
+    var legend = el('p', 'legend');
+    if (review.mode === 'confidence') {
+      add(legend, el('span', 'mark covered', 'Accepted'), el('span', 'mark partial', 'Contested, shaded yellow'), el('span', 'mark failed', 'Rejected, shaded red'), el('span', 'mark unclear', 'Not adjudicated, dashed'));
+      left.appendChild(legend);
     }
-    doc.appendChild(pub);
-    frag.appendChild(doc);
-    C.replace(host, frag);
+    var sel = review.selected && anchors.filter(function (a) { return a.text === review.selected.text; })[0];
+    var canvas = el('div', 'doc-canvas');
+    canvas.id = 'doc';
+    var page = el('div', 'page');
+    var used = {};
+    if (md.state === 'ready') {
+      page.appendChild(renderMarkdown(md.text, {
+        memo: m, anchors: anchors, used: used, mode: review.mode, selected: sel,
+        select: function (anchor) { review.selected = anchor; C.render(true); }
+      }));
+      add(page, el('p', 'doc-meta', memoMeta(m, j)));
+    } else if (md.state === 'loading') {
+      var wait = el('div', 'doc-empty');
+      add(wait, el('p', null, 'Loading the memo text…'));
+      page.appendChild(wait);
+    } else {
+      add(page, add(el('div', 'doc-empty'), el('p', null, 'The memo text could not be loaded. The claims behind it are listed below.')));
+    }
+    canvas.appendChild(page);
+    left.appendChild(canvas);
+    var usedIds = {};
+    Object.keys(used).forEach(function (k) { k.split(',').forEach(function (id) { usedIds[id] = true; }); });
+    var loose = Object.keys(m.claims).filter(function (id) { return !usedIds[id]; });
+    if (loose.length) {
+      var more = el('section', 'analysis-block');
+      add(more, C.sectionHead('Claims not found in the text (' + loose.length + ')', 'h3'));
+      var rl = el('ul', 'rows-list');
+      loose.forEach(function (id) {
+        var claim = m.claims[id];
+        var b = el('button', 'row-btn');
+        b.type = 'button';
+        add(b, claimStatusMark(claim.status), el('span', null, claim.statement));
+        b.addEventListener('click', function () { review.selected = { text: claim.statement, claimIds: [id], source: null }; C.render(true); });
+        add(rl, add(el('li'), b));
+      });
+      add(more, rl);
+      left.appendChild(more);
+    }
+    var side = el('aside', 'side');
+    side.setAttribute('aria-label', 'Review panel');
+    side.appendChild(reviewSide(m, j, sel));
+    add(layout, left, side);
+    return layout;
+  }
+  function reviewWindow(m, j) {
+    var frag = document.createDocumentFragment();
+    var out = (j.brief.scope && j.brief.scope.requestedOutput) || 'memo';
+    var bar = el('div', 'output-bar');
+    var tabs = el('div', 'view-tabs');
+    var tab = el('button', 'view-tab', capital(out));
+    tab.type = 'button';
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-selected', 'true');
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-label', 'Requested output');
+    tabs.appendChild(tab);
+    var modes = el('div', 'modes');
+    modes.setAttribute('role', 'group');
+    modes.setAttribute('aria-label', 'Show');
+    var seg = el('div', 'segmented');
+    [['text', 'Text'], ['confidence', 'Confidence']].forEach(function (def) {
+      var b = el('button', 'seg-btn', def[1]);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', review.mode === def[0] ? 'true' : 'false');
+      b.addEventListener('click', function () { review.mode = def[0]; C.render(true); });
+      seg.appendChild(b);
+    });
+    add(modes, el('span', null, 'Show:'), seg);
+    add(bar, tabs, modes);
+    frag.appendChild(bar);
+    if (out !== 'memo') add(frag, el('p', 'meta prose', 'Requested output: ' + humanise(out) + '. This workflow only writes the memo.'));
+    if (!m.isCurrent) {
+      var old = el('div', 'memo-banner');
+      add(old, el('span', null, 'Out of date: written from round ' + (m.roundIndex || '?') + '. Round ' + m.currentRound + ' is newer.'), C.linkButton('Go to round ' + m.currentRound, function () { C.go({ tab: 'synthesis', round: m.currentRound }); }));
+      frag.appendChild(old);
+    }
+    add(frag, add(el('div', 'btn-row'), copyMarkdown(m)));
+    frag.appendChild(reviewPage(m, j));
+    return frag;
+  }
+
+  /* ----- Output: the memo read-only, versions and audit trail ----- */
+  function outputWindow(m, j) {
+    var frag = document.createDocumentFragment();
+    var published = m.gate.status === 'published';
+    var layout = el('div', 'output-layout');
+    var article = el('article', 'output-article');
+    article.setAttribute('aria-label', 'Memo');
+    var md = loadMarkdown(m);
+    if (md.state === 'ready') article.appendChild(renderMarkdown(md.text, { memo: m, anchors: null, used: {}, mode: 'text', selected: null }));
+    else add(article, el('p', 'meta', md.state === 'loading' ? 'Loading the memo text…' : 'The memo text could not be loaded. Open the memo record instead.'));
+    var aside = el('aside', 'output-aside');
+    aside.setAttribute('aria-label', 'Export, versions and audit');
+    var status = el('div');
+    add(status, add(el('div', 'panel-marks'), published ? el('span', 'mark done', 'Published') : el('span', 'mark attention', 'Draft, not published')));
+    add(status, el('p', 'meta', published ? 'Publication gate: ' + m.gate.status + '.' : 'Publication approval is not a workflow action yet. Gate: ' + (m.gate.status || 'not checked') + '.'), copyMarkdown(m));
+    var versions = el('div');
+    add(versions, add(el('div', 'section-head'), el('h3', null, 'Versions')));
+    var vl = el('ul', 'rows');
+    var all = [];
+    j.rounds.forEach(function (r) { r.memoPaths.forEach(function (p) { all.push({ path: p, round: r.index }); }); });
+    all.reverse().forEach(function (v, i) {
+      var current = v.path === m.relPath;
+      var li = el('li');
+      add(li, C.artifactLink(v.path, 'Memo from round ' + v.round, true), ' ', current ? el('span', 'mark attention', published ? 'Published' : 'Latest draft') : el('span', 'mark closed', 'Superseded'));
+      if (current) add(li, el('div', 'when', 'Written ' + when(m.createdAt)));
+      vl.appendChild(li);
+    });
+    if (!all.length) add(vl, add(el('li'), el('span', 'meta', 'Only the current memo record is available.')));
+    versions.appendChild(vl);
+    var ran = el('div');
+    add(ran, add(el('div', 'section-head'), el('h3', null, 'Ran under')));
+    ran.appendChild(C.kv([['Analysis', state.runId], ['Synthesis round', String(m.roundIndex || '')], ['Memo versions', String(m.versions)], ['Sources', m.reviewStatus ? humanise(m.reviewStatus) : '']]));
+    var trail = el('div');
+    var events = state.view.events || [];
+    add(trail, add(el('div', 'section-head'), el('h3', null, 'Audit trail'), C.linkButton('All events', function () { C.navigate('audit'); })));
+    var tl = el('ul', 'rows');
+    events.slice(0, 8).forEach(function (e) {
+      var li = el('li');
+      add(li, humanise(e.type), el('div', 'when', [when(e.at), e.actor ? 'by ' + e.actor : ''].filter(Boolean).join(' · ')));
+      tl.appendChild(li);
+    });
+    if (!events.length) add(tl, add(el('li'), el('span', 'meta', 'No events recorded.')));
+    trail.appendChild(tl);
+    add(aside, status, versions, ran, trail);
+    add(layout, article, aside);
+    frag.appendChild(layout);
+    return frag;
+  }
+  C.panes.memo = function () {
+    var j = C.journey();
+    var host = $('pane-memo');
+    if (!j) return;
+    var m = j.memo;
+    if (!m) return C.replace(host, add(document.createDocumentFragment(), noMemo()));
+    C.replace(host, state.route === 'output' ? outputWindow(m, j) : reviewWindow(m, j));
   };
 
   /* ================= Audit ================= */
@@ -1054,22 +1637,19 @@
     add(ex, C.sectionHead('Exceptions', 'h2'));
     if (!v.exceptions.length) add(ex, el('p', 'meta', 'No exceptions recorded.'));
     else {
-      var t = el('table');
-      var head = el('tr');
-      ['Kind', 'Status', 'Raised', 'Record'].forEach(function (h) { head.appendChild(el('th', null, h)); });
-      t.appendChild(head);
+      var t = el('ul', 'rows audit-rows');
       v.exceptions.forEach(function (e) {
-        var tr = el('tr');
-        add(tr, el('td', null, humanise(e.kind)), add(el('td'), C.statusMark(e.status === 'open' ? 'failed' : 'committed', e.status)), el('td', 'figures', when(e.raisedAt)), add(el('td'), C.artifactLink(e.relPath, e.id)));
-        t.appendChild(tr);
+        var li = el('li', 'audit-row');
+        add(li, add(el('div'), C.artifactLink(e.relPath, humanise(e.kind))), C.statusMark(e.status === 'open' ? 'failed' : 'committed', capital(e.status)), el('span', 'meta figures', 'Raised ' + when(e.raisedAt)));
+        t.appendChild(li);
       });
-      add(ex, add(el('div', 'table-wrap'), t));
+      ex.appendChild(t);
     }
     frag.appendChild(ex);
 
     var board = el('section');
     add(board, C.sectionHead('Artefact board', 'h2', el('span', 'meta', v.counts.files + ' files' + (v.truncated ? ' · scan truncated' : ''))));
-    add(board, el('p', 'meta prose', 'Status inferred from the files on disk. Use it to inspect records; the other tabs show the workflow.'));
+    add(board, el('p', 'meta prose', 'Status inferred from the files on disk. Use it to inspect records; the other windows show the workflow.'));
     add(board, el('h3', null, 'Intent, collection and admission'), lane(v.panel1.stages));
     v.sources.forEach(function (s) {
       var note = (C.journey() && C.journey().notes) || {};
@@ -1081,7 +1661,7 @@
 
     var adv = el('section');
     add(adv, C.sectionHead('Deterministic next step', 'h2'), el('p', 'meta prose', 'Runs run:next, which checks the run for a deterministic step it can take without a human or model decision.'));
-    add(adv, add(el('div', 'btn-row'), C.actButton('Check next step', 'btn-secondary', function () { C.postAction({ action: 'run-next', runId: state.runId }); })));
+    add(adv, add(el('div', 'btn-row'), runNextButton()));
     frag.appendChild(adv);
 
     var evs = el('section');
@@ -1089,16 +1669,13 @@
     add(evs, C.sectionHead('Events (' + v.events.length + ', newest first)', 'h2'));
     if (!v.events.length) add(evs, el('p', 'meta', 'No events recorded.'));
     else {
-      var et = el('table');
-      var eh = el('tr');
-      ['At', 'Event', 'Stage', 'Status', 'Actor'].forEach(function (h) { eh.appendChild(el('th', null, h)); });
-      et.appendChild(eh);
+      var et = el('ul', 'rows audit-rows');
       v.events.forEach(function (e) {
-        var tr = el('tr');
-        add(tr, el('td', 'figures compact', when(e.at)), el('td', null, e.type), el('td', null, humanise(e.stage)), el('td', null, e.status), el('td', null, e.actor));
-        et.appendChild(tr);
+        var li = el('li', 'audit-row');
+        add(li, el('span', 'meta figures', when(e.at)), el('span', null, e.type), el('span', 'meta', [humanise(e.stage), e.status, e.actor].filter(Boolean).join(' · ')));
+        et.appendChild(li);
       });
-      add(evs, add(el('div', 'table-wrap'), et));
+      evs.appendChild(et);
     }
     frag.appendChild(evs);
     C.replace(host, frag);
