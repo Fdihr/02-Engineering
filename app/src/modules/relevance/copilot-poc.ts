@@ -2,6 +2,7 @@ import type {
   QuestionRelevanceRequest
 } from "../../core/types.js";
 import { err, type Result } from "../../core/result.js";
+import { readModelIdentity } from "../../core/model-identity.js";
 import {
   validateQuestionRelevanceAssessment,
   validateQuestionRelevanceRequest,
@@ -56,6 +57,8 @@ export const assessCopilotPocResponse = (
   const requestArtifactSha256 = validSha256(requestArtifactSha256Value);
   const responseArtifactRef = nonEmptyString(responseArtifactRefValue);
   const responseArtifactSha256 = validSha256(responseArtifactSha256Value);
+  const sdkResponse = isRecord(responseValue) &&
+    responseValue.schemaVersion === "question-relevance-copilot-sdk-response-v1";
   if (
     !requestArtifactRef ||
     !requestArtifactSha256 ||
@@ -68,19 +71,23 @@ export const assessCopilotPocResponse = (
       "invocationId",
       "startedAt",
       "completedAt",
+      ...(sdkResponse ? ["provider", "model"] : []),
       "proposal"
     ])
   ) {
     return err("INVALID_POC_RESPONSE");
   }
   if (
-    responseValue.schemaVersion !== COPILOT_POC_RESPONSE_SCHEMA_VERSION ||
+    (!sdkResponse && responseValue.schemaVersion !== COPILOT_POC_RESPONSE_SCHEMA_VERSION) ||
     responseValue.requestId !== request.value.id
   ) {
     return err("RELEVANCE_REQUEST_MISMATCH");
   }
   const invocationId = nonEmptyString(responseValue.invocationId);
-  if (!invocationId) {
+  const identity = readModelIdentity(sdkResponse
+    ? responseValue
+    : { provider: COPILOT_POC_PROVIDER, model: COPILOT_POC_MODEL });
+  if (!invocationId || !identity || (sdkResponse && identity.provider !== "github-copilot-sdk")) {
     return err("INVALID_POC_RESPONSE");
   }
 
@@ -92,8 +99,7 @@ export const assessCopilotPocResponse = (
     sourceDocumentArtifactSha256: request.value.sourceDocumentArtifactSha256,
     modelInvocation: {
       id: invocationId,
-      provider: COPILOT_POC_PROVIDER,
-      model: COPILOT_POC_MODEL,
+      ...identity,
       promptPolicyVersion: request.value.promptPolicyVersion,
       promptArtifactRef: requestArtifactRef,
       promptArtifactSha256: requestArtifactSha256,

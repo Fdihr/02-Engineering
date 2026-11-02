@@ -1,4 +1,5 @@
 import { err, ok, type Result } from "../../core/result.js";
+import { readModelIdentity, type ModelIdentity } from "../../core/model-identity.js";
 import type { ArtifactBinding } from "../assurance/types.js";
 import {
   canonicalJson,
@@ -21,8 +22,6 @@ import type {
   SynthesisProfilePolicy
 } from "./types.js";
 import {
-  BUILD_MODEL,
-  BUILD_PROVIDER,
   BUILD_RECORD_SCHEMA_VERSION,
   BUILD_RESPONSE_SCHEMA_VERSION
 } from "./types.js";
@@ -72,6 +71,7 @@ export const validateSynthesisBuildRecord = (
 };
 
 const readResponse = (value: unknown): Result<{
+  identity: ModelIdentity;
   invocationId: string;
   startedAt: string;
   completedAt: string;
@@ -94,8 +94,7 @@ const readResponse = (value: unknown): Result<{
       "proposal"
     ]) ||
     value.schemaVersion !== BUILD_RESPONSE_SCHEMA_VERSION ||
-    value.provider !== BUILD_PROVIDER ||
-    value.model !== BUILD_MODEL
+    !readModelIdentity(value)
   ) {
     return err("INVALID_BUILD_RESPONSE");
   }
@@ -105,6 +104,7 @@ const readResponse = (value: unknown): Result<{
   const startedAt = validTime(value.startedAt);
   const completedAt = validTime(value.completedAt);
   const capturedBy = nonEmptyString(value.capturedBy);
+  const identity = readModelIdentity(value);
   const proposal = parseBuildProposal(value.proposal);
   if (
     !invocationId ||
@@ -112,7 +112,8 @@ const readResponse = (value: unknown): Result<{
     !startedAt ||
     !completedAt ||
     !capturedBy ||
-    !proposal.ok
+    !proposal.ok ||
+    !identity
   ) {
     return err("INVALID_BUILD_RESPONSE");
   }
@@ -120,6 +121,7 @@ const readResponse = (value: unknown): Result<{
     return err("INVALID_INVOCATION_CHRONOLOGY");
   }
   return ok({
+    identity,
     invocationId,
     requestId,
     startedAt,
@@ -183,8 +185,7 @@ export const recordSynthesisBuildResponse = (input: {
     response: responseArtifact,
     invocation: {
       id: response.value.invocationId,
-      provider: BUILD_PROVIDER,
-      model: BUILD_MODEL,
+      ...response.value.identity,
       startedAt: response.value.startedAt,
       completedAt: response.value.completedAt,
       freshSession: true as const,

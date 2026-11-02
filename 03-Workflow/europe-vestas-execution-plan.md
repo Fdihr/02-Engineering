@@ -43,6 +43,8 @@ Produce an end-to-end, evidence-grounded intelligence memo analyzing the last tw
 - **Commands:**
   ```powershell
   npm run approve:scope -- <memo-scope-proposal.json> <reviewer-id>
+  npm run prepare:research-question -- <approved-memo-scope.json>
+  npm run record:research-question-draft -- <research-question-draft-request.json> <copilot-response.json>
   npm run approve:question -- <research-question-proposal.json> <approved-memo-scope.json> <reviewer-id>
   npm run approve:requirements -- <requirements-proposal.json> <approved-research-question.json> <reviewer-id>
   ```

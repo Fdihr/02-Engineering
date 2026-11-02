@@ -1,8 +1,7 @@
 import { err, ok, type Result } from "../../../core/result.js";
+import { readModelIdentity } from "../../../core/model-identity.js";
 import {
   EXTRACT_COMMIT_SCHEMA_VERSION,
-  EXTRACT_MODEL,
-  EXTRACT_PROVIDER,
   EXTRACT_RESPONSE_SCHEMA_VERSION,
   type AdmittedSource,
   type ApprovedRequirements,
@@ -71,8 +70,7 @@ const readResponse = (
       "proposal"
     ]) ||
     value.schemaVersion !== EXTRACT_RESPONSE_SCHEMA_VERSION ||
-    value.provider !== EXTRACT_PROVIDER ||
-    value.model !== EXTRACT_MODEL
+    !readModelIdentity(value)
   ) {
     return err("INVALID_EXTRACT_RESPONSE");
   }
@@ -82,7 +80,8 @@ const readResponse = (
   const startedAt = validTime(value.startedAt);
   const completedAt = validTime(value.completedAt);
   const capturedBy = nonEmptyString(value.capturedBy);
-  if (!requestId || !invocationId || !startedAt || !completedAt || !capturedBy) {
+  const identity = readModelIdentity(value);
+  if (!requestId || !invocationId || !startedAt || !completedAt || !capturedBy || !identity) {
     return err("INVALID_EXTRACT_RESPONSE");
   }
   if (value.freshSession !== true) {
@@ -96,8 +95,7 @@ const readResponse = (
     schemaVersion: EXTRACT_RESPONSE_SCHEMA_VERSION,
     requestId,
     invocationId,
-    provider: EXTRACT_PROVIDER,
-    model: EXTRACT_MODEL,
+    ...identity,
     startedAt,
     completedAt,
     freshSession: true,
@@ -204,8 +202,8 @@ export const recordExtractResponse = (
       lineage: request.lineage,
       invocation: {
         id: response.value.invocationId,
-        provider: EXTRACT_PROVIDER,
-        model: EXTRACT_MODEL,
+        provider: response.value.provider,
+        model: response.value.model,
         startedAt: response.value.startedAt,
         completedAt: response.value.completedAt,
         freshSession: true,

@@ -1,3 +1,4 @@
+import type { ModelIdentity } from "../../core/model-identity.js";
 import type {
   ApprovedResearchQuestion,
   SourceAnchor,
@@ -257,8 +258,8 @@ export type ExtractResponse = {
   schemaVersion: typeof EXTRACT_RESPONSE_SCHEMA_VERSION;
   requestId: string;
   invocationId: string;
-  provider: typeof EXTRACT_PROVIDER;
-  model: typeof EXTRACT_MODEL;
+  provider: ModelIdentity["provider"];
+  model: string;
   startedAt: string;
   completedAt: string;
   freshSession: true;
@@ -268,8 +269,8 @@ export type ExtractResponse = {
 
 export type ExtractInvocation = {
   id: string;
-  provider: typeof EXTRACT_PROVIDER;
-  model: typeof EXTRACT_MODEL;
+  provider: ModelIdentity["provider"];
+  model: string;
   startedAt: string;
   completedAt: string;
   freshSession: true;

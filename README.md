@@ -23,3 +23,20 @@ integrated browser. The repository skill reuses a verified running dashboard
 or starts one from a checkout containing the redesigned UI. It rejects the
 legacy workbench and static concept pages instead of treating any localhost
 response as the current app.
+
+## Live-provider configuration
+
+Use Node.js 22.9 or newer and run npm commands from `app/`. Collection,
+discovery, and probing require `SEERIST_API_KEY`; source retrieval requires
+`FIRECRAWL_API_KEY`.
+
+The live-provider scripts optionally load `.env` from the repository root
+(`..\.env` when running from `app/`). Existing process environment variables
+take precedence. A missing file does not prevent startup, but the commands
+still reject missing credentials before making provider requests.
+
+Git worktrees do not include an ignored `.env` from another checkout. Configure
+credentials in the process environment or create a private `.env` in this
+worktree's root using `.env.example` as the template. Do not commit credentials.
+After configuring credentials, rerun the failed discovery command; the successful
+scope, question, and requirements approvals do not need to be repeated.

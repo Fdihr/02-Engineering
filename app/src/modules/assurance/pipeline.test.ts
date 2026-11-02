@@ -196,7 +196,7 @@ if (!approvedRequirementsResult.ok) {
 }
 const requirements: ApprovedRequirements = approvedRequirementsResult.value;
 
-const buildCommit = (proposal: unknown): ExtractCommit => {
+const buildCommit = (proposal: unknown, sdk = false): ExtractCommit => {
   const request = createExtractRequest({
     admitted,
     requirements,
@@ -217,8 +217,8 @@ const buildCommit = (proposal: unknown): ExtractCommit => {
       schemaVersion: "source-assurance-copilot-poc-response-v2",
       requestId: request.value.id,
       invocationId: "copilot-session-1",
-      provider: "github-copilot-vscode",
-      model: "not-exposed-by-host",
+      provider: sdk ? "github-copilot-sdk" : "github-copilot-vscode",
+      model: sdk ? "test-model-1" : "not-exposed-by-host",
       startedAt: "2026-03-10T00:01:00.000Z",
       completedAt: "2026-03-10T00:02:00.000Z",
       freshSession: true,
@@ -258,6 +258,11 @@ const singleObservationProposal = {
 };
 
 const commit = buildCommit(singleObservationProposal);
+test("SDK extraction preserves the selected model without granting review authority", () => {
+  const sdkCommit = buildCommit(singleObservationProposal, true);
+  assert.equal(sdkCommit.invocation.provider, "github-copilot-sdk");
+  assert.equal(sdkCommit.invocation.model, "test-model-1");
+});
 
 const buildPackage = (source: ExtractCommit = commit) => {
   const result = createReviewPackage({
