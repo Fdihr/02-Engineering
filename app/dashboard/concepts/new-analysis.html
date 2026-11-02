@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>New analysis · CTI workbench (concept)</title>
+  <!--
+    THESIS: Ask the question and nothing else; the AI proposes every blank as an assumption you review before anything runs.
+  -->
+  <script src="/concepts/concepts.js"></script>
+  <link rel="stylesheet" href="/design_system.css">
+  <link rel="stylesheet" href="/run_view.css">
+  <link rel="stylesheet" href="/concepts/concepts.css">
+  <link rel="stylesheet" href="/concepts/new-analysis.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-left">
+        <div class="brand">
+          <img src="/assets/vestas/Vestas_White.svg" alt="Vestas">
+          <h1>CTI workbench</h1>
+        </div>
+        <nav class="topnav" aria-label="Main">
+          <a href="/concepts/decision-inbox.html">Home <span class="n">7</span></a>
+          <a href="/concepts/governance.html">Governance</a>
+          <a href="/concepts/process-map.html">Process map</a>
+        </nav>
+      </div>
+      <div class="topbar-actions">
+        <span class="signed">Signed in as <strong>FDIHR</strong></span>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Dark theme</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <div>
+        <a class="parent-link" href="/concepts/decision-inbox.html">Home</a>
+        <h2>New analysis</h2>
+        <p class="meta">Nothing is collected until you approve the research plan.</p>
+      </div>
+    </div>
+
+    <form class="new-form" id="new-form" novalidate>
+      <div class="field">
+        <label for="question">Your question</label>
+        <p class="meta" id="question-hint">Ask it the way you would ask a colleague.</p>
+        <textarea id="question" rows="4" required aria-describedby="question-hint question-error" placeholder="For example: how are state-linked actors targeting Nordic and Baltic energy infrastructure?"></textarea>
+        <div class="reason-error" id="question-error" hidden>Add your question first. The research plan is drafted from it.</div>
+      </div>
+
+      <fieldset class="field">
+        <legend>What you need back</legend>
+        <p class="meta">Pick the form that fits how it will be used.</p>
+        <div class="segmented" role="group" aria-label="What you need back" data-single="output">
+          <button class="chip-btn" type="button" aria-pressed="false" data-value="Brief">Brief</button>
+          <button class="chip-btn" type="button" aria-pressed="false" data-value="Memo">Memo</button>
+          <button class="chip-btn" type="button" aria-pressed="false" data-value="Assessment">Assessment</button>
+        </div>
+        <ul class="option-notes meta">
+          <li><strong>Brief</strong>One to two pages, for a quick decision.</li>
+          <li><strong>Memo</strong>Three to five pages, for leadership reading.</li>
+          <li><strong>Assessment</strong>Longer, with every judgement and source shown.</li>
+        </ul>
+      </fieldset>
+
+      <div class="field">
+        <label for="audience">Audience</label>
+        <p class="meta">Who will read the result.</p>
+        <input id="audience" type="text" autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label for="geography">Geography</label>
+        <p class="meta">Countries or regions in scope.</p>
+        <input id="geography" type="text" autocomplete="off">
+      </div>
+
+      <fieldset class="field">
+        <legend>Time window</legend>
+        <p class="meta">The period the evidence should cover.</p>
+        <div class="date-pair">
+          <input id="from" type="date" aria-label="From">
+          <span class="meta">to</span>
+          <input id="to" type="date" aria-label="To">
+        </div>
+      </fieldset>
+
+      <fieldset class="field">
+        <legend>Profile</legend>
+        <p class="meta">Adds the terminology and quality rules for the subject.</p>
+        <div class="segmented" role="group" aria-label="Profile" data-single="profile">
+          <button class="chip-btn" type="button" aria-pressed="false" data-value="Cyber">Cyber</button>
+          <button class="chip-btn" type="button" aria-pressed="false" data-value="Geopolitical">Geopolitical</button>
+          <button class="chip-btn" type="button" aria-pressed="false" data-value="Physical security">Physical security</button>
+          <button class="chip-btn" type="button" aria-pressed="false" data-value="Supply chain">Supply chain</button>
+        </div>
+      </fieldset>
+
+      <div class="field">
+        <label class="check" for="relevance"><input id="relevance" type="checkbox">Map relevance to Vestas</label>
+        <p class="meta">Uses the approved organisational context pack v2.</p>
+      </div>
+
+      <p class="caution">Anything you leave blank, the AI proposes as an assumption with its reason. You review every assumption before anything runs.</p>
+
+      <div class="submit-row">
+        <button class="btn-primary" id="submit" type="submit">Propose research plan</button>
+        <span id="drafting" role="status"></span>
+      </div>
+    </form>
+  </main>
+
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var form = $('new-form'), q = $('question'), err = $('question-error');
+    document.querySelectorAll('.segmented').forEach(function (group) {
+      group.addEventListener('click', function (e) {
+        var b = e.target.closest('.chip-btn');
+        if (!b) { return; }
+        group.querySelectorAll('.chip-btn').forEach(function (o) { o.setAttribute('aria-pressed', o === b ? 'true' : 'false'); });
+      });
+    });
+    q.addEventListener('input', function () { err.hidden = true; q.removeAttribute('aria-invalid'); });
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!q.value.trim()) {
+        err.hidden = false;
+        q.setAttribute('aria-invalid', 'true');
+        q.focus();
+        return;
+      }
+      $('submit').disabled = true;
+      $('drafting').innerHTML = '<span class="ai-mark">AI drafting the research plan…</span>';
+      setTimeout(function () { window.location.href = '/concepts/intent-review.html'; }, 1200);
+    });
+  })();
+  </script>
+</body>
+</html>

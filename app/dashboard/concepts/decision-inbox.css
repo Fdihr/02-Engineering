@@ -1,0 +1,7 @@
+.head-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px 24px; }
+.analysis-detail .question-line { margin-top:0; }
+.analysis-detail .rows { list-style:none; margin:0; padding:0; border-top:1px solid var(--rule); }
+.analysis-detail .rows li { padding:10px 0; border-bottom:1px solid var(--rule); font-size:var(--text-ui); }
+.analysis-detail .rows a { color:var(--action); }
+.analysis-detail section + section { margin-top:24px; }
+.analysis-detail .activity-strip { margin-bottom:24px; }

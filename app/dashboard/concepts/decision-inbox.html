@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="/design_system.css">
   <link rel="stylesheet" href="/run_view.css">
   <link rel="stylesheet" href="/concepts/concepts.css">
+  <link rel="stylesheet" href="/concepts/decision-inbox.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -26,9 +27,9 @@
           <h1>CTI workbench</h1>
         </div>
         <nav class="topnav" aria-label="Main">
-          <a href="/concepts/process-map.html">Process map</a>
           <a href="/concepts/decision-inbox.html" aria-current="page">Home <span class="n" id="nav-count">7</span></a>
-          <a href="/concepts/claim-trace.html">Memo review</a>
+          <a href="/concepts/governance.html">Governance</a>
+          <a href="/concepts/process-map.html">Process map</a>
         </nav>
       </div>
       <div class="topbar-actions">
@@ -41,12 +42,15 @@
   <main id="main">
     <div class="page-head">
       <div>
-        <h2>Decisions waiting for you</h2>
-        <p class="meta">Across 3 analyses. The workflow moves only when you decide. Concept with illustrative data.</p>
+        <h2>Home</h2>
+        <p class="meta">7 decisions waiting across 3 analyses. The workflow moves only when you decide. Concept with illustrative data.</p>
       </div>
-      <div class="keys" aria-label="Keyboard shortcuts">
-        <span><kbd>J</kbd><kbd>K</kbd> next, previous</span>
-        <span><kbd>R</kbd> write a reason</span>
+      <div class="head-actions">
+        <div class="keys" aria-label="Keyboard shortcuts">
+          <span><kbd>J</kbd><kbd>K</kbd> next, previous</span>
+          <span><kbd>R</kbd> write a reason</span>
+        </div>
+        <a class="btn-primary btn-link-primary" href="/concepts/new-analysis.html">New analysis</a>
       </div>
     </div>
 
@@ -59,8 +63,10 @@
           <p>No decision of this kind is waiting. Choose another filter or All.</p>
         </div>
 
-        <h3 class="group-head">Machine work <span class="meta">asks nothing of you</span></h3>
-        <div id="machine"></div>
+        <div id="analyses-wrap">
+          <h3 class="group-head">Your analyses <span class="meta"><span class="figures">4</span></span></h3>
+          <ul class="queue" id="analyses" aria-label="Your analyses"></ul>
+        </div>
       </div>
 
       <section class="detail" aria-live="polite" aria-labelledby="detail-title">
@@ -78,7 +84,8 @@
       { id: 'exceptions', label: 'Exceptions' },
       { id: 'intent', label: 'Intent' },
       { id: 'publication', label: 'Publication' },
-      { id: 'governance', label: 'Governance' }
+      { id: 'governance', label: 'Governance' },
+      { id: 'analyses', label: 'Analyses' }
     ];
 
     var items = [
@@ -141,8 +148,8 @@
         title: 'Approve the question for Nordic and Baltic sabotage',
         raised: 'Drafted by Maria L. at 10:28',
         quote: 'How likely is physical or cyber sabotage against energy and logistics infrastructure in the Nordic and Baltic region to disrupt wind turbine transport or installation over the next six months?',
-        confirm: 'Confirming approves this scope and question as version 1 and lets bounded Seerist discovery run: 4 searches, up to 3 pages each, 1 Sep to 31 Oct 2026. Nothing is collected before you confirm.',
-        primary: 'Approve and start discovery', secondary: 'Ask for a revision', danger: 'Reject',
+        confirm: 'Intent is decided in intent review, where the scope, assumptions and research questions are shown. Confirming there approves the plan and starts collection; nothing is collected before you confirm.',
+        primary: 'Open intent review', href: '/concepts/intent-review.html', secondary: null, danger: null,
         facts: [
           ['Geography', 'Denmark, Sweden, Finland, Estonia, Latvia, Lithuania'],
           ['Window', '<span class="figures">1 Sep \u2013 31 Oct 2026</span>'],
@@ -200,10 +207,43 @@
       }
     ];
 
-    var machine = [
-      { title: 'Synthesis build, round 3', meta: 'qti-2026-q3 \u00b7 request prepared 09:41 \u00b7 waiting for a model answer', mark: ['running', 'Running'] },
-      { title: 'Seerist discovery', meta: 'nordic-baltic-2026-11 \u00b7 starts when you approve the question', mark: ['', 'Waiting'] },
-      { title: 'Memo writer v2', meta: 'qti-2026-q3 \u00b7 draft v3 written yesterday at 16:20', mark: ['covered', 'Finished'] }
+    var analyses = [
+      {
+        id: 'an-a', kind: 'analyses', title: 'Europe cyber and geopolitical outlook, Q4 2026', age: '18 h',
+        meta: 'Memo \u00b7 Vestas leadership \u00b7 Publication', state: ['attention', 'Waiting for you: publication'],
+        question: 'Which cyber and geopolitical threats will most affect Vestas operations in Europe in Q4 2026?',
+        now: [['attention', 'Waiting for you'], 'Memo v3 is ready for publication review with <span class="figures">2</span> blockers.'],
+        stages: ['done', 'done', 'done', 'done', 'attention'], yours: ['Open publication review', '/concepts/claim-trace.html'],
+        facts: [['Question owner', 'FDIHR'], ['Output', 'Memo, v3'], ['Audience', 'Vestas leadership'], ['Time window', '1 Jul \u2013 30 Sep 2026'], ['Profile', 'Cyber and geopolitical'], ['Sources admitted', '<span class="figures">9</span>'], ['Started', '<span class="figures">14 Oct 2026</span> \u00b7 qti-2026-q3']],
+        links: [['Publication review', '/concepts/claim-trace.html'], ['Analysis', '/concepts/analysis.html']]
+      },
+      {
+        id: 'an-b', kind: 'analyses', title: 'Nordic and Baltic infrastructure sabotage', age: '20 min',
+        meta: 'Brief \u00b7 Security leadership \u00b7 Intent', state: ['attention', 'Waiting for you: research plan'],
+        question: 'How are state-linked actors targeting Nordic and Baltic energy and subsea infrastructure through sabotage?',
+        now: [['attention', 'Waiting for you'], 'Research plan drafted. Nothing has been collected.'],
+        stages: ['attention', '', '', '', ''], yours: ['Open intent review', '/concepts/intent-review.html'],
+        facts: [['Question owner', 'FDIHR'], ['Output', 'Brief'], ['Audience', 'Security leadership'], ['Time window', '1 Sep \u2013 30 Nov 2026'], ['Profile', 'Geopolitical'], ['Sources admitted', '<span class="figures">0</span>'], ['Started', '<span class="figures">2 Nov 2026</span> \u00b7 nordic-baltic-2026-11']],
+        links: [['Intent review', '/concepts/intent-review.html']]
+      },
+      {
+        id: 'an-c', kind: 'analyses', title: 'Ransomware against European manufacturers', age: '3 d',
+        meta: 'Assessment \u00b7 CISO office \u00b7 Evidence', state: ['running', 'Collecting, 42 of 120 calls'],
+        question: 'How is ransomware affecting European industrial manufacturers this autumn?',
+        now: [['running', 'Collecting'], '<span class="figures">42</span> of <span class="figures">120</span> calls used. 1 exception is waiting for you.'],
+        stages: ['done', 'running', '', '', ''], yours: ['Waiting for you: 1 exception', '/concepts/decision-inbox.html'],
+        facts: [['Question owner', 'FDIHR'], ['Output', 'Assessment'], ['Audience', 'CISO office'], ['Time window', '1 Aug \u2013 31 Oct 2026'], ['Profile', 'Cyber'], ['Sources admitted', '<span class="figures">23</span>'], ['Started', '<span class="figures">30 Oct 2026</span> \u00b7 ransomware-mfg-2026-10']],
+        links: [['Analysis', '/concepts/analysis.html']]
+      },
+      {
+        id: 'an-d', kind: 'analyses', title: 'APAC supply-chain disruption, Q3 2026', age: '21 d',
+        meta: 'Memo \u00b7 Procurement leadership \u00b7 Published', state: ['done', 'Published 12 Oct'],
+        question: 'Which supply-chain disruptions in Asia-Pacific most affected Vestas component supply in Q3 2026?',
+        now: [['done', 'Published'], 'Memo published on <span class="figures">12 Oct 2026</span>.'],
+        stages: ['done', 'done', 'done', 'done', 'done'], yours: ['Open the output', '/concepts/output.html'],
+        facts: [['Question owner', 'FDIHR'], ['Output', 'Memo'], ['Audience', 'Procurement leadership'], ['Time window', '1 Jul \u2013 30 Sep 2026'], ['Profile', 'Supply chain'], ['Sources admitted', '<span class="figures">14</span>'], ['Started', '<span class="figures">22 Sep 2026</span> \u00b7 apac-supply-2026-09']],
+        links: [['Output', '/concepts/output.html']]
+      }
     ];
 
     var filter = 'all';
@@ -211,41 +251,78 @@
 
     var $ = function (id) { return document.getElementById(id); };
     var esc = window.escapeHtml;
-    var visible = function () { return items.filter(function (i) { return filter === 'all' || i.kind === filter; }); };
+    var visibleDecisions = function () { return items.filter(function (i) { return filter === 'all' || i.kind === filter; }); };
+    var visibleAnalyses = function () { return filter === 'all' || filter === 'analyses' ? analyses : []; };
+    var visible = function () { return visibleDecisions().concat(visibleAnalyses()); };
+    var find = function (id) { return items.concat(analyses).filter(function (x) { return x.id === id; })[0]; };
 
     function renderFilters() {
       $('filters').innerHTML = KINDS.map(function (k) {
-        var n = k.id === 'all' ? items.length : items.filter(function (i) { return i.kind === k.id; }).length;
+        var n = k.id === 'all' ? items.length : k.id === 'analyses' ? analyses.length : items.filter(function (i) { return i.kind === k.id; }).length;
         return '<button class="chip-btn" type="button" data-filter="' + k.id + '" aria-pressed="' + (filter === k.id) + '">' + k.label + '<span class="n">' + n + '</span></button>';
       }).join('');
       $('nav-count').textContent = items.length;
     }
 
-    function renderQueue() {
-      var list = visible();
-      $('queue').innerHTML = list.map(function (i) {
-        return '<li data-id="' + i.id + '"><button class="queue-item" type="button" data-id="' + i.id + '" aria-current="' + (i.id === currentId) + '">' +
-          '<span class="q-title">' + esc(i.title) + '</span>' +
-          '<span class="q-age">' + esc(i.age) + '</span>' +
-          '<span class="q-meta"><span>' + esc(i.kindLabel) + '</span><span>' + esc(i.run) + '</span></span>' +
-          '<span class="q-state"><span class="mark ' + i.state[0] + '">' + esc(i.state[1]) + '</span></span>' +
-          '</button></li>';
-      }).join('');
-      $('queue').hidden = list.length === 0;
-      $('queue-empty').hidden = list.length !== 0 || items.length === 0;
+    function rowHtml(i, metaHtml) {
+      return '<li data-id="' + i.id + '"><button class="queue-item" type="button" data-id="' + i.id + '" aria-current="' + (i.id === currentId) + '">' +
+        '<span class="q-title">' + esc(i.title) + '</span>' +
+        '<span class="q-age">' + esc(i.age) + '</span>' +
+        '<span class="q-meta">' + metaHtml + '</span>' +
+        '<span class="q-state"><span class="mark ' + i.state[0] + '">' + esc(i.state[1]) + '</span></span>' +
+        '</button></li>';
     }
 
-    function renderMachine() {
-      $('machine').innerHTML = machine.map(function (m) {
-        return '<div class="machine-row"><span class="title">' + esc(m.title) + '</span><span class="mark ' + m.mark[0] + '">' + esc(m.mark[1]) + '</span><span class="meta">' + esc(m.meta) + '</span></div>';
+    function renderQueue() {
+      var list = visibleDecisions();
+      $('queue').innerHTML = list.map(function (i) {
+        return rowHtml(i, '<span>' + esc(i.kindLabel) + '</span><span>' + esc(i.run) + '</span>');
       }).join('');
+      $('queue').hidden = list.length === 0;
+      $('queue-empty').hidden = visible().length !== 0;
+      var an = visibleAnalyses();
+      $('analyses-wrap').hidden = an.length === 0;
+      $('analyses').innerHTML = an.map(function (i) {
+        return rowHtml(i, '<span>' + esc(i.meta) + '</span>');
+      }).join('');
+    }
+
+    function renderAnalysis(a) {
+      var labels = ['Intent', 'Evidence', 'Findings', 'Writing', 'Publication'];
+      var current = -1;
+      a.stages.forEach(function (s, n) { if (s === 'attention' || s === 'running') current = n; });
+      var stages = labels.map(function (l, n) {
+        var s = a.stages[n];
+        return '<li' + (n === current ? ' aria-current="step"' : '') + '>' + (s ? '<span class="mark ' + s + '">' + l + '</span>' : l) + '</li>';
+      }).join('');
+      return '<div class="analysis-detail">' +
+        '<section><div class="section-head"><h3 id="detail-title">' + esc(a.title) + '</h3></div>' +
+        '<p class="question-line">' + esc(a.question) + '</p>' +
+        '<div class="activity-strip" role="status"><span class="now"><span class="mark ' + a.now[0][0] + '">' + a.now[0][1] + '</span><span>' + a.now[1] + '</span></span>' +
+        '<ol class="stages" aria-label="Stages">' + stages + '</ol>' +
+        '<a class="yours" href="' + a.yours[1] + '">' + esc(a.yours[0]) + '</a></div></section>' +
+        '<section><div class="section-head"><h3>Facts</h3></div><dl class="facts">' +
+          a.facts.map(function (f) { return '<dt>' + f[0] + '</dt><dd>' + f[1] + '</dd>'; }).join('') +
+        '</dl></section>' +
+        '<section><div class="section-head"><h3>Windows</h3></div><ul class="rows">' +
+          a.links.map(function (l) { return '<li><a href="' + l[1] + '">' + esc(l[0]) + '</a></li>'; }).join('') +
+        '</ul></section></div>';
     }
 
     function renderDetail() {
-      var i = items.filter(function (x) { return x.id === currentId; })[0];
+      var i = find(currentId);
+      if (i && i.kind === 'analyses') {
+        var box = $('detail');
+        box.classList.add('swapping');
+        requestAnimationFrame(function () {
+          box.innerHTML = renderAnalysis(i);
+          requestAnimationFrame(function () { box.classList.remove('swapping'); });
+        });
+        return;
+      }
       if (!i) {
         $('detail').innerHTML = items.length === 0
-          ? '<div class="empty-state"><h3 id="detail-title">Nothing waits for you</h3><p>Every decision is made. Machine work continues on its own; new decisions appear here.</p></div>'
+          ? '<div class="empty-state"><h3 id="detail-title">Nothing waits for you</h3><p>Every decision is made. Analyses continue on their own; new decisions appear here.</p></div>'
           : '<div class="empty-state"><h3 id="detail-title">Choose a decision</h3><p>Select a row on the left, or press J.</p></div>';
         return;
       }
@@ -339,6 +416,10 @@
       var b = e.target.closest('.queue-item');
       if (b) select(b.getAttribute('data-id'));
     });
+    $('analyses').addEventListener('click', function (e) {
+      var b = e.target.closest('.queue-item');
+      if (b) select(b.getAttribute('data-id'));
+    });
     $('detail').addEventListener('click', function (e) {
       var b = e.target.closest('[data-act]');
       if (b) decide(b.getAttribute('data-act'));
@@ -355,7 +436,6 @@
 
     renderFilters();
     renderQueue();
-    renderMachine();
     renderDetail();
   })();
   </script>

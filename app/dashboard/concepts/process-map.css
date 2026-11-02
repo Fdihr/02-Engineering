@@ -8,14 +8,6 @@
 .strip-spec { margin:0 0 56px; }
 .strip-spec h3, .map-section-h { margin:0 0 4px; font-size:var(--text-heading); font-weight:500; }
 .strip-spec > .meta { margin:0 0 16px; max-width:68ch; }
-.question-line { margin:0 0 8px; font-size:var(--text-heading); font-weight:300; }
-.activity-strip { display:flex; flex-wrap:wrap; align-items:center; gap:8px 24px; padding:10px 16px; background:var(--sunken); border-radius:var(--radius-control); font-size:var(--text-ui); }
-.activity-strip .now { display:inline-flex; align-items:center; gap:8px; }
-.activity-strip .now .mark { font-size:var(--text-ui); }
-.stages { display:flex; flex-wrap:wrap; gap:4px 14px; margin:0; padding:0; list-style:none; color:var(--ink-2); font-size:var(--text-meta); }
-.stages li[aria-current="step"] { color:var(--ink); font-weight:500; }
-.stages .mark { font-size:var(--text-meta); }
-.activity-strip .yours { margin-left:auto; }
 .strip-states { margin-top:24px; }
 .strip-states td:first-child { white-space:nowrap; }
 
@@ -100,5 +92,4 @@
   .handoff > :first-child { display:none; }
   .step .facts { grid-template-columns:minmax(0, 1fr); }
   .step .facts dt { padding-bottom:0; border-bottom:0; }
-  .activity-strip .yours { margin-left:0; }
 }

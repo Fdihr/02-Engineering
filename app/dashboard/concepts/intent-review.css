@@ -1,0 +1,14 @@
+.intent-main { min-width:0; }
+.intent-main section { margin:0 0 40px; }
+.intent-main .section-head { margin-bottom:8px; }
+.scope-table td { vertical-align:top; }
+.scope-table .meta { margin:4px 0 0; }
+.scope-table input, .rq-edit input { width:100%; max-width:34rem; min-height:32px; padding:4px 8px; color:var(--ink); background:var(--canvas); border:1px solid var(--rule); border-radius:var(--radius-control); font:inherit; }
+.rq-list li { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:4px 16px; align-items:start; }
+.rq-list .rq-actions { display:flex; gap:12px; }
+.rq-list .meta { margin:2px 0 0; }
+.rq-note { margin:12px 0 0; }
+.plate-pane { position:sticky; top:80px; }
+@media (max-width:1023px) {
+  .plate-pane { position:static; order:-1; padding:0; border-top:0; }
+}

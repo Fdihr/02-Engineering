@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Analysis · CTI workbench (concept)</title>
+  <!--
+    THESIS: Everything the analysis knows, as it grows. Evidence and findings in one read-only window, with the machine's progress in the strip.
+    OWN-WORLD: ECS "weather window". Night Sky bar, ruled rows, assessment marks plus words, Blue Sky Band for the selected source.
+    STORY: The analyst watches collection and relevance checking, opens any source to see why it was admitted or excluded, and reads findings as they form.
+    FIRST VIEWPORT: Header with activity strip; tabs; source list on the left and the selected source on the right.
+    FORM: List-and-detail with J/K, as in the inbox. No plate: nothing here is decided.
+  -->
+  <script src="/concepts/concepts.js"></script>
+  <link rel="stylesheet" href="/design_system.css">
+  <link rel="stylesheet" href="/run_view.css">
+  <link rel="stylesheet" href="/concepts/concepts.css">
+  <link rel="stylesheet" href="/concepts/analysis.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-left">
+        <div class="brand">
+          <img src="/assets/vestas/Vestas_White.svg" alt="Vestas">
+          <h1>CTI workbench</h1>
+        </div>
+        <nav class="topnav" aria-label="Main">
+          <a href="/concepts/decision-inbox.html">Home <span class="n">7</span></a>
+          <a href="/concepts/governance.html">Governance</a>
+          <a href="/concepts/process-map.html">Process map</a>
+        </nav>
+      </div>
+      <div class="topbar-actions">
+        <span class="signed">Signed in as <strong>FDIHR</strong></span>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Dark theme</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <div>
+        <a class="parent-link" href="/concepts/decision-inbox.html">Home</a>
+        <h2>Analysis</h2>
+        <p class="meta">Ransomware against European manufacturers · assessment for the CISO office · analysis ransomware-mfg-2026-10 · started 20 Oct. Concept with illustrative data.</p>
+      </div>
+      <div class="keys" aria-label="Keyboard shortcuts">
+        <span><kbd>J</kbd><kbd>K</kbd> next, previous source</span>
+      </div>
+    </div>
+
+    <p class="question-line">How is ransomware affecting European industrial manufacturers this autumn?</p>
+    <div class="activity-strip" role="status">
+      <span class="now"><span class="mark running">Checking relevance</span><span>AI checking relevance, <span class="figures">18</span> of <span class="figures">64</span> sources</span></span>
+      <ol class="stages" aria-label="Stages">
+        <li><span class="mark done">Intent</span></li>
+        <li aria-current="step"><span class="mark running">Evidence</span></li>
+        <li>Findings</li>
+        <li>Writing</li>
+        <li>Publication</li>
+      </ol>
+      <a class="yours" href="/concepts/decision-inbox.html">Waiting for you: 1 decision</a>
+    </div>
+
+    <nav class="view-tabs" role="tablist" aria-label="Analysis">
+      <button class="view-tab" type="button" role="tab" id="tab-evidence" aria-controls="pane-evidence" aria-selected="true" data-tab="evidence">Evidence <span class="tab-count">23 admitted</span></button>
+      <button class="view-tab" type="button" role="tab" id="tab-findings" aria-controls="pane-findings" aria-selected="false" tabindex="-1" data-tab="findings">Findings <span class="tab-count">5</span></button>
+    </nav>
+
+    <div class="tab-pane" id="pane-evidence" role="tabpanel" aria-labelledby="tab-evidence">
+      <div class="inbox">
+        <div>
+          <div class="filters" role="group" aria-label="Filter sources" id="filters"></div>
+          <ul class="queue" id="queue" aria-label="Sources"></ul>
+          <p class="meta list-note" id="list-note"></p>
+        </div>
+        <section class="detail" aria-live="polite" aria-label="Selected source">
+          <div class="detail-body" id="detail"></div>
+        </section>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="pane-findings" role="tabpanel" aria-labelledby="tab-findings" hidden>
+      <div id="findings"></div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+  (function () {
+    var esc = window.escapeHtml;
+    var $ = function (id) { return document.getElementById(id); };
+    var mark = function (cls, word) { return '<span class="mark ' + cls + '">' + esc(word) + '</span>'; };
+
+    var Q = {
+      q1: 'Which ransomware groups are most active against European manufacturers?',
+      q2: 'How are intrusions reaching production environments?',
+      q3: 'What disruption have manufacturers reported?'
+    };
+
+    var sources = [
+      { id: 's1', name: 'EU agency threat landscape', tier: 'Tier 2', tierLabel: 'Tier 2, official', pub: 'EU cybersecurity agency', date: '26 Oct 2026', retrieved: '27 Oct 2026', anchor: 'seg-031 · 6020–6118', answers: ['q1', 'q3'], assurance: ['covered', 'Reviewed'], status: 'admitted',
+        quotes: ['Ransomware accounted for the majority of disruptive incidents in manufacturing.'], why: 'Official publisher, within the time window and relevant to two research questions. Admitted under source assurance policy v3.' },
+      { id: 's2', name: 'National CERT bulletin on manufacturing incidents', tier: 'Tier 2', tierLabel: 'Tier 2, official', pub: 'National CERT', date: '28 Oct 2026', retrieved: '28 Oct 2026', anchor: 'seg-003 · 412–520', answers: ['q2'], assurance: ['covered', 'Reviewed'], status: 'admitted',
+        quotes: ['Most reported intrusions began with compromised VPN credentials or unpatched edge devices.'], why: 'Official publisher and directly relevant to how intrusions reach production. Admitted under source assurance policy v3.' },
+      { id: 's3', name: 'Control Risks analyst report', tier: 'Tier 1', tierLabel: 'Tier 1, analyst report', pub: 'Control Risks', date: '27 Oct 2026', retrieved: '27 Oct 2026', anchor: 'seg-006 · 980–1114', answers: ['q1'], assurance: ['covered', 'Reviewed'], status: 'admitted',
+        quotes: ['Two affiliates account for most extortion activity against mid-sized European manufacturers.', 'Dwell time before encryption has shortened to under three days.'], why: 'Named analyst publisher with method notes, relevant to the active groups question. Admitted under source assurance policy v3.' },
+      { id: 's4', name: 'Industry ISAC weekly summary', tier: 'Tier 3', tierLabel: 'Tier 3, specialist media', pub: 'Manufacturing ISAC', date: '30 Oct 2026', retrieved: '30 Oct 2026', anchor: 'seg-005 · 702–790', answers: ['q3'], assurance: ['covered', 'Reviewed'], status: 'admitted',
+        quotes: ['Two members reported production stoppages after ransomware incidents this week.'], why: 'Peer reports from the sector. Tier 3 admitted when it adds first-hand reporting.' },
+      { id: 's5', name: 'Specialist security media on affiliate rebrand', tier: 'Tier 3', tierLabel: 'Tier 3, specialist media', pub: 'Specialist security outlet', date: '29 Oct 2026', retrieved: '29 Oct 2026', anchor: 'seg-011 · 1840–1952', answers: ['q1'], assurance: ['attention', 'Provisional'], status: 'admitted',
+        quotes: ['The group re-emerged under a new leak-site name after a short pause.'], why: 'Relevant, but the claim rests on one outlet. Held as provisional until a second source confirms it.' },
+      { id: 's6', name: 'Regional news report on plant shutdown', tier: 'Tier 3', tierLabel: 'Tier 3, established media', pub: 'Regional newspaper', date: '31 Oct 2026', retrieved: '31 Oct 2026', anchor: 'seg-002 · 188–266', answers: ['q3'], assurance: ['attention', 'Provisional'], status: 'admitted',
+        quotes: ['The plant halted two production lines for four days while systems were restored.'], why: 'First-hand local reporting on disruption. Provisional: the company has not confirmed the cause.' },
+      { id: 's7', name: 'Vendor blog on edge-device exploitation', tier: 'Tier 4', tierLabel: 'Tier 4, vendor blog', pub: 'Security vendor', date: '30 Oct 2026', retrieved: '31 Oct 2026', anchor: 'seg-008 · 1320–1451', answers: ['q2'], assurance: ['attention', 'Waiting for you'], status: 'exception',
+        quotes: ['Exploitation of a firewall flaw preceded encryption in most of the cases we handled.'], why: 'Tier 4 sources need an exception before they can support a finding. The AI proposes admission because it is the only source on this exploit path.' },
+      { id: 's8', name: 'Threat researcher write-up on loader changes', tier: 'Tier 3', tierLabel: 'Tier 3, specialist', pub: 'Independent researcher', date: '29 Oct 2026', retrieved: '30 Oct 2026', anchor: 'seg-004 · 530–655', answers: ['q2'], assurance: ['ai', 'Checking'], status: 'admitted',
+        quotes: ['The loader now abuses signed remote-management tools to avoid detection.'], why: 'Relevant to intrusion paths. Source assurance is still running.' },
+      { id: 's9', name: 'Court filing on extortion negotiation', tier: 'Tier 2', tierLabel: 'Tier 2, official', pub: 'Regional court', date: '24 Oct 2026', retrieved: '27 Oct 2026', anchor: 'seg-001 · 90–204', answers: ['q3'], assurance: ['covered', 'Reviewed'], status: 'admitted',
+        quotes: ['The manufacturer paid a reduced sum after twelve days without production.'], why: 'Primary legal record of a disruption. Admitted under source assurance policy v3.' },
+      { id: 's10', name: 'Security conference slides on OT segmentation', tier: 'Tier 3', tierLabel: 'Tier 3, specialist', pub: 'Industry conference', date: '25 Oct 2026', retrieved: '28 Oct 2026', anchor: 'seg-017 · 3010–3144', answers: ['q2'], assurance: ['covered', 'Reviewed'], status: 'admitted',
+        quotes: ['Flat networks let encryption spread from office systems into the plant within hours.'], why: 'Practitioner evidence on how intrusions spread. Admitted under source assurance policy v3.' },
+      { id: 'x1', name: 'Marketing page on ransomware protection', tier: 'Tier 5', tierLabel: 'Tier 5, marketing', pub: 'Security vendor', date: '28 Oct 2026', retrieved: '29 Oct 2026', anchor: 'none', answers: [], assurance: ['closed', 'Excluded'], status: 'excluded',
+        reason: 'Not relevant to any research question (AI, confidence high).' },
+      { id: 'x2', name: 'Syndicated copy of the EU agency landscape', tier: 'Tier 4', tierLabel: 'Tier 4, aggregator', pub: 'News aggregator', date: '27 Oct 2026', retrieved: '29 Oct 2026', anchor: 'none', answers: [], assurance: ['closed', 'Excluded'], status: 'excluded',
+        reason: 'Duplicate of EU agency threat landscape, which is already admitted.' },
+      { id: 'x3', name: 'Report on a 2023 plant ransomware incident', tier: 'Tier 3', tierLabel: 'Tier 3, specialist media', pub: 'Specialist security outlet', date: '14 Mar 2023', retrieved: '29 Oct 2026', anchor: 'none', answers: [], assurance: ['closed', 'Excluded'], status: 'excluded',
+        reason: 'Outside the time window (1 Sep to 30 Nov 2026).' }
+    ];
+
+    var TOTALS = { all: 23, tier12: 9, prov: 6, excl: 41 };
+    var filter = 'all';
+    var currentId = 's1';
+
+    var findings = [
+      { q: 'q1', items: [
+        { t: 'Two extortion affiliates account for most reported activity against mid-sized manufacturers.', m: ['covered', 'Covered'], n: 3, tier: 'Tier 1', ch: 'not challenged' },
+        { t: 'One group re-emerged under a new leak-site name in late October.', m: ['partial', 'Partial'], n: 1, tier: 'Tier 3', ch: 'challenged, kept as partial' } ] },
+      { q: 'q2', items: [
+        { t: 'Compromised remote-access credentials and unpatched edge devices are the most common first step.', m: ['covered', 'Covered'], n: 4, tier: 'Tier 2', ch: 'not challenged' },
+        { t: 'Flat office and plant networks let encryption reach production within hours.', m: ['partial', 'Partial'], n: 2, tier: 'Tier 3', ch: 'not challenged' } ] },
+      { q: 'q3', items: [
+        { t: 'Reported stoppages last between four and twelve days.', m: ['partial', 'Partial'], n: 3, tier: 'Tier 2', ch: 'challenged, kept as partial' } ],
+        building: 'Ransomware remains the main cause of production disruption at European manufacturers this autumn.' }
+    ];
+
+    var gaps = [
+      { t: 'No source yet on ransom payment rates in the autumn period.', m: 'Research question 3' },
+      { t: 'Edge-device exploitation rests on one Tier 4 source until the exception is decided.', m: 'Research question 2' }
+    ];
+
+    function visible() {
+      return sources.filter(function (s) {
+        if (filter === 'all') return s.status !== 'excluded';
+        if (filter === 'tier12') return s.status !== 'excluded' && (s.tier === 'Tier 1' || s.tier === 'Tier 2');
+        if (filter === 'prov') return s.assurance[1] === 'Provisional' || s.status === 'exception';
+        return s.status === 'excluded';
+      });
+    }
+    function assurance(s) { return s.assurance[0] === 'ai' ? '<span class="ai-mark">Checking</span>' : mark(s.assurance[0], s.assurance[1]); }
+
+    function renderFilters() {
+      var f = [['all', 'All', TOTALS.all], ['tier12', 'Tier 1\u20132', TOTALS.tier12], ['prov', 'Provisional', TOTALS.prov], ['excl', 'Excluded', TOTALS.excl]];
+      $('filters').innerHTML = f.map(function (k) {
+        return '<button class="chip-btn" type="button" data-filter="' + k[0] + '" aria-pressed="' + (filter === k[0]) + '">' + k[1] + '<span class="n">' + k[2] + '</span></button>';
+      }).join('');
+    }
+
+    function renderQueue() {
+      var list = visible();
+      $('queue').innerHTML = list.map(function (s) {
+        return '<li data-id="' + s.id + '"><button class="queue-item" type="button" data-id="' + s.id + '" aria-current="' + (s.id === currentId) + '">' +
+          '<span class="q-title">' + esc(s.name) + '</span>' +
+          '<span class="q-age">' + esc(s.date) + '</span>' +
+          '<span class="q-meta"><span>' + esc(s.tier) + '</span><span>' + esc(s.pub) + '</span></span>' +
+          '<span class="q-state">' + assurance(s) + '</span></button></li>';
+      }).join('');
+      $('list-note').textContent = 'Showing ' + list.length + ' of ' + TOTALS[filter] + ' sources. The rest load as relevance checking finishes.';
+    }
+
+    function renderDetail() {
+      var s = sources.filter(function (x) { return x.id === currentId; })[0];
+      var body = $('detail');
+      if (!s) { body.innerHTML = '<div class="empty-state"><h3>No source selected</h3><p>Choose a source in the list.</p></div>'; return; }
+      var html = '<div class="section-head"><h3 id="detail-title">' + esc(s.name) + '</h3>' + assurance(s) + '</div>';
+      if (s.status === 'exception') {
+        html += '<div class="caution">' + mark('attention', 'Waiting for you') + '<span>This Tier 4 source needs an exception decision before it can support a finding. <a href="/concepts/decision-inbox.html">Decide in Home</a></span></div>';
+      }
+      if (s.status === 'excluded') html += '<p class="excluded-reason">' + esc(s.reason) + '</p>';
+      html += '<dl class="facts">' +
+        '<dt>Tier</dt><dd>' + esc(s.tierLabel) + '</dd>' +
+        '<dt>Publisher</dt><dd>' + esc(s.pub) + '</dd>' +
+        '<dt>Retrieved</dt><dd>' + esc(s.retrieved) + '</dd>' +
+        '<dt>Anchor</dt><dd>' + (s.anchor === 'none' ? 'None' : '<code>' + esc(s.anchor) + '</code>') + '</dd>' +
+        '<dt>Questions it answers</dt><dd>' + (s.answers.length ? s.answers.map(function (q) { return esc(Q[q]); }).join('<br>') : 'None') + '</dd>' +
+        '<dt>Assurance</dt><dd>' + assurance(s) + '</dd></dl>';
+      if (s.status !== 'excluded') {
+        html += '<h4 class="trace-h">Quotes used <span class="meta">' + s.quotes.length + '</span></h4><ul class="ev-list">' + s.quotes.map(function (q) {
+          return '<li class="ev"><blockquote>\u201c' + esc(q) + '\u201d</blockquote><div class="ev-source">' + esc(s.name) + '</div><div class="ev-meta"><span>' + esc(s.tier) + '</span><span class="anchor">' + esc(s.anchor) + '</span><span>' + esc(s.retrieved) + '</span></div></li>';
+        }).join('') + '</ul>';
+        html += '<details class="drawer"><summary>Why it was admitted</summary><div class="drawer-body"><p>' + esc(s.why) + '</p></div></details>';
+      }
+      body.classList.add('swapping');
+      requestAnimationFrame(function () {
+        body.innerHTML = html;
+        requestAnimationFrame(function () { body.classList.remove('swapping'); });
+      });
+    }
+
+    function renderFindings() {
+      var html = findings.map(function (g, i) {
+        return '<section class="finding-group"><div class="section-head"><h3>Research question ' + (i + 1) + '</h3><span class="meta">' + esc(Q[g.q]) + '</span></div><ul class="rows">' +
+          g.items.map(function (f) {
+            return '<li><p class="finding-text">' + esc(f.t) + '</p><div class="finding-marks">' + mark(f.m[0], f.m[1]) + '<span class="meta"><span class="figures">' + f.n + '</span> ' + (f.n === 1 ? 'source' : 'sources') + ' · ' + esc(f.tier) + ' best · ' + esc(f.ch) + '</span></div></li>';
+          }).join('') +
+          (g.building ? '<li><p class="finding-text">' + esc(g.building) + '</p><div class="finding-marks"><span class="ai-mark">Synthesis waits for evidence to finish</span><span class="meta">Key judgement, still building</span></div></li>' : '') +
+          '</ul></section>';
+      }).join('');
+      html += '<section class="finding-group"><div class="section-head"><h3>Open gaps</h3><span class="meta">' + gaps.length + '</span></div><ul class="rows">' +
+        gaps.map(function (g) { return '<li><p class="finding-text">' + esc(g.t) + '</p><div class="finding-marks">' + mark('gap', 'Gap') + '<span class="meta">' + esc(g.m) + '</span></div></li>'; }).join('') + '</ul></section>';
+      $('findings').innerHTML = html;
+    }
+
+    function select(id, focus) {
+      currentId = id;
+      document.querySelectorAll('.queue-item').forEach(function (b) { b.setAttribute('aria-current', String(b.getAttribute('data-id') === id)); });
+      renderDetail();
+      if (focus) {
+        var btn = document.querySelector('.queue-item[data-id="' + id + '"]');
+        if (btn) { btn.focus({ preventScroll: true }); btn.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+      }
+    }
+
+    document.addEventListener('click', function (e) {
+      var q = e.target.closest('.queue-item');
+      if (q) { select(q.getAttribute('data-id'), false); return; }
+      var f = e.target.closest('[data-filter]');
+      if (f) {
+        filter = f.getAttribute('data-filter');
+        var list = visible();
+        if (!list.some(function (s) { return s.id === currentId; })) currentId = list.length ? list[0].id : null;
+        renderFilters(); renderQueue(); renderDetail();
+        return;
+      }
+      var tab = e.target.closest('.view-tab');
+      if (tab) {
+        document.querySelectorAll('.view-tab').forEach(function (t) {
+          var on = t === tab;
+          t.setAttribute('aria-selected', String(on));
+          t.tabIndex = on ? 0 : -1;
+          document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+        });
+      }
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.target.matches('input, textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key !== 'j' && e.key !== 'k') return;
+      if ($('pane-evidence').hidden) return;
+      var list = visible();
+      if (!list.length) return;
+      e.preventDefault();
+      var idx = list.map(function (s) { return s.id; }).indexOf(currentId);
+      var next = list[Math.max(0, Math.min(list.length - 1, idx + (e.key === 'j' ? 1 : -1)))];
+      select(next.id, true);
+    });
+
+    renderFilters();
+    renderQueue();
+    renderDetail();
+    renderFindings();
+  })();
+  </script>
+</body>
+</html>
