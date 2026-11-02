@@ -1,3 +1,4 @@
+import type { ModelIdentity } from "../../core/model-identity.js";
 import type {
   ArtifactBinding,
   ClaimKind,
@@ -241,8 +242,8 @@ export type SynthesisBuildResponse = {
   schemaVersion: typeof BUILD_RESPONSE_SCHEMA_VERSION;
   requestId: string;
   invocationId: string;
-  provider: typeof BUILD_PROVIDER;
-  model: typeof BUILD_MODEL;
+  provider: ModelIdentity["provider"];
+  model: string;
   startedAt: string;
   completedAt: string;
   freshSession: true;
@@ -265,8 +266,8 @@ export type SynthesisBuildRecord = {
   response: ArtifactBinding;
   invocation: {
     id: string;
-    provider: typeof BUILD_PROVIDER;
-    model: typeof BUILD_MODEL;
+    provider: ModelIdentity["provider"];
+    model: string;
     startedAt: string;
     completedAt: string;
     freshSession: true;

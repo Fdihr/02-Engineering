@@ -17,6 +17,8 @@ test("writes one approved question artifact and refuses to overwrite it", async 
         id: "rq-command-test",
         runId: "research-run-test",
         scopeVersion: 1,
+        researchThesis:
+          "Disruptions are more likely to arise from attacks on third-party operational dependencies.",
         question: "What cyber threats could disrupt wind-farm operations?",
         rationale: "Bound synthetic command test.",
         geographies: ["Northern Europe"],
@@ -35,6 +37,10 @@ test("writes one approved question artifact and refuses to overwrite it", async 
         runId: "research-run-test",
         version: 1,
         purpose: { value: "Assess operational continuity risk.", origin: "human" },
+        researchThesis: {
+          value: "Disruptions are more likely to arise from attacks on third-party operational dependencies.",
+          origin: "human"
+        },
         threatTopic: { value: "Cyber threats", origin: "human" },
         audience: { value: "Strategic risk leadership", origin: "human" },
         geographies: { value: ["Northern Europe"], origin: "human" },

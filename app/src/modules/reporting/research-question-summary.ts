@@ -31,6 +31,7 @@ export const renderResearchQuestionSummary = (
     row("Scope ID", question.scopeApproval?.scopeId ?? "Legacy unbound question"),
     row("Scope artifact", question.scopeApproval?.artifactRef ?? "Not recorded"),
     row("Question", question.question),
+    row("Research thesis", question.researchThesis ?? "Not recorded (legacy question)"),
     row("Rationale", question.rationale),
     row("Geographies", question.geographies.join(", ")),
     row("From", question.timeWindow.from),

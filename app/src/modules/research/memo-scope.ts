@@ -106,6 +106,10 @@ const readScopeDefinition = (
   const id = nonEmptyString(value.id);
   const runId = nonEmptyString(value.runId);
   const purpose = readOriginatedString(value.purpose);
+  const researchThesis =
+    value.researchThesis === undefined
+      ? undefined
+      : readOriginatedString(value.researchThesis);
   const threatTopic = readOriginatedString(value.threatTopic);
   const audience = readOriginatedString(value.audience);
   const geographies = readOriginatedStrings(value.geographies);
@@ -121,6 +125,7 @@ const readScopeDefinition = (
     !Number.isInteger(value.version) ||
     value.version < 1 ||
     !purpose ||
+    (value.researchThesis !== undefined && !researchThesis) ||
     !threatTopic ||
     !audience ||
     !geographies ||
@@ -134,6 +139,7 @@ const readScopeDefinition = (
     runId,
     version: value.version,
     purpose,
+    ...(researchThesis ? { researchThesis } : {}),
     threatTopic,
     audience,
     geographies,
@@ -161,6 +167,9 @@ export const approveMemoScope = (
     return err("INVALID_SCOPE_APPROVAL_TIME");
   }
   const definition = readScopeDefinition(value);
+  if (definition.ok && !definition.value.researchThesis) {
+    return err("INVALID_MEMO_SCOPE");
+  }
   return definition.ok
     ? ok({ ...definition.value, status: "approved", approvedBy, approvedAt })
     : definition;

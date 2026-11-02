@@ -37,6 +37,12 @@ export const renderMemoScopeSummary = (
     row("Research run", scope.runId),
     row("Version", String(scope.version)),
     row("Purpose", originated(scope.purpose, String)),
+    row(
+      "Research thesis",
+      scope.researchThesis
+        ? originated(scope.researchThesis, String)
+        : "Not recorded (legacy scope)"
+    ),
     row("Threat topic", originated(scope.threatTopic, String)),
     row("Audience", originated(scope.audience, String)),
     row("Geographies", originated(scope.geographies, (value) => value.join(", "))),
