@@ -26,7 +26,7 @@
           <h1>CTI workbench</h1>
         </div>
         <nav class="topnav" aria-label="Main">
-          <a href="/concepts/decision-inbox.html">Home <span class="n">7</span></a>
+          <a href="/concepts/decision-inbox.html">Home <span class="n">6</span></a>
           <a href="/concepts/governance.html">Governance</a>
           <a href="/concepts/process-map.html">Process map</a>
         </nav>
@@ -178,7 +178,7 @@
 
     function renderDecision() {
       if (published) {
-        $('decision').innerHTML = '<section><div class="caution is-done">' + mark('done', 'Published') + '<span>Memo v3.1 approved for publication by FDIHR. The decision and every claim trace are in the audit trail. <a href="/concepts/output.html">Open the published memo</a></span></div></section>';
+        $('decision').innerHTML = '<section><div class="caution is-done">' + mark('done', 'Published') + '<span>Memo v3.1 approved for publication by FDIHR. The decision and every claim trace are in the audit trail.</span></div><p class="next-step"><a class="btn-primary" href="/concepts/output.html">Open the published memo</a></p></section>';
         return;
       }
       var open = openBlockers();
@@ -302,7 +302,15 @@
       if (claim) { select(claim.getAttribute('data-claim'), !claim.classList.contains('claim-btn')); return; }
       var fix = e.target.closest('[data-fix]');
       if (fix) { var p = fix.getAttribute('data-fix').split(':'); applyFix(p[0], p[1]); return; }
-      if (e.target.id === 'btn-publish' && !openBlockers().length) { published = true; renderDecision(); window.showToast('Memo v3.1 approved for publication: done.'); return; }
+      if (e.target.id === 'btn-publish' && !openBlockers().length) {
+        published = true; renderDecision();
+        document.querySelector('.activity-strip .now').innerHTML = '<span class="mark done">Published</span><span>Memo v3.1 published to Vestas leadership</span>';
+        document.querySelector('.activity-strip li[aria-current]').innerHTML = '<span class="mark done">Publication</span>';
+        document.querySelector('.activity-strip li[aria-current]').removeAttribute('aria-current');
+        var yours = document.querySelector('.activity-strip .yours');
+        yours.textContent = 'Open the published memo'; yours.href = '/concepts/output.html';
+        window.showToast('Memo v3.1 approved for publication: done.'); return;
+      }
       if (e.target.id === 'btn-return') { window.showToast('Returned to synthesis with your notes. The memo stays at v3.'); return; }
       var tab = e.target.closest('.view-tab');
       if (tab) {

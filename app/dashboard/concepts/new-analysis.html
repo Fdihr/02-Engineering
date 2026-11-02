@@ -23,7 +23,7 @@
           <h1>CTI workbench</h1>
         </div>
         <nav class="topnav" aria-label="Main">
-          <a href="/concepts/decision-inbox.html">Home <span class="n">7</span></a>
+          <a href="/concepts/decision-inbox.html">Home <span class="n">6</span></a>
           <a href="/concepts/governance.html">Governance</a>
           <a href="/concepts/process-map.html">Process map</a>
         </nav>
@@ -48,7 +48,7 @@
       <div class="field">
         <label for="question">Your question</label>
         <p class="meta" id="question-hint">Ask it the way you would ask a colleague.</p>
-        <textarea id="question" rows="4" required aria-describedby="question-hint question-error" placeholder="For example: how are state-linked actors targeting Nordic and Baltic energy infrastructure?"></textarea>
+        <textarea id="question" rows="4" required aria-describedby="question-hint question-error" placeholder="For example: how are state-linked actors targeting Nordic and Baltic energy infrastructure?">Which cyber and geopolitical threats will most affect Vestas operations in Europe in Q4 2026?</textarea>
         <div class="reason-error" id="question-error" hidden>Add your question first. The research plan is drafted from it.</div>
       </div>
 
@@ -57,7 +57,7 @@
         <p class="meta">Pick the form that fits how it will be used.</p>
         <div class="segmented" role="group" aria-label="What you need back" data-single="output">
           <button class="chip-btn" type="button" aria-pressed="false" data-value="Brief">Brief</button>
-          <button class="chip-btn" type="button" aria-pressed="false" data-value="Memo">Memo</button>
+          <button class="chip-btn" type="button" aria-pressed="true" data-value="Memo">Memo</button>
           <button class="chip-btn" type="button" aria-pressed="false" data-value="Assessment">Assessment</button>
         </div>
         <ul class="option-notes meta">
@@ -70,22 +70,22 @@
       <div class="field">
         <label for="audience">Audience</label>
         <p class="meta">Who will read the result.</p>
-        <input id="audience" type="text" autocomplete="off">
+        <input id="audience" type="text" autocomplete="off" value="Vestas leadership">
       </div>
 
       <div class="field">
         <label for="geography">Geography</label>
         <p class="meta">Countries or regions in scope.</p>
-        <input id="geography" type="text" autocomplete="off">
+        <input id="geography" type="text" autocomplete="off" value="Europe (EU, UK and Norway)">
       </div>
 
       <fieldset class="field">
         <legend>Time window</legend>
         <p class="meta">The period the evidence should cover.</p>
         <div class="date-pair">
-          <input id="from" type="date" aria-label="From">
+          <input id="from" type="date" aria-label="From" value="2026-10-01">
           <span class="meta">to</span>
-          <input id="to" type="date" aria-label="To">
+          <input id="to" type="date" aria-label="To" value="2026-12-31">
         </div>
       </fieldset>
 
@@ -93,7 +93,7 @@
         <legend>Profile</legend>
         <p class="meta">Adds the terminology and quality rules for the subject.</p>
         <div class="segmented" role="group" aria-label="Profile" data-single="profile">
-          <button class="chip-btn" type="button" aria-pressed="false" data-value="Cyber">Cyber</button>
+          <button class="chip-btn" type="button" aria-pressed="true" data-value="Cyber">Cyber</button>
           <button class="chip-btn" type="button" aria-pressed="false" data-value="Geopolitical">Geopolitical</button>
           <button class="chip-btn" type="button" aria-pressed="false" data-value="Physical security">Physical security</button>
           <button class="chip-btn" type="button" aria-pressed="false" data-value="Supply chain">Supply chain</button>
@@ -101,7 +101,7 @@
       </fieldset>
 
       <div class="field">
-        <label class="check" for="relevance"><input id="relevance" type="checkbox">Map relevance to Vestas</label>
+        <label class="check" for="relevance"><input id="relevance" type="checkbox" checked>Map relevance to Vestas</label>
         <p class="meta">Uses the approved organisational context pack v2.</p>
       </div>
 

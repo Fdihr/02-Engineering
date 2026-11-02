@@ -27,7 +27,7 @@
           <h1>CTI workbench</h1>
         </div>
         <nav class="topnav" aria-label="Main">
-          <a href="/concepts/decision-inbox.html" aria-current="page">Home <span class="n" id="nav-count">7</span></a>
+          <a href="/concepts/decision-inbox.html" aria-current="page">Home <span class="n" id="nav-count">6</span></a>
           <a href="/concepts/governance.html">Governance</a>
           <a href="/concepts/process-map.html">Process map</a>
         </nav>
@@ -43,7 +43,7 @@
     <div class="page-head">
       <div>
         <h2>Home</h2>
-        <p class="meta">7 decisions waiting across 3 analyses. The workflow moves only when you decide. Concept with illustrative data.</p>
+        <p class="meta">6 decisions waiting. The workflow moves only when you decide. Concept with illustrative data.</p>
       </div>
       <div class="head-actions">
         <div class="keys" aria-label="Keyboard shortcuts">
@@ -64,7 +64,7 @@
         </div>
 
         <div id="analyses-wrap">
-          <h3 class="group-head">Your analyses <span class="meta"><span class="figures">4</span></span></h3>
+          <h3 class="group-head">Your analyses <span class="meta"><span class="figures">1</span></span></h3>
           <ul class="queue" id="analyses" aria-label="Your analyses"></ul>
         </div>
       </div>
@@ -82,7 +82,6 @@
     var KINDS = [
       { id: 'all', label: 'All' },
       { id: 'exceptions', label: 'Exceptions' },
-      { id: 'intent', label: 'Intent' },
       { id: 'publication', label: 'Publication' },
       { id: 'governance', label: 'Governance' },
       { id: 'analyses', label: 'Analyses' }
@@ -143,23 +142,6 @@
         tech: 'command: record:synthesis-challenge\nfinding: contradiction\nclaims: kj-3'
       },
       {
-        id: 'intent-nb', kind: 'intent', kindLabel: 'Intent', run: 'nordic-baltic-2026-11', age: '20 min',
-        state: ['', 'Waiting for you'],
-        title: 'Approve the question for Nordic and Baltic sabotage',
-        raised: 'Drafted by Maria L. at 10:28',
-        quote: 'How likely is physical or cyber sabotage against energy and logistics infrastructure in the Nordic and Baltic region to disrupt wind turbine transport or installation over the next six months?',
-        confirm: 'Intent is decided in intent review, where the scope, assumptions and research questions are shown. Confirming there approves the plan and starts collection; nothing is collected before you confirm.',
-        primary: 'Open intent review', href: '/concepts/intent-review.html', secondary: null, danger: null,
-        facts: [
-          ['Geography', 'Denmark, Sweden, Finland, Estonia, Latvia, Lithuania'],
-          ['Window', '<span class="figures">1 Sep \u2013 31 Oct 2026</span>'],
-          ['Audience', 'Vestas leadership'],
-          ['Lenses', 'Hybrid sabotage and logistics corridors; wind farm OT, SCADA and grid']
-        ],
-        evidenceTitle: null, evidence: null,
-        tech: 'command: approve:scope, then approve:question\nartefacts: runs/nordic-baltic-2026-11/intent/'
-      },
-      {
         id: 'pub-q4', kind: 'publication', kindLabel: 'Publication', run: 'qti-2026-q3', age: '18 h',
         state: ['attention', '2 blockers'],
         title: 'Approve the Q4 Europe memo for publication',
@@ -214,37 +196,10 @@
         question: 'Which cyber and geopolitical threats will most affect Vestas operations in Europe in Q4 2026?',
         now: [['attention', 'Waiting for you'], 'Memo v3 is ready for publication review with <span class="figures">2</span> blockers.'],
         stages: ['done', 'done', 'done', 'done', 'attention'], yours: ['Open publication review', '/concepts/claim-trace.html'],
-        facts: [['Question owner', 'FDIHR'], ['Output', 'Memo, v3'], ['Audience', 'Vestas leadership'], ['Time window', '1 Jul \u2013 30 Sep 2026'], ['Profile', 'Cyber and geopolitical'], ['Sources admitted', '<span class="figures">9</span>'], ['Started', '<span class="figures">14 Oct 2026</span> \u00b7 qti-2026-q3']],
-        links: [['Publication review', '/concepts/claim-trace.html'], ['Analysis', '/concepts/analysis.html']]
-      },
-      {
-        id: 'an-b', kind: 'analyses', title: 'Nordic and Baltic infrastructure sabotage', age: '20 min',
-        meta: 'Brief \u00b7 Security leadership \u00b7 Intent', state: ['attention', 'Waiting for you: research plan'],
-        question: 'How are state-linked actors targeting Nordic and Baltic energy and subsea infrastructure through sabotage?',
-        now: [['attention', 'Waiting for you'], 'Research plan drafted. Nothing has been collected.'],
-        stages: ['attention', '', '', '', ''], yours: ['Open intent review', '/concepts/intent-review.html'],
-        facts: [['Question owner', 'FDIHR'], ['Output', 'Brief'], ['Audience', 'Security leadership'], ['Time window', '1 Sep \u2013 30 Nov 2026'], ['Profile', 'Geopolitical'], ['Sources admitted', '<span class="figures">0</span>'], ['Started', '<span class="figures">2 Nov 2026</span> \u00b7 nordic-baltic-2026-11']],
-        links: [['Intent review', '/concepts/intent-review.html']]
-      },
-      {
-        id: 'an-c', kind: 'analyses', title: 'Ransomware against European manufacturers', age: '3 d',
-        meta: 'Assessment \u00b7 CISO office \u00b7 Evidence', state: ['running', 'Collecting, 42 of 120 calls'],
-        question: 'How is ransomware affecting European industrial manufacturers this autumn?',
-        now: [['running', 'Collecting'], '<span class="figures">42</span> of <span class="figures">120</span> calls used. 1 exception is waiting for you.'],
-        stages: ['done', 'running', '', '', ''], yours: ['Waiting for you: 1 exception', '/concepts/decision-inbox.html'],
-        facts: [['Question owner', 'FDIHR'], ['Output', 'Assessment'], ['Audience', 'CISO office'], ['Time window', '1 Aug \u2013 31 Oct 2026'], ['Profile', 'Cyber'], ['Sources admitted', '<span class="figures">23</span>'], ['Started', '<span class="figures">30 Oct 2026</span> \u00b7 ransomware-mfg-2026-10']],
-        links: [['Analysis', '/concepts/analysis.html']]
-      },
-      {
-        id: 'an-d', kind: 'analyses', title: 'APAC supply-chain disruption, Q3 2026', age: '21 d',
-        meta: 'Memo \u00b7 Procurement leadership \u00b7 Published', state: ['done', 'Published 12 Oct'],
-        question: 'Which supply-chain disruptions in Asia-Pacific most affected Vestas component supply in Q3 2026?',
-        now: [['done', 'Published'], 'Memo published on <span class="figures">12 Oct 2026</span>.'],
-        stages: ['done', 'done', 'done', 'done', 'done'], yours: ['Open the output', '/concepts/output.html'],
-        facts: [['Question owner', 'FDIHR'], ['Output', 'Memo'], ['Audience', 'Procurement leadership'], ['Time window', '1 Jul \u2013 30 Sep 2026'], ['Profile', 'Supply chain'], ['Sources admitted', '<span class="figures">14</span>'], ['Started', '<span class="figures">22 Sep 2026</span> \u00b7 apac-supply-2026-09']],
-        links: [['Output', '/concepts/output.html']]
-      }
-    ];
+        facts: [['Question owner', 'FDIHR'], ['Output', 'Memo, v3'], ['Audience', 'Vestas leadership'], ['Time window', '1 Oct \u2013 31 Dec 2026'], ['Profile', 'Cyber'], ['Sources admitted', '<span class="figures">9</span>'], ['Started', '<span class="figures">24 Oct 2026</span> \u00b7 qti-2026-q3']],
+        links: [['Publication review', '/concepts/claim-trace.html'],         ['Analysis', '/concepts/analysis.html'], ['Output, after publishing', '/concepts/output.html']]
+              }
+            ];
 
     var filter = 'all';
     var currentId = items[0].id;

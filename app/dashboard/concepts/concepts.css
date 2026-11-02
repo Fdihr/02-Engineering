@@ -189,6 +189,8 @@ code { padding:0 4px; background:var(--sunken); border:1px solid var(--rule); bo
 .ai-mark::before { box-sizing:border-box; width:12px; height:12px; border:1px solid var(--action); border-radius:50%; background:radial-gradient(circle, var(--action) 0 2px, transparent 2.5px); content:""; }
 @media (prefers-reduced-motion:no-preference) { .ai-mark::before { animation:ai-pulse 1.6s var(--ease) infinite; } }
 @keyframes ai-pulse { 50% { opacity:.35; } }
+.next-step { margin:16px 0 0; }
+a.btn-primary { display:inline-flex; align-items:center; text-decoration:none; }
 
 @media (max-width:1279px) {
   .review { grid-template-columns:minmax(0, 1fr) minmax(20rem, 26rem); gap:32px 40px; }

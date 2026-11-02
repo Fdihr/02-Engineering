@@ -9,7 +9,7 @@
     OWN-WORLD: ECS "weather window". Night Sky bar, white canvas, ruled rows, one plate for the intent decision, marks that separate what you stated from what the AI assumed.
     STORY: The analyst checks the assumed scope rows, adjusts the research questions, then approves the plan; collection starts and the question is locked for this run.
     FIRST VIEWPORT: Header with question and stages, scope table on the left, the decision plate on the right.
-    FORM: Analysis B, nordic-baltic-2026-11, waiting at Intent.
+    FORM: Analysis qti-2026-q3, waiting at Intent.
   -->
   <script src="/concepts/concepts.js"></script>
   <link rel="stylesheet" href="/design_system.css">
@@ -27,7 +27,7 @@
           <h1>CTI workbench</h1>
         </div>
         <nav class="topnav" aria-label="Main">
-          <a href="/concepts/decision-inbox.html">Home <span class="n">7</span></a>
+          <a href="/concepts/decision-inbox.html">Home <span class="n">6</span></a>
           <a href="/concepts/governance.html">Governance</a>
           <a href="/concepts/process-map.html">Process map</a>
         </nav>
@@ -44,11 +44,11 @@
       <div>
         <a class="parent-link" href="/concepts/decision-inbox.html">Home</a>
         <h2>Intent review</h2>
-        <p class="meta">Nordic and Baltic infrastructure sabotage · brief for Security leadership · analysis nordic-baltic-2026-11. Concept with illustrative data.</p>
+        <p class="meta">Europe cyber and geopolitical outlook, Q4 2026 · memo for Vestas leadership · analysis qti-2026-q3. Concept with illustrative data.</p>
       </div>
     </div>
 
-    <p class="question-line">How are state-linked actors targeting Nordic and Baltic energy and subsea infrastructure through sabotage?</p>
+    <p class="question-line">Which cyber and geopolitical threats will most affect Vestas operations in Europe in Q4 2026?</p>
     <div class="activity-strip" role="status" id="strip">
       <span class="now" id="strip-now"><span class="mark attention">Waiting for you</span><span>Research plan drafted. Nothing has been collected.</span></span>
       <ol class="stages" aria-label="Stages" id="stages">
@@ -64,7 +64,7 @@
     <div class="review">
       <div class="intent-main">
         <section aria-labelledby="h-scope">
-          <div class="section-head"><h3 id="h-scope">Scope</h3><span class="meta">3 of 7 rows are assumed. Check them before you approve.</span></div>
+          <div class="section-head"><h3 id="h-scope">Scope</h3><span class="meta">2 of 7 rows are assumed. Check them before you approve.</span></div>
           <div class="table-wrap">
             <table class="scope-table">
               <thead><tr><th>Field</th><th>Value</th><th>Origin</th><th>Action</th></tr></thead>
@@ -107,20 +107,20 @@
     var collected = false;
 
     var scope = [
-      { f: 'Purpose', v: 'Understand how sabotage by state-linked actors could affect energy and subsea infrastructure', o: 'stated' },
-      { f: 'Audience', v: 'Security leadership', o: 'stated' },
-      { f: 'Geography', v: 'Denmark, Sweden, Finland, Norway, Estonia, Latvia, Lithuania', o: 'stated' },
-      { f: 'Time window', v: '1 Sep to 30 Nov 2026', o: 'assumed', why: 'Not given. The AI took the current quarter, which matches the recent incident cluster.' },
-      { f: 'Output', v: 'Brief', o: 'stated' },
-      { f: 'Threat topic', v: 'State-linked sabotage of energy and subsea infrastructure', o: 'assumed', why: 'Inferred from the question. Cyber and physical sabotage are both in scope.' },
-      { f: 'Map relevance to Vestas', v: 'Yes', o: 'assumed', why: 'Not ticked. Assumed because the audience is Vestas Security; uses organisational context pack v2.' }
+      { f: 'Purpose', v: 'Tell Vestas leadership which cyber and geopolitical threats are most likely to affect European operations next quarter', o: 'stated' },
+      { f: 'Audience', v: 'Vestas leadership', o: 'stated' },
+      { f: 'Geography', v: 'Europe (EU, UK and Norway)', o: 'stated' },
+      { f: 'Time window', v: '1 Oct to 31 Dec 2026', o: 'assumed', why: 'Stated as Q4 2026; the AI took the calendar quarter.' },
+      { f: 'Output', v: 'Memo', o: 'stated' },
+      { f: 'Threat topic', v: 'State-linked cyber activity, ransomware and hybrid sabotage against energy, manufacturing and logistics', o: 'assumed', why: 'Inferred from \u2018cyber and geopolitical threats\u2019 and Vestas operations.' },
+      { f: 'Map relevance to Vestas', v: 'Yes', o: 'stated' }
     ];
 
     var rqs = [
-      { q: 'Which Nordic and Baltic energy and subsea assets have been physically or digitally disrupted since 1 September?', why: 'Sets the factual baseline of incidents in scope.' },
-      { q: 'Which state-linked actors, or their proxies, are credibly attributed to these disruptions?', why: 'Separates attribution claims from the incidents themselves.' },
-      { q: 'Which methods recur across incidents, and which assets do they favour?', why: 'Lets the brief name patterns rather than single events.' },
-      { q: 'What exposure does this create for Vestas offshore and onshore sites in the region?', why: 'Maps the findings to operations, using the organisational context pack.', pending: true }
+      { q: 'How are state-linked actors targeting European energy and utility OT networks?', why: 'Sets the baseline of state-linked activity in scope.' },
+      { q: 'What is driving production disruption at European industrial manufacturers?', why: 'Covers criminal and other disruptive activity against manufacturing.' },
+      { q: 'What hybrid threats affect Baltic and North Sea logistics and subsea infrastructure?', why: 'Covers physical and cyber pressure on the corridors Vestas depends on.' },
+      { q: 'What does this mean for Vestas sites, service technicians and the supply chain?', why: 'Maps the findings to operations, using the organisational context pack.', pending: true }
     ];
 
     function mark(c, t) { return '<span class="mark ' + c + '">' + t + '</span>'; }
