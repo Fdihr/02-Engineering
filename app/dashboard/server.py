@@ -25,7 +25,7 @@ from . import auth, settings
 from .model import RELEVANCE_REQUEST_PATH, ai_stage_for, build_run_view
 from .relevance_bridge import build_relevance_prompt, build_response, parse_model_answer
 from .scan import _fs_path, list_available_runs, read_artifact_text, resolve_inside_run, scan_run_directory
-from .copilot import CopilotError, available_models, generate, load_settings, save_model
+from .copilot import CopilotError, WORKFLOW_STEPS, available_models, generate, load_settings, resolve_model, save_model
 
 DASHBOARD_DIR = Path(__file__).resolve().parent
 APP_DIR = DASHBOARD_DIR.parent
@@ -555,16 +555,17 @@ def _handle_ai_stage(runs_root: Path, payload: dict[str, Any], invocation: dict[
     return (200 if succeeded else 400), {"ok": succeeded, "runId": run_id, "steps": steps, "error": "" if succeeded else steps[-1]["stderr"] or steps[-1]["stdout"]}
 
 
-def _generate_and_preserve(runs_root: Path, request_file: Path, request: dict[str, Any], prompt: dict[str, str]) -> dict[str, Any]:
+def _generate_and_preserve(runs_root: Path, request_file: Path, request: dict[str, Any], prompt: dict[str, str], stage: str) -> dict[str, Any]:
     """Keep the original output even when downstream validation rejects it."""
     request_bytes = request_file.read_bytes()
     if json.loads(request_bytes) != request:
         raise CopilotError("The prepared request changed before generation. Refresh the analysis before retrying.")
     checksum = hashlib.sha256(request_bytes).hexdigest()
-    invocation = generate(runs_root, prompt)
+    invocation = generate(runs_root, prompt, stage)
     path = request_file.parent / f"copilot-invocation-{uuid.uuid4().hex}.json"
     _write_json(path, {
         **invocation,
+        "stage": stage,
         "requestId": request.get("id"),
         "requestArtifactSha256": checksum,
     })
@@ -616,8 +617,7 @@ def _handle_draft_question(runs_root: Path, payload: dict[str, Any]) -> tuple[in
     if not run_id or not reviewer_id or payload.get("scopeConfirmed") is not True:
         return 400, {"ok": False, "error": "Confirm the scope and enter your analyst ID before generating a question."}
     # Fail before persisting a human approval when the model has not been configured.
-    if not load_settings(runs_root)["model"]:
-        raise CopilotError("Choose and save a model in Settings first.")
+    resolve_model(runs_root, "research-question")
     scope = _scope_proposal(payload, run_id)
     target = runs_root / run_id
     scope_path = target / "memo-scopes" / scope["id"] / "v1" / "approved-memo-scope.json"
@@ -640,7 +640,7 @@ def _handle_draft_question(runs_root: Path, payload: dict[str, Any]) -> tuple[in
     if request_file is None:
         return 400, {"ok": False, "error": "Prepared request is outside the analysis."}
     request = json.loads(request_file.read_text(encoding="utf-8"))
-    invocation = _generate_and_preserve(runs_root, request_file, request, request["prompt"])
+    invocation = _generate_and_preserve(runs_root, request_file, request, request["prompt"], "research-question")
     proposal, problem = parse_stage_answer(invocation["content"])
     if problem:
         return 400, {"ok": False, "error": problem}
@@ -713,7 +713,7 @@ def _handle_run_ai(runs_root: Path, payload: dict[str, Any]) -> tuple[int, dict[
               "user": build_relevance_prompt(request)} if relevance else request.get("prompt")
     if not isinstance(prompt, dict) or not all(isinstance(prompt.get(key), str) and prompt[key].strip() for key in ("system", "user")):
         return 400, {"ok": False, "error": "The AI request has no valid bounded prompt."}
-    invocation = _generate_and_preserve(runs_root, request_file, request, prompt)
+    invocation = _generate_and_preserve(runs_root, request_file, request, prompt, "relevance" if relevance else stage)
     recorded_payload = {**payload, "answer": invocation["content"], "freshSession": True}
     status, response = (_handle_record_relevance(runs_root, recorded_payload, invocation)
                         if relevance else _handle_ai_stage(runs_root, recorded_payload, invocation))
@@ -853,7 +853,10 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
 def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     action = payload.get("action")
     if action == "save-copilot-settings":
-        return 200, {"ok": True, "settings": save_model(runs_root, payload.get("model"))}
+        if "stages" in payload and not isinstance(payload["stages"], dict):
+            return 400, {"ok": False, "error": "Stage overrides must be an object. Refresh Settings and retry."}
+        return 200, {"ok": True, "settings": save_model(runs_root, payload.get("model"), payload["stages"])
+                    if "stages" in payload else save_model(runs_root, payload.get("model"))}
     if action in ("run-ai-stage", "draft-research-question"):
         if not COPILOT_LOCK.acquire(blocking=False):
             return 409, {"ok": False, "error": "Copilot is already running a stage. Wait for it to finish."}
@@ -1334,7 +1337,7 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
                 return
             if parsed.path in ("/api/copilot-settings", "/api/copilot-models"):
                 try:
-                    result = ({"settings": load_settings(runs_root)} if parsed.path.endswith("settings")
+                    result = ({"settings": load_settings(runs_root), "workflow": WORKFLOW_STEPS} if parsed.path.endswith("settings")
                               else {"models": available_models()})
                     self._send(200, "application/json; charset=utf-8", json.dumps(result))
                 except CopilotError as exc:

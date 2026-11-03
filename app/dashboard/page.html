@@ -122,7 +122,8 @@
 
         <div class="brief-step">
           <div class="brief-step-title">4. Draft and review the research question</div>
-          <p class="meta">Copilot tests the approved thesis against the scope; it must not assume the thesis is true. Your model in Settings is used for every AI stage.</p>
+          <p class="meta">Copilot tests the approved thesis against the scope; it must not assume the thesis is true. The saved research-question override or default model in Settings is used.</p>
+          <p class="meta" id="draft-question-model">Loading the saved model assignment...</p>
           <label class="check"><input type="checkbox" id="scope-confirm">I approve the thesis and scope above, including the purpose and topic below, for question drafting.</label>
           <div class="btn-row">
             <button class="btn-primary" id="btn-draft-question" type="button">Approve scope and draft with Copilot</button>
@@ -170,20 +171,26 @@
     <div class="tab-pane" id="pane-memo" hidden></div>
     <div class="tab-pane" id="pane-audit" hidden></div>
     <div class="tab-pane" id="pane-settings" aria-label="Settings" hidden>
-      <section>
-        <div class="section-head"><h2>Local Copilot</h2></div>
-        <p class="meta prose">Runs on this PC through the GitHub Copilot SDK using your local sign-in. One model is used for question drafting, relevance, extraction, synthesis, challenge, key judgements and memo writing. Human approvals remain yours.</p>
+      <section class="model-settings" aria-labelledby="model-settings-heading">
+        <div class="section-head"><h2 id="model-settings-heading">Workflow models</h2><span class="meta">Shared across analyses in this run folder</span></div>
+        <p class="meta prose">Choose a default, then change the model wherever the workflow uses AI reasoning. Changes apply to future invocations, not recorded answers. Human decisions and deterministic checks have no model.</p>
+        <div class="model-connections">
+          <div><h3>GitHub Copilot</h3><p class="meta" id="copilot-connection-status">Uses your local Copilot sign-in. Refresh models to check availability.</p><div class="btn-row"><button class="btn-secondary" id="btn-refresh-models" type="button">Refresh models</button></div></div>
+          <div><h3>Azure AI Foundry <span class="actor">Not connected</span></h3><p class="meta">Reserved for a future connection. Saving an endpoint below does not enable model calls.</p></div>
+        </div>
         <div class="form-grid">
           <div class="field field-wide">
-            <label for="copilot-model">Model for all AI stages</label>
+            <label for="copilot-model">Default Copilot model</label>
             <select id="copilot-model" disabled aria-describedby="copilot-setting-status"><option value="">Refresh models to choose</option></select>
             <span class="hint" id="copilot-saved-model">No model selected.</span>
           </div>
         </div>
+        <p class="meta" id="copilot-setting-status" role="status"></p>
+        <div class="model-workflow-heading"><h3>AI reasoning through the workflow</h3><span class="meta">AI steps are configurable. Human and system steps are read-only.</span></div>
+        <ol class="model-workflow" id="model-workflow" aria-label="Workflow stages and model assignments"><li class="meta">Loading workflow settings...</li></ol>
         <div class="btn-row">
-          <button class="btn-primary" id="btn-save-model" type="button" disabled>Save model</button>
-          <button class="btn-secondary" id="btn-refresh-models" type="button">Refresh models</button>
-          <span class="meta" id="copilot-setting-status" role="status"></span>
+          <button class="btn-primary" id="btn-save-model" type="button" disabled>Save model settings</button>
+          <button class="btn-secondary" id="btn-discard-models" type="button" disabled>Discard changes</button>
         </div>
         <p class="meta prose">Only available models from your account are offered. An unavailable saved model is never silently replaced. If sign-in is required, sign in to GitHub Copilot CLI on this PC, then refresh.</p>
       </section>

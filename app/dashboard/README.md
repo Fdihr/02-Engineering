@@ -28,7 +28,27 @@ Settings can store Seerist credentials, Microsoft Entra tenant/application IDs, 
 
 Install the app dependencies with `npm install`. The pinned `@github/copilot-sdk` includes a platform runtime; a separate CLI executable on PATH is not needed to run it. Use a supported Node.js version (20.19+ or 22.12+). The runtime uses the PC's existing Copilot sign-in and subscription; if it reports an authentication error, sign in through GitHub Copilot CLI locally, then use **Settings → Refresh models**. No API key is stored in this app.
 
-Choose **Settings → Model for all AI stages → Save model**. The chooser reads the live account catalog, and saving checks availability again. The selected ID is persisted in `<runs-root>/.copilot-settings.json` (ignored with `app/runs` by default). This one setting controls research-question drafting, relevance, extraction, Build, Challenge, key judgements and memo writing. An unavailable model fails explicitly; no fallback or Auto model is silently substituted.
+Choose **Settings → Workflow models → Default Copilot model**. The workflow map shows the seven implemented AI stages in order, interleaved with read-only human decisions and deterministic steps. Each AI stage can **Use default model** or have an explicit Copilot model override: research-question drafting, relevance, extraction, Build, Challenge, key judgements and memo writing. The model shown on an AI execution task is its saved, effective model, not an unsaved Settings selection.
+
+Use **Save model settings** to apply the entire configuration, or **Discard changes** to restore the saved selections. Refreshing models retains unsaved selections. Both listing and saving use the live account catalog; an unavailable saved selection is shown explicitly and must be replaced or reset to the default before saving. Generation checks account availability again and never silently falls back to another model or Auto.
+
+Settings are shared by all analyses under the same run root and persist in `<runs-root>/.copilot-settings.json` (ignored with `app/runs` by default):
+
+```json
+{
+  "model": "account-model-id",
+  "stages": {
+    "challenge": {
+      "provider": "github-copilot-sdk",
+      "model": "another-account-model-id"
+    }
+  }
+}
+```
+
+Existing files containing only `model` remain valid and supply the default to all stages. Missing stage entries inherit the default; an empty `stages` object resets all overrides. The legacy default-only save action preserves existing overrides. Unknown stages, malformed bindings and unimplemented providers are rejected without replacing the saved configuration. Changes affect future invocations only; invocation receipts retain the stage and actual provider/model alongside the existing request checksum and raw answer. Historical responses and human approval gates are unchanged.
+
+**Azure AI Foundry** is visible as **Not connected**. The existing endpoint configuration is retained, but is not a working model transport or catalog, and no Foundry assignment can be saved or invoked yet.
 
 On a new analysis, enter the thesis and scope, confirm scope approval, and choose **Approve scope and draft with Copilot**. The returned question and rationale remain editable proposals. Approve the question and requirements separately before collection. **Continue question drafting** resumes a scope-approved analysis after a reload; changing its approved scope requires a new analysis ID. Requirements and search suggestions remain explicitly labelled lens-based templates, not model-generated output.
 

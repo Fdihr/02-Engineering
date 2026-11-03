@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from dashboard.copilot import CopilotError, call_copilot, generate, load_settings, save_model
+from dashboard.copilot import COPILOT_PROVIDER, STAGE_IDS, CopilotError, call_copilot, generate, load_settings, resolve_model, save_model
 from dashboard.server import COPILOT_LOCK, STAGE_RESPONSES, _handle_analyst_action
 
 
@@ -27,16 +27,81 @@ class CopilotTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_settings_are_explicit_persistent_and_checked_against_catalog(self):
-        self.assertEqual(load_settings(self.root), {"model": None})
+        self.assertEqual(load_settings(self.root), {"model": None, "stages": {}})
         with patch("dashboard.copilot.available_models", return_value=[{"id": "test-model", "name": "Test"}]):
             with self.assertRaises(CopilotError):
                 save_model(self.root, "missing")
             save_model(self.root, "test-model")
-        self.assertEqual(load_settings(self.root), {"model": "test-model"})
+        self.assertEqual(load_settings(self.root), {"model": "test-model", "stages": {}})
         self.assertEqual(list(self.root.glob("*.tmp")), [])
         (self.root / ".copilot-settings.json").write_text("invalid", encoding="utf-8")
         with self.assertRaisesRegex(CopilotError, "saved model"):
             load_settings(self.root)
+
+    def test_legacy_default_is_inherited_by_every_stage(self):
+        (self.root / ".copilot-settings.json").write_text('{"model":"test-model"}', encoding="utf-8")
+        for stage in STAGE_IDS:
+            self.assertEqual(resolve_model(self.root, stage), "test-model")
+        with self.assertRaisesRegex(CopilotError, "Unknown AI stage"):
+            resolve_model(self.root, "publication-approval")
+
+    def test_overrides_persist_without_changing_other_stages_and_can_be_reset(self):
+        catalog = [{"id": name, "name": name} for name in ("default", "reasoning", "new-default")]
+        stages = {"challenge": {"provider": COPILOT_PROVIDER, "model": "reasoning"}}
+        with patch("dashboard.copilot.available_models", return_value=catalog):
+            self.assertEqual(save_model(self.root, "default", stages), {"model": "default", "stages": stages})
+            save_model(self.root, "new-default")  # Legacy callers retain overrides.
+            self.assertEqual(load_settings(self.root)["stages"], stages)
+            for stage in STAGE_IDS:
+                self.assertEqual(resolve_model(self.root, stage), "reasoning" if stage == "challenge" else "new-default")
+            save_model(self.root, "new-default", {})
+        self.assertEqual(resolve_model(self.root, "challenge"), "new-default")
+        self.assertEqual(list(self.root.glob("*.tmp")), [])
+
+    def test_invalid_assignments_never_replace_saved_settings(self):
+        catalog = [{"id": "test-model", "name": "Test"}]
+        with patch("dashboard.copilot.available_models", return_value=catalog):
+            save_model(self.root, "test-model", {})
+            original = (self.root / ".copilot-settings.json").read_bytes()
+            invalid = [
+                [],
+                {"approval": {"provider": COPILOT_PROVIDER, "model": "test-model"}},
+                {"challenge": {"provider": "azure-ai-foundry", "model": "deployment"}},
+                {"challenge": {"provider": COPILOT_PROVIDER, "model": "unavailable"}},
+                {"challenge": {"provider": COPILOT_PROVIDER, "model": ""}},
+                {"challenge": {"model": "test-model"}},
+                {"challenge": None},
+            ]
+            for stages in invalid:
+                with self.subTest(stages=stages), self.assertRaises(CopilotError):
+                    save_model(self.root, "test-model", stages)
+                self.assertEqual((self.root / ".copilot-settings.json").read_bytes(), original)
+            with patch("dashboard.copilot.available_models", side_effect=CopilotError("Sign in required")):
+                with self.assertRaisesRegex(CopilotError, "Sign in"):
+                    save_model(self.root, "test-model", {})
+            self.assertEqual((self.root / ".copilot-settings.json").read_bytes(), original)
+
+    def test_corrupt_or_future_provider_assignments_cannot_silently_use_default(self):
+        for stages in (None, [], {"challenge": {"provider": "azure-ai-foundry", "model": "deployment"}}):
+            (self.root / ".copilot-settings.json").write_text(json.dumps({"model": "test-model", "stages": stages}), encoding="utf-8")
+            with patch("dashboard.copilot.call_copilot") as transport:
+                with self.assertRaises(CopilotError):
+                    generate(self.root, {"system": "s", "user": "u"}, "challenge")
+                transport.assert_not_called()
+
+    def test_generation_routes_every_stage_to_its_override_and_retains_provenance(self):
+        stages = {stage: {"provider": COPILOT_PROVIDER, "model": stage + "-model"} for stage in STAGE_IDS}
+        (self.root / ".copilot-settings.json").write_text(json.dumps({"model": "default", "stages": stages}), encoding="utf-8")
+        for stage in STAGE_IDS:
+            with self.subTest(stage=stage), patch("dashboard.copilot.call_copilot", return_value={**invocation(), "model": stage + "-model"}) as transport:
+                result = generate(self.root, {"system": "s", "user": "u"}, stage)
+                self.assertEqual(transport.call_args.args[0]["model"], stage + "-model")
+                self.assertEqual(result["stage"], stage)
+                self.assertEqual(result["provider"], COPILOT_PROVIDER)
+        with patch("dashboard.copilot.call_copilot", side_effect=CopilotError("Model unavailable")) as transport:
+            with self.assertRaisesRegex(CopilotError, "unavailable"):
+                generate(self.root, {"system": "s", "user": "u"}, "challenge")
+            transport.assert_called_once()  # No retry with the default.
 
     def test_transport_uses_stdin_and_reports_runtime_and_timeout_failures(self):
         with patch("dashboard.copilot.subprocess.run") as runner:
@@ -54,15 +119,15 @@ class CopilotTests(unittest.TestCase):
     def test_generation_never_selects_an_implicit_or_different_model(self):
         with patch("dashboard.copilot.call_copilot") as transport:
             with self.assertRaisesRegex(CopilotError, "Settings"):
-                generate(self.root, {"system": "s", "user": "u"})
+                generate(self.root, {"system": "s", "user": "u"}, "build")
             transport.assert_not_called()
             (self.root / ".copilot-settings.json").write_text('{"model":"test-model"}', encoding="utf-8")
             transport.return_value = invocation()
-            self.assertEqual(generate(self.root, {"system": "s", "user": "u"})["model"], "test-model")
+            self.assertEqual(generate(self.root, {"system": "s", "user": "u"}, "build")["model"], "test-model")
             self.assertEqual(transport.call_args.args[0]["model"], "test-model")
             transport.return_value = {**invocation(), "model": "another-model"}
             with self.assertRaisesRegex(CopilotError, "provenance"):
-                generate(self.root, {"system": "s", "user": "u"})
+                generate(self.root, {"system": "s", "user": "u"}, "build")
 
     def test_all_automatic_stages_preserve_sdk_provenance_and_record_once(self):
         paths = {
@@ -88,6 +153,7 @@ class CopilotTests(unittest.TestCase):
                     self.assertEqual(record.call_args.args[0], STAGE_RESPONSES[stage][1])
                     self.assertEqual(_handle_analyst_action(self.root, run, payload)[0], 409)
                     transport.assert_called_once()
+                    self.assertEqual(transport.call_args.args[2], stage)
                 response = json.loads(next(request.parent.glob("copilot-response-*.json")).read_text(encoding="utf-8"))
                 self.assertEqual(response["provider"], "github-copilot-sdk")
                 self.assertEqual(response["model"], "test-model")
@@ -95,6 +161,7 @@ class CopilotTests(unittest.TestCase):
                 self.assertTrue(response["freshSession"])
                 receipt = json.loads(next(request.parent.glob("copilot-invocation-*.json")).read_text(encoding="utf-8"))
                 self.assertEqual(receipt["content"], invocation()["content"])
+                self.assertEqual(receipt["stage"], stage)
                 self.assertEqual(len(receipt["requestArtifactSha256"]), 64)
 
     def test_relevance_uses_sdk_model_without_approving_evidence(self):
@@ -104,12 +171,13 @@ class CopilotTests(unittest.TestCase):
         request.parent.mkdir(parents=True)
         request.write_text('{"id":"r1","preparedAt":"2026-01-01T00:00:00.000Z"}', encoding="utf-8")
         answer = {"verdict": "not-relevant", "rationale": "Outside the question", "support": [], "limitations": ["One source only"]}
-        with patch("dashboard.server.generate", return_value=invocation(json.dumps(answer))), \
+        with patch("dashboard.server.generate", return_value=invocation(json.dumps(answer))) as transport, \
                 patch("dashboard.server._run_npm_script", return_value={"ok": True, "stderr": "", "stdout": ""}) as runner:
             status, result = _handle_analyst_action(self.root, run, {
                 "action": "run-ai-stage", "runId": run.name, "reviewerId": "analyst", "requestPath": rel,
             })
         self.assertEqual(status, 200, result)
+        self.assertEqual(transport.call_args.args[2], "relevance")
         self.assertEqual([call.args[0] for call in runner.call_args_list], ["record:question-relevance"])
         response = json.loads(next(request.parent.glob("copilot-response-*.json")).read_text(encoding="utf-8"))
         self.assertEqual(response["schemaVersion"], "question-relevance-copilot-sdk-response-v1")
@@ -205,11 +273,13 @@ class CopilotTests(unittest.TestCase):
         draft = {"question": "Do supplier incidents disrupt European production more often than direct attacks?",
                  "rationale": "Compare supporting and contradictory evidence for both disruption pathways."}
         run = self.root / payload["runId"]
-        with patch("dashboard.server.load_settings", return_value={"model": "test-model"}), \
+        with patch("dashboard.server.resolve_model", return_value="test-model") as resolver, \
                 patch("dashboard.server.generate", side_effect=lambda *args: invocation(json.dumps(draft))) as transport:
             self.assertEqual(_handle_analyst_action(self.root, run, {**payload, "scopeConfirmed": False})[0], 400)
             status, result = _handle_analyst_action(self.root, run, payload)
             self.assertEqual(status, 200, result)
+            resolver.assert_called_with(self.root, "research-question")
+            self.assertEqual(transport.call_args.args[2], "research-question")
             self.assertEqual(result["draft"]["status"], "proposed")
             self.assertEqual(result["draft"]["researchThesis"], payload["researchThesis"])
             self.assertFalse((run / "research-questions").exists())
