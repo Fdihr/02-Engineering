@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from dashboard import settings
+from dashboard.copilot import WORKFLOW_STEPS
 from dashboard.server import create_server, parse_stage_answer, read_lead, _handle_analyst_action
 
 
@@ -44,6 +45,10 @@ class ServerTests(unittest.TestCase):
         self.assertIn("/design_system.css", page)
         self.assertIn("/run_view.js", page)
         self.assertIn('id="integration-settings"', page)
+        self.assertIn('id="model-workflow"', page)
+        self.assertIn('Default Copilot model', page)
+        self.assertIn('Azure AI Foundry', page)
+        self.assertIn('Not connected', page)
         for script in ("/run_view.js", "/run_panes.js"):
             with urlopen(self.base + script) as response:
                 self.assertIn("text/javascript", response.headers.get("Content-Type"))
@@ -118,6 +123,13 @@ C.panes.settings();
 """
         result = subprocess.run(
             ["node", "-e", script, str(Path(__file__).parent / "run_panes.js")],
+            capture_output=True, text=True, timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_workflow_model_controls_preserve_saved_settings_until_successful_save(self):
+        result = subprocess.run(
+            ["node", str(Path(__file__).parent / "test_model_settings.cjs"), json.dumps(WORKFLOW_STEPS)],
             capture_output=True, text=True, timeout=15,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -308,7 +320,12 @@ C.panes.settings();
     def test_local_copilot_settings_endpoints_and_visible_auth_errors(self):
         with patch("dashboard.server.load_settings", return_value={"model": "saved-model"}):
             with urlopen(self.base + "/api/copilot-settings") as response:
-                self.assertEqual(json.loads(response.read())["settings"]["model"], "saved-model")
+                data = json.loads(response.read())
+                self.assertEqual(data["settings"]["model"], "saved-model")
+                self.assertEqual({step["id"] for step in data["workflow"] if step["kind"] == "ai"},
+                                 {"research-question", "relevance", "extract", "build", "challenge", "key-judgements", "memo-writer"})
+                self.assertTrue(any(step["kind"] == "human" for step in data["workflow"]))
+                self.assertTrue(any(step["kind"] == "system" for step in data["workflow"]))
         with patch("dashboard.server.available_models", return_value=[{"id": "test-model", "name": "Test"}]):
             with urlopen(self.base + "/api/copilot-models") as response:
                 self.assertEqual(json.loads(response.read())["models"][0]["id"], "test-model")
@@ -324,6 +341,21 @@ C.panes.settings();
             with urlopen(request) as response:
                 self.assertEqual(json.loads(response.read())["settings"]["model"], "test-model")
             saver.assert_called_once_with(self.run_dir.parent, "test-model")
+        stages = {"challenge": {"provider": "github-copilot-sdk", "model": "reasoning"}}
+        with patch("dashboard.server.save_model", return_value={"model": "test-model", "stages": stages}) as saver:
+            request = Request(self.base + "/api/action", data=json.dumps({
+                "action": "save-copilot-settings", "model": "test-model", "stages": stages,
+            }).encode(), headers={"Content-Type": "application/json"})
+            with urlopen(request) as response:
+                self.assertEqual(json.loads(response.read())["settings"]["stages"], stages)
+            saver.assert_called_once_with(self.run_dir.parent, "test-model", stages)
+        for invalid in (None, [], "bad"):
+            request = Request(self.base + "/api/action", data=json.dumps({
+                "action": "save-copilot-settings", "model": "test-model", "stages": invalid,
+            }).encode(), headers={"Content-Type": "application/json"})
+            with self.assertRaises(HTTPError) as failed:
+                urlopen(request)
+            self.assertEqual(failed.exception.code, 400)
 
     def test_intent_requires_identity_and_preserves_existing_run(self):
         with patch("dashboard.server._run_npm_script") as runner:

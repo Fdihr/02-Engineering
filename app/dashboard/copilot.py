@@ -10,6 +10,25 @@ from typing import Any
 
 APP_DIR = Path(__file__).resolve().parent.parent
 SETTINGS_NAME = ".copilot-settings.json"
+COPILOT_PROVIDER = "github-copilot-sdk"
+WORKFLOW_STEPS = [
+    {"kind": "human", "label": "Approve scope", "description": "Set the thesis and boundaries before AI drafting."},
+    {"kind": "ai", "id": "research-question", "label": "Draft research question", "description": "Turn the approved scope into a question proposal."},
+    {"kind": "human", "label": "Approve question and requirements", "description": "Confirm the research intent before collection."},
+    {"kind": "system", "label": "Collect and canonicalize", "description": "Bounded Seerist collection and captured-content preparation. Collection leads wait for RSS."},
+    {"kind": "ai", "id": "relevance", "label": "Assess question relevance", "description": "Assess each canonical source against the approved question."},
+    {"kind": "human", "label": "Admit evidence", "description": "Current compatibility review; an AI proposal cannot approve evidence."},
+    {"kind": "ai", "id": "extract", "label": "Extract source observations", "description": "Find requirement-linked observations with exact source anchors."},
+    {"kind": "human", "label": "Review source support", "description": "Current interim source-assurance review before synthesis."},
+    {"kind": "ai", "id": "build", "label": "Build synthesis", "description": "Propose cross-source claims from source notes."},
+    {"kind": "ai", "id": "challenge", "label": "Challenge synthesis", "description": "Test claims for gaps, contradictions and alternative explanations."},
+    {"kind": "human", "label": "Adjudicate challenges", "description": "Decide which claims stand before key-judgement selection."},
+    {"kind": "ai", "id": "key-judgements", "label": "Select key judgements", "description": "Select bounded judgements from adjudicated claims."},
+    {"kind": "ai", "id": "memo-writer", "label": "Write memo", "description": "Write the memo from selected judgements and traceable evidence."},
+    {"kind": "system", "label": "Verify output", "description": "Deterministic validation and publication-blocker checks; no model selector."},
+    {"kind": "human", "label": "Approve publication", "description": "Publication remains an explicit human decision."},
+]
+STAGE_IDS = {step["id"] for step in WORKFLOW_STEPS if step["kind"] == "ai"}
 
 
 class CopilotError(Exception):
@@ -46,14 +65,39 @@ def call_copilot(payload: dict[str, Any]) -> dict[str, Any]:
 def load_settings(runs_root: Path) -> dict[str, Any]:
     path = runs_root / SETTINGS_NAME
     if not path.exists():
-        return {"model": None}
+        return {"model": None, "stages": {}}
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise CopilotError("Could not read the saved model setting. Check .copilot-settings.json in the run directory.") from exc
     if not isinstance(value, dict) or not isinstance(value.get("model"), str) or not value["model"].strip():
         raise CopilotError("The saved model setting is invalid. Select and save a model in Settings.")
-    return {"model": value["model"]}
+    return {"model": value["model"], "stages": _validate_stages(value.get("stages", {}))}
+
+
+def _validate_stages(stages: Any) -> dict[str, dict[str, str]]:
+    if not isinstance(stages, dict) or set(stages) - STAGE_IDS:
+        raise CopilotError("Invalid AI stage settings. Refresh Settings and select models for the supported stages.")
+    for binding in stages.values():
+        if (
+            not isinstance(binding, dict)
+            or set(binding) != {"provider", "model"}
+            or binding["provider"] != COPILOT_PROVIDER
+            or not isinstance(binding["model"], str)
+            or not binding["model"].strip()
+        ):
+            raise CopilotError("Each stage must use an explicit Copilot model. Foundry is not connected yet.")
+    return stages
+
+
+def resolve_model(runs_root: Path, stage: str) -> str:
+    if stage not in STAGE_IDS:
+        raise CopilotError("Unknown AI stage. No model was invoked.")
+    settings = load_settings(runs_root)
+    model = settings["stages"].get(stage, {}).get("model") or settings["model"]
+    if not model:
+        raise CopilotError("Choose and save a Copilot model in Settings before running an AI stage.")
+    return model
 
 
 def available_models() -> list[dict[str, str]]:
@@ -67,23 +111,27 @@ def available_models() -> list[dict[str, str]]:
     return models
 
 
-def save_model(runs_root: Path, model: Any) -> dict[str, str]:
-    if not isinstance(model, str) or model not in {entry["id"] for entry in available_models()}:
+def save_model(runs_root: Path, model: Any, stages: Any = None) -> dict[str, Any]:
+    overrides = _validate_stages(load_settings(runs_root)["stages"] if stages is None else stages)
+    catalog = {entry["id"] for entry in available_models()}
+    if not isinstance(model, str) or model not in catalog:
         raise CopilotError("That model is not available. Refresh models and select an available model.")
+    for stage, binding in overrides.items():
+        if binding["model"] not in catalog:
+            raise CopilotError(f"The model for {stage} is not available. Refresh models and select an available model.")
+    saved = {"model": model, "stages": overrides}
     runs_root.mkdir(parents=True, exist_ok=True)
     temporary = runs_root / f".copilot-settings-{uuid.uuid4().hex}.tmp"
     try:
-        temporary.write_text(json.dumps({"model": model}, indent=2) + "\n", encoding="utf-8")
+        temporary.write_text(json.dumps(saved, indent=2) + "\n", encoding="utf-8")
         os.replace(temporary, runs_root / SETTINGS_NAME)
     finally:
         temporary.unlink(missing_ok=True)
-    return {"model": model}
+    return saved
 
 
-def generate(runs_root: Path, prompt: dict[str, str]) -> dict[str, Any]:
-    model = load_settings(runs_root)["model"]
-    if not model:
-        raise CopilotError("Choose and save a Copilot model in Settings before running an AI stage.")
+def generate(runs_root: Path, prompt: dict[str, str], stage: str) -> dict[str, Any]:
+    model = resolve_model(runs_root, stage)
     result = call_copilot({"action": "generate", "model": model, "prompt": prompt})
     if (
         result.get("provider") != "github-copilot-sdk"
@@ -93,4 +141,4 @@ def generate(runs_root: Path, prompt: dict[str, str]) -> dict[str, Any]:
                    for key in ("invocationId", "startedAt", "completedAt", "content"))
     ):
         raise CopilotError("Copilot returned incomplete or mismatched invocation provenance. No answer was recorded.")
-    return result
+    return {**result, "stage": stage}
