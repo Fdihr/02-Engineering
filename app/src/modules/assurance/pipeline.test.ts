@@ -3,6 +3,7 @@ import test from "node:test";
 import { createSourceDocument } from "../source/source-document.js";
 import { assembleSourceNote } from "./assemble.js";
 import { recordExtractResponse } from "./extract/record.js";
+import { validateExtractCommit } from "./extract/commit.js";
 import { createExtractRequest } from "./extract/request.js";
 import { measureAssurance, readMeasuredNote } from "./measure.js";
 import { validateProfilePolicy } from "./policy.js";
@@ -262,6 +263,20 @@ test("SDK extraction preserves the selected model without granting review author
   const sdkCommit = buildCommit(singleObservationProposal, true);
   assert.equal(sdkCommit.invocation.provider, "github-copilot-sdk");
   assert.equal(sdkCommit.invocation.model, "test-model-1");
+  const reopened = validateExtractCommit(JSON.parse(JSON.stringify(sdkCommit)), policy);
+  assert.ok(reopened.ok);
+  assert.deepEqual(reopened.value, sdkCommit);
+  assert.ok(validateExtractCommit(commit, policy).ok);
+  for (const identity of [
+    { provider: "unapproved-provider", model: "test-model-1" },
+    { provider: "github-copilot-sdk", model: "auto" },
+    { provider: "github-copilot-sdk", model: "not-exposed-by-host" },
+    { provider: "github-copilot-vscode", model: "test-model-1" }
+  ]) {
+    assert.equal(validateExtractCommit({
+      ...sdkCommit, invocation: { ...sdkCommit.invocation, ...identity }
+    }, policy).ok, false);
+  }
 });
 
 const buildPackage = (source: ExtractCommit = commit) => {

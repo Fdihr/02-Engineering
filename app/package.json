@@ -45,7 +45,8 @@
     "match:rss": "node --import tsx src/commands/match-rss.ts",
     "rss:batch": "node --import tsx src/commands/rss-batch.ts",
     "collect:article": "node --import tsx src/commands/collect-article.ts",
-    "article:admit": "node --import tsx src/commands/admit-article.ts"
+    "article:admit": "node --import tsx src/commands/admit-article.ts",
+    "article:reassessment": "node --import tsx src/commands/article-reassessment.ts"
   },
   "keywords": [],
   "author": "",

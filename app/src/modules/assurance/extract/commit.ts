@@ -1,9 +1,8 @@
 import { err, ok, type Result } from "../../../core/result.js";
+import { readModelIdentity } from "../../../core/model-identity.js";
 import { hasAllowedKeys, validateObservation } from "../observation.js";
 import {
   EXTRACT_COMMIT_SCHEMA_VERSION,
-  EXTRACT_MODEL,
-  EXTRACT_PROVIDER,
   EXTRACT_REQUEST_SCHEMA_VERSION,
   EXTRACT_RESPONSE_SCHEMA_VERSION,
   type Disposition,
@@ -82,8 +81,6 @@ const readInvocation = (value: unknown): ExtractInvocation | undefined => {
       "request",
       "response"
     ]) ||
-    value.provider !== EXTRACT_PROVIDER ||
-    value.model !== EXTRACT_MODEL ||
     value.freshSession !== true
   ) {
     return undefined;
@@ -94,7 +91,9 @@ const readInvocation = (value: unknown): ExtractInvocation | undefined => {
   const capturedBy = nonEmptyString(value.capturedBy);
   const request = readArtifactBinding(value.request);
   const response = readArtifactBinding(value.response);
+  const identity = readModelIdentity(value);
   if (
+    !identity ||
     !id ||
     !startedAt ||
     !completedAt ||
@@ -107,8 +106,7 @@ const readInvocation = (value: unknown): ExtractInvocation | undefined => {
   }
   return {
     id,
-    provider: EXTRACT_PROVIDER,
-    model: EXTRACT_MODEL,
+    ...identity,
     startedAt,
     completedAt,
     freshSession: true,

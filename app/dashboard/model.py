@@ -561,6 +561,7 @@ def _build_relevance_queue(run_id: str, json_by_path: dict[str, Any], candidates
         queue.append({
             "requestPath": rel_path,
             "sourceItemId": source_item_id,
+            "preparedAt": _string_field(value, ["preparedAt"]),
             "title": _string_field(source, ["title"]) or source_item_id,
             "publisher": _string_field(source, ["publisherHost"]),
             "url": _string_field(source, ["finalUrl", "requestedUrl"]),

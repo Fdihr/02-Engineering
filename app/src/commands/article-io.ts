@@ -1,6 +1,10 @@
 import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { ARTICLE_EXTRACTION_VERSION, createArticleCapture, prepareArticle } from "../modules/collection/article-capture.js";
+import { ARTICLE_EXTRACTION_VERSION, adaptArticleContent, createArticleCapture, prepareArticle } from "../modules/collection/article-capture.js";
+import { assessCopilotPocResponse } from "../modules/relevance/copilot-poc.js";
+import { validateQuestionRelevanceRequest } from "../modules/relevance/question-relevance.js";
+import { createSourceDocument } from "../modules/source/source-document.js";
 import { rssRecord, rssSha256, type RssResponse } from "../modules/collection/rss-capture.js";
 import { longPath, type LoadedArtifact } from "./assurance-io.js";
 import { loadRssQuestion, loadRssRunArtifact, rssRunPath } from "./rss-io.js";
@@ -17,6 +21,7 @@ export const loadArticleCapture = async (root: string, path: string) => {
     if (!isDeepStrictEqual(loaded.binding, binding)) throw new Error("Article artifact checksum mismatch.");
     return loaded;
   };
+
   const planArtifact = await reopen(value.lineage.plan);
   const request = await reopen(value.lineage.request);
   const response = await reopen(value.lineage.response);
@@ -49,4 +54,37 @@ export const loadArticleCapture = async (root: string, path: string) => {
     throw new Error("Article receipt does not reconstruct from raw HTML and approved inputs.");
   }
   return { capture: reconstructed.value, artifact };
+};
+
+export const loadArticleAssessment = async (root: string, capturePath: string, assessmentPath: string) => {
+  const { capture, artifact } = await loadArticleCapture(root, capturePath);
+  const assessment = await loadRssRunArtifact(root, assessmentPath);
+  const a = assessment.value;
+  if (!rssRecord(a) || !rssRecord(a.modelInvocation) || a.sourceItemId !== capture.id ||
+      typeof a.modelInvocation.promptArtifactRef !== "string" ||
+      typeof a.modelInvocation.responseArtifactRef !== "string") throw new Error("Article assessment does not bind this capture.");
+  const request = await loadRssRunArtifact(root, a.modelInvocation.promptArtifactRef);
+  const response = await loadRssRunArtifact(root, a.modelInvocation.responseArtifactRef);
+  const checked = validateQuestionRelevanceRequest(request.value);
+  if (!checked.ok) throw new Error("Invalid article relevance request.");
+  const source = adaptArticleContent(capture, artifact.binding);
+  const document = source.ok ? createSourceDocument(source.value) : source;
+  const documentArtifact = await loadRssRunArtifact(root, checked.value.sourceDocumentArtifactRef);
+  if (!document.ok || !isDeepStrictEqual(document.value, checked.value.sourceDocument) ||
+      !isDeepStrictEqual(document.value, documentArtifact.value) ||
+      documentArtifact.binding.artifactSha256 !== checked.value.sourceDocumentArtifactSha256 ||
+      !isDeepStrictEqual(capture.researchQuestion, checked.value.researchQuestion) ||
+      !isDeepStrictEqual(capture.limitations, checked.value.sourceLimitations)) {
+    throw new Error("Article canonical content or question does not reconstruct.");
+  }
+  const assessed = assessCopilotPocResponse(request.value, request.binding.artifactRef,
+    request.binding.artifactSha256, response.value, response.binding.artifactRef, response.binding.artifactSha256);
+  const decision = await loadRssRunArtifact(root, resolve(dirname(assessmentPath), "question-relevance-decision.json"));
+  if (!assessed.ok || !isDeepStrictEqual(a, assessed.value.assessment) ||
+      !isDeepStrictEqual(decision.value, assessed.value.decision)) throw new Error("Article relevance does not reconstruct.");
+  const expected = resolve(root, capture.runId, "sources", capture.id, document.value.id,
+    "question-relevance", checked.value.id, "assessments", assessed.value.assessment.id, "question-relevance-assessment.json");
+  if (resolve(assessmentPath) !== expected) throw new Error("Article admission requires the recorded assessment path.");
+  return { capture, artifact, assessment, request, response, checked: checked.value,
+    document: document.value, assessed: assessed.value, decision };
 };

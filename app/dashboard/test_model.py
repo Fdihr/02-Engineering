@@ -51,6 +51,16 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["snapshotId"], "snapshot-article-1")
 
+        old = {**relevance, "verdict": "partially-relevant", "preparedAt": "2026-11-03T10:00:00Z"}
+        new = {**relevance, "preparedAt": "2026-11-03T11:00:00Z", "candidateId": "reassessment-1"}
+        candidate = {**candidate, "candidateId": "reassessment-1",
+                     "decision": {**candidate["decision"], "snapshotId": "snapshot-reassessment-1"}}
+        for queue in ([old, new], [new, old]):
+            rows = _source_rows(full, {}, [candidate], queue, [], [], {}, None)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["snapshotId"], "snapshot-reassessment-1")
+            self.assertEqual(next(s for s in rows[0]["steps"] if s["key"] == "relevance")["detail"], "Relevant")
+
     def test_empty_run_shows_pending_stages_without_publication_claim(self):
         view = build_run_view("empty", [], [], [], "2026-10-26T00:00:00Z")
         self.assertEqual(len(view["panel1"]["stages"]), 6)

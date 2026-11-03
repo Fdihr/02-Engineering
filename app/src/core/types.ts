@@ -178,6 +178,7 @@ export type LocalArticleEvidenceCandidate = Omit<
   articleLineage: {
     capture: SourceArtifactLineage;
     plan: SourceArtifactLineage;
+    reassessment?: SourceArtifactLineage;
   };
 };
 
