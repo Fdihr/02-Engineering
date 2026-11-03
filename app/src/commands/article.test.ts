@@ -16,6 +16,7 @@ import { collectArticle, reextractArticle } from "./collect-article.js";
 import { loadArticleCapture } from "./article-io.js";
 import { admitArticle } from "./admit-article.js";
 import { loadAdmittedSource, loadJsonArtifact } from "./assurance-io.js";
+import { prepareArticleReassessment, loadArticleReassessment } from "./article-reassessment.js";
 
 const question: ApprovedResearchQuestion = {
   id: "rq-1", runId: "article-test", scopeVersion: 1, question: "What threatens Polish factories?",
@@ -250,4 +251,103 @@ test("invalid plans fail before I/O, and HTTP failures preserve explicit non-ret
     await assert.rejects(collectArticle([f.planPath, f.questionPath], f.runRoot, fetch), /EEXIST/);
     assert.equal(calls, 1);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("explicit v1-to-v2 production reassessment preserves history and consumes one source reservation", async t => {
+  for (const verdict of ["relevant", "partially-relevant", "not-relevant", "uncertain"]) await t.test(verdict, async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "article-reassessment-"));
+    try {
+      const f = await setup(root);
+      let fetches = 0;
+      const capturePath = await collectArticle([f.planPath, f.questionPath], f.runRoot, async (url, requestedAt) => {
+        fetches++;
+        return { raw: html(), response: { ...response, requestedAt, receivedAt: new Date().toISOString(), finalUrl: url } };
+      });
+      const documentPath = invoke("canonicalize-source.ts", [capturePath], f.runRoot);
+      const document = await loadJsonArtifact(documentPath);
+      const capture = await loadArticleCapture(f.runRoot, capturePath);
+      const legacy = createQuestionRelevanceRequest({
+        preparedAt: new Date().toISOString(), researchQuestion: capture.capture.researchQuestion,
+        sourceDocument: document.value, sourceDocumentArtifactRef: document.binding.artifactRef,
+        sourceDocumentArtifactSha256: document.binding.artifactSha256, sourceLimitations: capture.capture.limitations
+      }, "question-relevance-prompt-v1");
+      assert.ok(legacy.ok);
+      const legacyDir = resolve(documentPath, "..", "question-relevance", legacy.value.id);
+      await mkdir(legacyDir, { recursive: true });
+      const legacyRequestPath = resolve(legacyDir, "question-relevance-request.json");
+      await writeFile(legacyRequestPath, JSON.stringify(legacy.value));
+      const record = async (requestPath: string, value: string) => {
+        const request = JSON.parse(await readFile(requestPath, "utf8"));
+        const segment = request.sourceDocument.segments[0];
+        const startedAt = new Date(Date.now() + 10).toISOString();
+        const completedAt = new Date(Date.now() + 20).toISOString();
+        const responsePath = resolve(requestPath, "..", "synthetic-response.json");
+        const invocation = {
+          invocationId: `synthetic-${request.id}`, provider: "github-copilot-sdk", model: "synthetic-test-model",
+          startedAt, completedAt, freshSession: true
+        };
+        await writeFile(responsePath, JSON.stringify({
+          schemaVersion: "question-relevance-copilot-sdk-response-v1", requestId: request.id,
+          invocationId: invocation.invocationId, provider: invocation.provider, model: invocation.model,
+          startedAt, completedAt, proposal: {
+            verdict: value, rationale: "Synthetic reassessment contract test.",
+            support: [{ anchor: {
+              sourceDocumentId: request.sourceDocument.id, sourceDocumentArtifactRef: request.sourceDocumentArtifactRef,
+              sourceDocumentArtifactSha256: request.sourceDocumentArtifactSha256, segmentId: segment.id,
+              segmentSha256: segment.textSha256, quote: segment.text, quoteStartUtf8Byte: 0,
+              quoteEndUtf8Byte: Buffer.byteLength(segment.text)
+            }, relationToQuestion: "Synthetic factory incident." }], limitations: ["Synthetic; not a live test."]
+          }
+        }));
+        return { assessmentPath: invoke("record-question-relevance.ts", [requestPath, responsePath], f.runRoot), invocation };
+      };
+      const prior = await record(legacyRequestPath, "partially-relevant");
+      await admitArticle(f.runRoot, capturePath, prior.assessmentPath);
+      const previousAdmissionPath = resolve(f.run, "article-admissions", plan.id, "article-admission-result.json");
+      const originals = [capturePath, legacyRequestPath, prior.assessmentPath, previousAdmissionPath];
+      const before = await Promise.all(originals.map(p => readFile(p, "utf8")));
+      const approvalPath = resolve(f.run, "reassessment-approval.json");
+      const authorization = {
+        schemaVersion: "local-article-reassessment-v1", id: "reassessment-1", runId: question.runId,
+        sourceItemId: plan.id, capture: capture.artifact.binding,
+        previousAssessment: (await loadJsonArtifact(prior.assessmentPath)).binding,
+        previousAdmission: (await loadJsonArtifact(previousAdmissionPath)).binding,
+        approvedBy: "test-operator", approvedAt: new Date().toISOString(), reason: "Explicit v2 migration.",
+        promptPolicyVersion: "question-relevance-prompt-v2", maxFetches: 0, maxModelCalls: 1,
+        admission: "controller-relevant-only"
+      };
+      for (const invalid of [{ maxModelCalls: 2 }, { maxFetches: 1 }, { approvedBy: "" },
+        { approvedAt: "2099-01-01T00:00:00Z" }, { approvedAt: "2020-01-01T00:00:00Z" },
+        { promptPolicyVersion: "question-relevance-prompt-v1" },
+        { previousAssessment: { ...authorization.previousAssessment, artifactSha256: "f".repeat(64) } }]) {
+        await writeFile(approvalPath, JSON.stringify({ ...authorization, ...invalid }));
+        await assert.rejects(prepareArticleReassessment(f.runRoot, approvalPath));
+      }
+      await writeFile(approvalPath, JSON.stringify(authorization));
+      const prepared = await prepareArticleReassessment(f.runRoot, approvalPath);
+      const loaded = await loadArticleReassessment(f.runRoot, prepared.authorizationPath);
+      assert.equal(loaded.request.value.promptPolicyVersion, "question-relevance-prompt-v2");
+      const next = await record(prepared.requestPath, verdict);
+      await assert.rejects(admitArticle(f.runRoot, capturePath, next.assessmentPath), /EEXIST/);
+      await assert.rejects(admitArticle(f.runRoot, capturePath, next.assessmentPath, prepared.authorizationPath), /ENOENT/);
+      await writeFile(resolve(loaded.directory, "generation-attempt.json"), JSON.stringify({
+        requestId: loaded.request.value.id, model: next.invocation.model,
+        reservedAt: loaded.request.value.preparedAt, maxModelCalls: 1, maxFetches: 0
+      }));
+      await writeFile(resolve(loaded.directory, "invocation.json"), JSON.stringify(next.invocation));
+      const result = await admitArticle(f.runRoot, capturePath, next.assessmentPath, prepared.authorizationPath);
+      assert.equal(result.outcome, verdict === "relevant" ? "approved" : verdict === "not-relevant" ? "not-relevant" : "exception");
+      if (result.snapshotRef) {
+        const admitted = await loadAdmittedSource(f.runRoot, result.snapshotRef, new Date().toISOString());
+        assert.equal(admitted.snapshotId, "snapshot-reassessment-1");
+        assert.equal(admitted.candidateId, plan.id);
+      }
+      await assert.rejects(admitArticle(f.runRoot, capturePath, next.assessmentPath, prepared.authorizationPath), /EEXIST/);
+      await assert.rejects(prepareArticleReassessment(f.runRoot, approvalPath), /EEXIST/);
+      await writeFile(approvalPath, JSON.stringify({ ...authorization, id: "another-approval" }));
+      await assert.rejects(prepareArticleReassessment(f.runRoot, approvalPath), /EEXIST/);
+      assert.deepEqual(await Promise.all(originals.map(p => readFile(p, "utf8"))), before);
+      assert.equal(fetches, 1);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
 });

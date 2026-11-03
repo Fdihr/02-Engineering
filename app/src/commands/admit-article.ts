@@ -2,52 +2,46 @@ import { appendFile, mkdir, readdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
-import type { LocalArticleEvidenceCandidate } from "../core/types.js";
-import { adaptArticleContent } from "../modules/collection/article-capture.js";
 import { rssRecord } from "../modules/collection/rss-capture.js";
+import type { LocalArticleEvidenceCandidate } from "../core/types.js";
 import { createOpenExceptionItem, validateExceptionItem } from "../modules/exceptions/exception-item.js";
-import { assessCopilotPocResponse } from "../modules/relevance/copilot-poc.js";
-import { validateQuestionRelevanceRequest } from "../modules/relevance/question-relevance.js";
-import { createSourceDocument } from "../modules/source/source-document.js";
 import { admitVerifiedArticle } from "../workflow/admit-article-evidence.js";
 import { artifactRef, commandError, longPath, writeJsonOnce } from "./assurance-io.js";
-import { loadArticleCapture } from "./article-io.js";
+import { loadArticleAssessment } from "./article-io.js";
+import { loadArticleReassessment } from "./article-reassessment.js";
 import { articleRunRoot } from "./collect-article.js";
 import { persistExceptionItem } from "./exception-io.js";
 import { loadRssRunArtifact } from "./rss-io.js";
 
 export const admitArticle = async (
-  root: string, capturePath: string, assessmentPath: string
+  root: string, capturePath: string, assessmentPath: string, reassessmentPath?: string
 ): Promise<{ outcome: string; snapshotRef?: string }> => {
-  const { capture, artifact } = await loadArticleCapture(root, capturePath);
-  const assessment = await loadRssRunArtifact(root, assessmentPath);
-  const a = assessment.value;
-  if (!rssRecord(a) || !rssRecord(a.modelInvocation) || a.sourceItemId !== capture.id ||
-      typeof a.modelInvocation.promptArtifactRef !== "string" ||
-      typeof a.modelInvocation.responseArtifactRef !== "string") throw new Error("Article assessment does not bind this capture.");
-  const request = await loadRssRunArtifact(root, a.modelInvocation.promptArtifactRef);
-  const response = await loadRssRunArtifact(root, a.modelInvocation.responseArtifactRef);
-  const checked = validateQuestionRelevanceRequest(request.value);
-  if (!checked.ok) throw new Error("Invalid article relevance request.");
-  const source = adaptArticleContent(capture, artifact.binding);
-  const document = source.ok ? createSourceDocument(source.value) : source;
-  const documentArtifact = await loadRssRunArtifact(root, checked.value.sourceDocumentArtifactRef);
-  if (!document.ok || !isDeepStrictEqual(document.value, checked.value.sourceDocument) ||
-      !isDeepStrictEqual(document.value, documentArtifact.value) ||
-      documentArtifact.binding.artifactSha256 !== checked.value.sourceDocumentArtifactSha256 ||
-      !isDeepStrictEqual(capture.researchQuestion, checked.value.researchQuestion) ||
-      !isDeepStrictEqual(capture.limitations, checked.value.sourceLimitations)) {
-    throw new Error("Article canonical content or question does not reconstruct.");
+  const verified = await loadArticleAssessment(root, capturePath, assessmentPath);
+  const { capture, artifact, assessment, decision, assessed } = verified;
+  const reassessment = reassessmentPath ? await loadArticleReassessment(root, reassessmentPath) : undefined;
+  if (reassessment && (!isDeepStrictEqual(reassessment.authorization.capture, artifact.binding) ||
+      !isDeepStrictEqual(reassessment.request.binding, verified.request.binding) ||
+      Date.parse(assessed.assessment.modelInvocation.startedAt) < Date.parse(reassessment.request.value.preparedAt))) {
+    throw new Error("Reassessment request or invocation does not bind this authorization.");
   }
-  const assessed = assessCopilotPocResponse(request.value, request.binding.artifactRef,
-    request.binding.artifactSha256, response.value, response.binding.artifactRef, response.binding.artifactSha256);
-  const decision = await loadRssRunArtifact(root, resolve(dirname(assessmentPath), "question-relevance-decision.json"));
-  if (!assessed.ok || !isDeepStrictEqual(a, assessed.value.assessment) ||
-      !isDeepStrictEqual(decision.value, assessed.value.decision)) throw new Error("Article relevance does not reconstruct.");
-  const expected = resolve(root, capture.runId, "sources", capture.id, document.value.id,
-    "question-relevance", checked.value.id, "assessments", assessed.value.assessment.id, "question-relevance-assessment.json");
-  if (resolve(assessmentPath) !== expected) throw new Error("Article admission requires the recorded assessment path.");
-  if (assessed.value.decision.destination === "human_exception_triage") {
+  if (reassessment) {
+    const attempt = await loadRssRunArtifact(root, resolve(reassessment.directory, "generation-attempt.json"));
+    const invocation = await loadRssRunArtifact(root, resolve(reassessment.directory, "invocation.json"));
+    const provenance = assessed.assessment.modelInvocation;
+    if (!rssRecord(attempt.value) || !rssRecord(invocation.value) ||
+        attempt.value.requestId !== verified.checked.id || attempt.value.maxModelCalls !== 1 ||
+        attempt.value.maxFetches !== 0 || attempt.value.model !== provenance.model ||
+        typeof attempt.value.reservedAt !== "string" ||
+        !Number.isFinite(Date.parse(attempt.value.reservedAt)) ||
+        Date.parse(attempt.value.reservedAt) < Date.parse(verified.checked.preparedAt) ||
+        Date.parse(attempt.value.reservedAt) > Date.parse(provenance.startedAt) ||
+        invocation.value.invocationId !== provenance.id || invocation.value.provider !== provenance.provider ||
+        invocation.value.model !== provenance.model || invocation.value.freshSession !== true ||
+        invocation.value.startedAt !== provenance.startedAt || invocation.value.completedAt !== provenance.completedAt) {
+      throw new Error("Reassessment generation receipt does not bind the recorded invocation.");
+    }
+  }
+  if (assessed.decision.destination === "human_exception_triage") {
     const exceptions = resolve(root, capture.runId, "exceptions");
     let found = false;
     for (const entry of await readdir(longPath(exceptions))) {
@@ -59,12 +53,16 @@ export const admitArticle = async (
     }
     if (!found) throw new Error("Recorded article relevance exception is missing.");
   }
-  const directory = resolve(root, capture.runId, "article-admissions", capture.id);
+  const decisionId = reassessment?.authorization.id ?? capture.id;
+  const directory = reassessment
+    ? resolve(root, capture.runId, "article-admissions", capture.id, "reassessments", decisionId)
+    : resolve(root, capture.runId, "article-admissions", capture.id);
   await mkdir(longPath(dirname(directory)), { recursive: true });
   await mkdir(longPath(directory)); // Fail closed on repeated or incomplete decisions.
   const decidedAt = new Date().toISOString();
   const refs = [artifact.binding, capture.lineage.plan, assessment.binding, decision.binding];
-  let outcome: string = assessed.value.assessment.verdict;
+  if (reassessment) refs.push(reassessment.artifact.binding, reassessment.authorization.previousAdmission);
+  let outcome: string = assessed.assessment.verdict;
   let snapshotRef: string | undefined;
   if (outcome === "relevant") {
     const item: LocalArticleEvidenceCandidate = {
@@ -76,18 +74,22 @@ export const admitArticle = async (
       researchQuestion: capture.researchQuestion, role: "evidence_candidate", contentCompleteness: "captured_content",
       source: { requestedUrl: capture.plan.url, finalUrl: capture.response.finalUrl,
         publisherHost: new URL(capture.response.finalUrl).hostname, title: capture.title },
-      articleLineage: { capture: artifact.binding, plan: capture.lineage.plan },
+      articleLineage: { capture: artifact.binding, plan: capture.lineage.plan,
+        ...(reassessment ? { reassessment: reassessment.artifact.binding } : {}) },
       questionRelevance: {
         assessmentArtifactRef: assessment.binding.artifactRef, assessmentArtifactSha256: assessment.binding.artifactSha256,
         decisionArtifactRef: decision.binding.artifactRef, decisionArtifactSha256: decision.binding.artifactSha256,
-        ...assessed.value
+        ...assessed
       },
       limitations: capture.limitations
     };
-    const intakePath = resolve(root, capture.runId, "source-reintakes", capture.id, "intake-result.json");
+    const intakePath = resolve(root, capture.runId, "source-reintakes", decisionId, "intake-result.json");
     const admitted = admitVerifiedArticle({
       plan: capture.plan, item, intakeArtifactRef: artifactRef(intakePath),
-      decisionId: capture.id, decidedAt
+      decisionId, decidedAt,
+      ...(reassessment ? { reassessment: {
+        id: decisionId, approvedAt: reassessment.authorization.approvedAt
+      } } : {})
     });
     if (!admitted.ok || admitted.value.outcome !== "approved") throw new Error(admitted.ok ? "Article admission failed." : admitted.error);
     await mkdir(longPath(dirname(intakePath)), { recursive: true });
@@ -104,7 +106,7 @@ export const admitArticle = async (
     outcome = "approved";
   } else if (outcome !== "not-relevant") {
     // The recorder already raises the uncertain verdict's exception.
-    if (assessed.value.decision.destination !== "human_exception_triage") {
+    if (assessed.decision.destination !== "human_exception_triage") {
       const exception = createOpenExceptionItem({ kind: "uncertain-relevance", runId: capture.runId, refs, raisedAt: decidedAt });
       if (!exception.ok) throw new Error(exception.error);
       await persistExceptionItem(root, exception.value);
@@ -120,9 +122,9 @@ export const admitArticle = async (
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
-    const [capture, assessment, ...extra] = process.argv.slice(2);
-    if (!capture || !assessment || extra.length) throw new Error("Usage: article:admit -- <article-capture.json> <recorded-assessment.json>");
-    const result = await admitArticle(articleRunRoot(), capture, assessment);
+    const [capture, assessment, reassessment, ...extra] = process.argv.slice(2);
+    if (!capture || !assessment || extra.length) throw new Error("Usage: article:admit -- <article-capture.json> <recorded-assessment.json> [reassessment-authorization.json]");
+    const result = await admitArticle(articleRunRoot(), capture, assessment, reassessment);
     console.log(`Outcome: ${result.outcome}`);
     if (result.snapshotRef) console.log(`Snapshot: ${result.snapshotRef}`);
   } catch (error) { console.error(`Article admission failed: ${commandError(error)}`); process.exitCode = 1; }

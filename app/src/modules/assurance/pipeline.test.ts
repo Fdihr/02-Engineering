@@ -3,12 +3,14 @@ import test from "node:test";
 import { createSourceDocument } from "../source/source-document.js";
 import { assembleSourceNote } from "./assemble.js";
 import { recordExtractResponse } from "./extract/record.js";
+import { validateExtractCommit } from "./extract/commit.js";
 import { createExtractRequest } from "./extract/request.js";
 import { measureAssurance, readMeasuredNote } from "./measure.js";
 import { validateProfilePolicy } from "./policy.js";
 import { approveRequirements } from "./requirements.js";
 import { createReviewPackage } from "./review/package.js";
-import { recordReview } from "./review/record.js";
+import { recordReview, validateReviewRecord } from "./review/record.js";
+import { validateSynthesisSourceNote } from "../synthesis/source-note.js";
 import { validateAdmittedSource } from "./snapshot-source.js";
 import type {
   AdmittedSource,
@@ -262,6 +264,20 @@ test("SDK extraction preserves the selected model without granting review author
   const sdkCommit = buildCommit(singleObservationProposal, true);
   assert.equal(sdkCommit.invocation.provider, "github-copilot-sdk");
   assert.equal(sdkCommit.invocation.model, "test-model-1");
+  const reopened = validateExtractCommit(JSON.parse(JSON.stringify(sdkCommit)), policy);
+  assert.ok(reopened.ok);
+  assert.deepEqual(reopened.value, sdkCommit);
+  assert.ok(validateExtractCommit(commit, policy).ok);
+  for (const identity of [
+    { provider: "unapproved-provider", model: "test-model-1" },
+    { provider: "github-copilot-sdk", model: "auto" },
+    { provider: "github-copilot-sdk", model: "not-exposed-by-host" },
+    { provider: "github-copilot-vscode", model: "test-model-1" }
+  ]) {
+    assert.equal(validateExtractCommit({
+      ...sdkCommit, invocation: { ...sdkCommit.invocation, ...identity }
+    }, policy).ok, false);
+  }
 });
 
 const buildPackage = (source: ExtractCommit = commit) => {
@@ -385,6 +401,60 @@ const provisionalResponse = {
   irReview: []
 };
 
+const simplifiedResponse = {
+  ...baseResponse,
+  reviewPolicyVersion: "support-review-v2",
+  omissionPass: "not-performed",
+  humanObservations: [],
+  irReview: reviewPackage.modelDispositions.map(({ irId, disposition }) => ({ irId, disposition })),
+  assessment: { status: "not-assessed" }
+};
+
+test("v2 records explicit support and unchanged coverage without a source questionnaire", () => {
+  const record = buildRecord(simplifiedResponse);
+  assert.equal(record.ok, true);
+  if (!record.ok) return;
+  assert.deepEqual(record.value.assessment, { status: "not-assessed" });
+  assert.equal(record.value.irReviewBasis, "rows-only");
+  assert.equal(record.value.reviewPolicyVersion, "support-review-v2");
+  assert.deepEqual(validateReviewRecord(record.value, policy), record);
+  assert.equal(buildRecord({ ...simplifiedResponse, verdicts: [] }).ok, false);
+  assert.equal(buildRecord({ ...simplifiedResponse, irReview: [] }).ok, false);
+  assert.equal(buildRecord({ ...simplifiedResponse, assessment: undefined }).ok, false);
+  assert.equal(buildRecord({ ...simplifiedResponse, reviewPolicyVersion: undefined }).ok, false);
+  assert.equal(buildRecord({ ...simplifiedResponse, reviewPolicyVersion: "support-review-v3" }).ok, false);
+  assert.equal(validateReviewRecord({ ...record.value, reviewPolicyVersion: undefined }, policy).ok, false);
+  assert.equal(buildRecord({ ...simplifiedResponse, assessment }).ok, true);
+});
+
+test("v2 requires explanations for coverage overrides and statement concerns, not normal gaps", () => {
+  for (const disposition of ["partial", "contradicted"]) {
+    const changed = simplifiedResponse.irReview.map((entry, index) => index ? entry : { ...entry, disposition });
+    assert.deepEqual(buildRecord({ ...simplifiedResponse, irReview: changed }), { ok: false, error: "MISSING_IR_REVIEW_NOTE" });
+    assert.equal(buildRecord({
+      ...simplifiedResponse,
+      irReview: changed.map(entry => ({ ...entry, note: "The reviewed statement warrants this change." }))
+    }).ok, true);
+  }
+  for (const verdict of ["unsupported", "chrome"]) {
+    const verdicts = baseResponse.verdicts.map(entry => ({ ...entry, verdict }));
+    assert.equal(buildRecord({ ...simplifiedResponse, verdicts }).ok, false);
+    const explained = buildRecord({
+      ...simplifiedResponse, verdicts: verdicts.map(entry => ({ ...entry, note: "This row does not support the proposed statement." }))
+    });
+    assert.equal(explained.ok, true);
+    if (explained.ok) assert.deepEqual(validateReviewRecord(explained.value, policy), explained);
+  }
+  assert.equal(buildRecord({ ...simplifiedResponse, sourceConcern: "" }).ok, false);
+  assert.equal(buildRecord({ ...simplifiedResponse, sourceConcern: "x".repeat(2001) }).ok, false);
+  assert.equal(buildRecord({ ...baseResponse, sourceConcern: "Unversioned change" }).ok, false);
+  assert.equal(buildRecord({ ...provisionalResponse, reviewPolicyVersion: "support-review-v2", sourceConcern: "Not a performed review" }).ok, false);
+  assert.equal(buildRecord({
+    ...simplifiedResponse,
+    verdicts: baseResponse.verdicts.map(entry => ({ ...entry, correctedIrIds: [] }))
+  }).ok, false);
+});
+
 test("records provisional review state without human judgments", () => {
   const record = buildRecord(provisionalResponse);
   assert.equal(record.ok, true);
@@ -485,6 +555,38 @@ const buildNote = (responseValue: unknown = baseResponse) => {
     assembledAt: "2026-03-14T00:00:00.000Z"
   });
 };
+
+test("v2 source notes retain unassessed credibility and source concerns through synthesis validation", () => {
+  const note = buildNote({ ...simplifiedResponse, sourceConcern: "The official allegation has not been independently corroborated." });
+  assert.equal(note.ok, true);
+  if (!note.ok) return;
+  assert.equal(note.value.reviewStatus, "reviewed");
+  assert.deepEqual(note.value.assessment, { status: "not-assessed" });
+  assert.equal(note.value.reviewPolicyVersion, "support-review-v2");
+  assert.ok(note.value.caveats.some(text => text.includes("were not assessed")));
+  assert.ok(note.value.caveats.includes("Reviewer source concern: The official allegation has not been independently corroborated."));
+  assert.ok(note.value.caveats.some(text => text.includes("No omission pass")));
+  assert.ok(note.value.inScopeObservations.every(observation => observation.reviewVerdict === "supported"));
+  assert.equal(validateSynthesisSourceNote(note.value).ok, true);
+  assert.equal(validateSynthesisSourceNote({ ...note.value, reviewPolicyVersion: undefined }).ok, false);
+  assert.equal(validateSynthesisSourceNote({ ...note.value, caveats: [] }).ok, false);
+  const measured = readMeasuredNote(note.value, policy);
+  const record = buildRecord({ ...simplifiedResponse, sourceConcern: "The official allegation has not been independently corroborated." });
+  if (!measured.ok || !record.ok) throw new Error("Expected a readable v2 note and review.");
+  const metrics = measureAssurance({
+    note: measured.value,
+    reviewPackage,
+    reviewRecord: record.value,
+    attemptFailures: [[]],
+    measuredAt: "2026-03-15T00:00:00.000Z"
+  });
+  assert.equal(metrics.ok, true);
+  if (metrics.ok) {
+    assert.equal(metrics.value.supportFailureRate, 0);
+    assert.equal(metrics.value.omissionCount, null);
+    assert.equal(metrics.value.dispositionMismatches?.underclaims, null);
+  }
+});
 
 test("assembles a lineage-complete note with disjoint observation sets", () => {
   const note = buildNote();

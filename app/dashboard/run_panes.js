@@ -789,9 +789,9 @@
     var parts = [];
     parts.push(el('p', 'meta prose', review.status === 'provisional'
       ? 'This source was recorded without the support pass. Its note is provisional and blocks publication. Complete the review to replace it.'
-      : 'Check each observation against its quote, confirm how the source covers each requirement, and assess the source. This is the support pass.'));
-    parts.push(el('div', 'form-label', 'Observations: does the quote support the statement?'));
-    var bulk = el('button', 'btn-secondary', 'Mark all supported');
+      : 'Check the statements against their quotes. Confirm those that hold up and flag only what needs correcting. This checks support, not whether the source is true.'));
+    parts.push(el('h3', null, 'Do the quotes support the statements?'));
+    var bulk = el('button', 'btn-secondary', 'I checked the quotes — mark all supported');
     bulk.type = 'button';
     bulk.addEventListener('click', function () {
       review.observations.forEach(function (o, idx) { state.drafts[key + 'v' + idx] = 'supported'; });
@@ -802,7 +802,7 @@
     var verdicts = [];
     review.observations.forEach(function (obs, idx) {
       var li = el('li');
-      add(li, el('div', null, obs.text), el('blockquote', 'quote', obs.quote),
+      add(li, add(el('div', 'review-comparison'), el('div', 'review-statement', obs.text), el('blockquote', 'quote', obs.quote)),
         el('div', 'meta', capital(humanise(obs.claimKind)) + ' · ' + humanise(obs.attribution) + (obs.attributedTo ? ' (' + obs.attributedTo + ')' : '') + ' · ' + (obs.irIds.length ? obs.irIds.join(', ') : 'no requirement')));
       var verdict = C.selectInput([['', 'Choose…'], ['supported', 'Supported'], ['unsupported', 'Unsupported'], ['duplicate', 'Duplicate of an earlier one'], ['chrome', 'Page chrome']], key + 'v' + idx);
       var dup = C.selectInput([['', 'Duplicate of…']].concat(review.observations.slice(0, idx).map(function (o, k) { return [o.observationId, (k + 1) + '. ' + o.text.slice(0, 60)]; })), key + 'd' + idx);
@@ -810,55 +810,86 @@
       dupField.hidden = verdict.value !== 'duplicate';
       verdict.addEventListener('change', function () { dupField.hidden = verdict.value !== 'duplicate'; });
       var note = C.textInput(key + 'n' + idx, '');
-      add(li, add(el('div', 'review-row'), C.field('Verdict', verdict), dupField, C.field('Note (optional)', note)));
+      note.maxLength = 1000;
+      var noteField = C.field('Explain the concern', note);
+      var updateVerdict = function () {
+        noteField.hidden = !['unsupported', 'chrome'].includes(verdict.value) && !note.value.trim();
+      };
+      verdict.addEventListener('change', updateVerdict);
+      updateVerdict();
+      add(li, add(el('div', 'review-row'), C.field('Quote support', verdict), dupField, noteField));
+      if (obs.attribution === 'relayed') add(li, el('p', 'meta', 'Relayed reporting: keep the named upstream attribution; this quote is not independent corroboration.'));
       verdicts.push({ observationId: obs.observationId, verdict: verdict, duplicateOf: dup, note: note });
       obsList.appendChild(li);
     });
     parts.push(obsList);
-    parts.push(el('div', 'form-label', 'Requirement coverage (prefilled with the AI proposal; a note is required unless covered)'));
+    var coverage = el('details', 'review-coverage');
+    coverage.open = Boolean(state.expanded[key + 'coverage']);
+    coverage.addEventListener('toggle', function () { state.expanded[key + 'coverage'] = coverage.open; });
+    add(coverage, el('summary', null, 'Question coverage — confirm or correct the proposal'));
+    add(coverage, el('p', 'meta prose', 'These are the model’s proposed links, not a full-source coverage audit. Leave them unchanged if they fit the reviewed statements. Explain only a change or contradiction.'));
     var irs = [];
     review.requirements.forEach(function (req) {
       var box = el('div', 'review-ir');
       add(box, el('div', 'meta', req.irId + ': ' + req.text));
       var disp = C.selectInput([['covered', 'Covered'], ['partial', 'Partial'], ['silent', 'Silent'], ['contradicted', 'Contradicted']], key + 'ir:' + req.irId, req.disposition || 'silent');
-      var note = C.textInput(key + 'irn:' + req.irId, req.note || (req.disposition === 'silent' ? 'The source does not address this requirement.' : ''));
-      add(box, add(el('div', 'review-row'), C.field('Disposition', disp), C.field('Note', note)));
-      irs.push({ irId: req.irId, disposition: disp, note: note });
-      parts.push(box);
+      var note = C.textInput(key + 'irn:' + req.irId, '');
+      note.maxLength = 1000;
+      if (req.note) add(box, el('p', 'meta', 'Model caveat: ' + req.note));
+      var noteField = C.field('Review note', note);
+      var updateCoverage = function () {
+        noteField.hidden = disp.value === (req.disposition || 'silent') && disp.value !== 'contradicted' && !note.value.trim();
+      };
+      disp.addEventListener('change', updateCoverage);
+      updateCoverage();
+      add(box, add(el('div', 'review-row'), C.field('Contribution', disp), noteField));
+      irs.push({ irId: req.irId, disposition: disp, note: note, proposed: req.disposition || 'silent' });
+      coverage.appendChild(box);
     });
-    parts.push(el('div', 'form-label', 'Source assessment'));
-    var access = C.selectInput([['', 'Choose…'], ['direct', 'Direct'], ['indirect', 'Indirect'], ['unknown', 'Unknown']], key + 'acc');
-    var accessWhy = C.textInput(key + 'accw', '', 'e.g. journalist summarises a third-party study');
-    var track = C.selectInput([['', 'Choose…'], ['established', 'Established'], ['limited', 'Limited'], ['unknown', 'Unknown']], key + 'tr');
-    var trackWhy = C.textInput(key + 'trw', '', 'e.g. national daily, energy desk');
-    var dep = C.selectInput([['', 'Choose…'], ['original', 'Original reporting'], ['relayed', 'Relayed'], ['mixed', 'Mixed'], ['unknown', 'Unknown']], key + 'dep');
-    var upstream = C.textInput(key + 'up', '', 'e.g. NCSC-NL study, Modat');
-    var grid = el('div', 'form-grid');
-    add(grid, C.field('Access to the events', access), C.field('Why', accessWhy), C.field('Track record', track), C.field('Why', trackWhy), C.field('Dependency', dep), C.field('Upstream sources (comma-separated)', upstream));
-    parts.push(grid);
-    var depWhy = C.textInput(key + 'depw', '', '', true);
-    var alignment = C.textInput(key + 'al', '', 'e.g. consistent with NCSC-NL findings; not independently corroborated', true);
-    var limits = C.textInput(key + 'lim', '', 'one per line', true);
-    parts.push(C.field('Dependency rationale', depWhy, true), C.field('Alignment with other reporting', alignment, true), C.field('Limitations', limits, true));
+    parts.push(coverage);
+    parts.push(el('h3', null, 'Any source concern?'));
+    parts.push(el('p', 'meta prose', 'Optional. Flag a material problem, such as unclear attribution or misleading context. Skipping this leaves source reliability and reporting dependency unassessed — it does not mark them as good.'));
+    var concern = C.textInput(key + 'concern', '', 'Describe a concern only if there is one', true);
+    concern.maxLength = 2000;
+    parts.push(C.field('Source concern (optional)', concern, true));
+    parts.push(el('p', 'meta prose', 'Confirming records your support verdicts and the question links above. It does not record a full-source omission pass or approve publication.'));
     var problem = el('span', 'meta fail');
-    var submit = C.actButton('Record review', 'btn-primary', function () {
-      var missing = verdicts.filter(function (v) { return !v.verdict.value || (v.verdict.value === 'duplicate' && !v.duplicateOf.value); }).length;
-      var missingIr = irs.filter(function (r) { return r.disposition.value !== 'covered' && !r.note.value.trim(); }).length;
-      var incomplete = !access.value || !track.value || !dep.value;
-      if (missing || missingIr || incomplete) {
-        problem.textContent = (missing ? missing + ' observation(s) need a verdict. ' : '') + (missingIr ? missingIr + ' requirement(s) need a note. ' : '') + (incomplete ? 'Complete the source assessment.' : '');
+    problem.setAttribute('role', 'alert');
+    problem.id = 'support-review-problem';
+    var submit = C.actButton('Confirm support review', 'btn-primary', function () {
+      var missing = verdicts.filter(function (v) { return !v.verdict.value || (v.verdict.value === 'duplicate' && !v.duplicateOf.value); });
+      var corrections = verdicts.filter(function (v) { return ['unsupported', 'chrome'].includes(v.verdict.value) && !v.note.value.trim(); });
+      var changedIr = irs.filter(function (r) { return (r.disposition.value !== r.proposed || r.disposition.value === 'contradicted') && !r.note.value.trim(); });
+      verdicts.forEach(function (v) {
+        [[v.verdict, !v.verdict.value], [v.duplicateOf, v.verdict.value === 'duplicate' && !v.duplicateOf.value], [v.note, corrections.includes(v)]].forEach(function (entry) {
+          entry[0].setAttribute('aria-invalid', entry[1] ? 'true' : 'false');
+          entry[0].setAttribute('aria-describedby', problem.id);
+        });
+      });
+      irs.forEach(function (r) {
+        r.note.setAttribute('aria-invalid', changedIr.includes(r) ? 'true' : 'false');
+        r.note.setAttribute('aria-describedby', problem.id);
+      });
+      if (missing.length || changedIr.length || corrections.length) {
+        problem.textContent = (missing.length ? missing.length + ' statement(s) need a support verdict. ' : '') + (corrections.length ? 'Explain the flagged statement concern. ' : '') + (changedIr.length ? 'Explain the changed or contradicted question link.' : '');
+        if (changedIr.length) {
+          state.expanded[key + 'coverage'] = true;
+          coverage.open = true;
+        }
+        if (missing.length) (missing[0].verdict.value ? missing[0].duplicateOf : missing[0].verdict).focus();
+        else if (corrections.length) corrections[0].note.focus();
+        else if (changedIr.length) changedIr[0].note.focus();
         return;
       }
       problem.textContent = '';
-      C.postAction({
+      var payload = {
         action: 'record-assurance-review', runId: state.runId, snapshotId: snap, reviewerId: C.analyst(), mode: 'performed',
+        reviewPolicyVersion: 'support-review-v2',
         verdicts: verdicts.map(function (v) { return { observationId: v.observationId, verdict: v.verdict.value, duplicateOf: v.duplicateOf.value, note: v.note.value }; }),
-        irReview: irs.map(function (r) { return { irId: r.irId, disposition: r.disposition.value, note: r.note.value }; }),
-        assessment: {
-          access: access.value, accessRationale: accessWhy.value, trackRecord: track.value, trackRecordRationale: trackWhy.value,
-          alignment: alignment.value, dependencyKind: dep.value, upstreamSources: upstream.value, dependencyRationale: depWhy.value, limitations: limits.value
-        }
-      }, 'Source review: ' + row.title).then(function (data) { if (data && data.ok) C.dropDrafts(key); });
+        irReview: irs.map(function (r) { return { irId: r.irId, disposition: r.disposition.value, note: r.note.value }; })
+      };
+      if (concern.value.trim()) payload.sourceConcern = concern.value.trim();
+      C.postAction(payload, 'Source review: ' + row.title).then(function (data) { if (data && data.ok) C.dropDrafts(key); });
     }, true);
     var btns = el('div', 'btn-row');
     add(btns, submit);
@@ -869,7 +900,7 @@
     }
     add(btns, C.analyst() ? el('span', 'meta', 'Reviewing as ' + C.analyst()) : el('span', 'meta', 'Enter your analyst ID in the top bar first.'), problem);
     parts.push(btns);
-    return step(review.status === 'provisional' ? 'Complete the skipped support pass' : 'Review the extracted observations', parts);
+    return step(review.status === 'provisional' ? 'Complete the skipped support pass' : 'Check quote support', parts);
   }
   function actionPanel(row) {
     var action = row.action;

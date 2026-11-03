@@ -190,6 +190,12 @@ blockquote.quote { margin:6px 0; padding-left:12px; border-left:2px solid var(--
 /* Review forms */
 .review-obs { margin:0 0 16px; padding-left:22px; }
 .review-obs > li { padding:12px 0; border-top:1px solid var(--rule); }
+.review-comparison { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px 24px; align-items:start; }
+.review-comparison .quote { margin:0 0 12px; }
+.review-statement { max-width:70ch; line-height:1.6; margin-bottom:12px; overflow-wrap:anywhere; }
+.review-coverage { padding:16px 0; border-top:1px solid var(--rule); border-bottom:1px solid var(--rule); margin-bottom:24px; }
+.review-coverage > summary { cursor:pointer; font-weight:500; }
+.review-coverage > summary:hover { color:var(--action); }
 .review-row { display:grid; grid-template-columns:minmax(12rem, 16rem) minmax(12rem, 16rem) minmax(0, 1fr); gap:10px 14px; margin-top:8px; align-items:end; }
 .review-ir { padding:10px 0; border-top:1px solid var(--rule); }
 .form-label { margin:16px 0 6px; color:var(--ink-2); font-size:var(--text-meta); font-weight:500; }
@@ -602,7 +608,7 @@ kbd { display:inline-flex; align-items:center; justify-content:center; min-width
   .topbar-actions { flex-wrap:wrap; }
   main { padding:24px 16px 96px; }
   .phasebar { grid-template-columns:repeat(2, minmax(0, 1fr)); }
-  .review-row { grid-template-columns:minmax(0, 1fr); }
+  .review-row, .review-comparison { grid-template-columns:minmax(0, 1fr); }
   .doc-canvas { padding:12px; }
   .page { padding:24px; }
   .gutter { position:static; flex-direction:row; width:auto; margin-right:8px; }

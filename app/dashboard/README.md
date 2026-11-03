@@ -22,6 +22,26 @@ The workbench is organised around the analyst's job, not the artefact tree. `jou
 
 `POST /api/action` supports explicit scope approval and question drafting, final question/requirements approval, bounded Seerist discovery, provider item classification, analyst decisions, local Copilot execution or manual paste-back for each AI stage, opt-in RSS batches, re-preparing a key-judgement or memo-writer request when the automatic chain did not, and `run:next`. Publisher retrieval is CLI-first and requires a separately approved exact-URL plan. Existing Seerist leads remain pending; native captured provider content can still be canonicalized and assessed for relevance. Recording relevance alone never admits evidence. These actions delegate validation and approval recording to TypeScript commands; they do not automate the full analysis loop. A scope-approved run can resume question drafting or complete question approval only against the same approved scope. Existing approvals cannot be overwritten. Partial command failures retain completed artifacts and must be inspected before retrying.
 
+Saved local articles with a completed nonpositive v1 decision can use the
+operator-only `py -3 -m dashboard.article_reassessment <approved-authorization.json>`
+path from `app/`. This requires a separate checksum-bound production approval
+for one v2 call and zero fetches, preserves all original history, and admits
+only exact `relevant`. It does not promote diagnostic calibrations or approve
+source support. See [the authorization contract](../../02-Contracts/local-article-retrieval.md#explicit-production-reassessment).
+
+The source support form uses `reviewPolicyVersion: "support-review-v2"`:
+statements sit beside their quotes, every statement needs an explicit verdict,
+and question coverage starts from the model proposal. Explanations are required
+only for unsupported/page-chrome verdicts, changed links, or contradictions.
+A duplicate needs an earlier statement as its target. The optional source
+concern follows the note as a caveat. The mandatory reliability questionnaire
+is gone; skipped source assessment is explicitly `not-assessed`, not a positive
+credibility or independence judgment. Confirmation records rows-only coverage,
+not an omission pass or publication approval. The endpoint rejects missing
+verdicts and explanations before writing a response. Unversioned submissions
+retain the historical full-assessment rules. Existing failed responses are
+preserved, not repaired or approved automatically.
+
 **Evidence → Collect a bounded batch** selects one of the two observed feeds,
 records a real permission-review reference, and explicitly approves a one-shot
 RSS batch policy under the operator's analyst ID. Choose 1-5 sources/relevance

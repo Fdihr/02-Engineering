@@ -492,7 +492,9 @@ def _source_rows(
         }
     for item in relevance_queue:
         previous = relevance_by_retrieval.get(item["sourceItemId"])
-        if previous is None or (item["status"] == "assessed" and previous["status"] != "assessed"):
+        def relevance_rank(value: dict[str, Any]) -> tuple[bool, bool, str]:
+            return bool(value.get("candidateId")), value["status"] == "assessed", value.get("preparedAt", "")
+        if previous is None or relevance_rank(item) > relevance_rank(previous):
             relevance_by_retrieval[item["sourceItemId"]] = item
     candidate_by_retrieval: dict[str, dict[str, Any]] = {}
     orphan_candidates: list[dict[str, Any]] = []

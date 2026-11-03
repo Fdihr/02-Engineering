@@ -257,7 +257,7 @@ def derive_source_waiting(stages: list[dict[str, Any]]) -> str | None:
     if latest_extract["status"] == "in-progress":
         return "model step: run the pending request and record the response"
     if review is None or review["status"] == "in-progress":
-        return "support pass: verdicts, dispositions, assessment"
+        return "support review: check quotes and confirm question links"
     if review["status"] == "provisional" and (note is None or note["status"] == "provisional"):
         if note is None:
             return "assemble (provisional)"
@@ -561,6 +561,7 @@ def _build_relevance_queue(run_id: str, json_by_path: dict[str, Any], candidates
         queue.append({
             "requestPath": rel_path,
             "sourceItemId": source_item_id,
+            "preparedAt": _string_field(value, ["preparedAt"]),
             "title": _string_field(source, ["title"]) or source_item_id,
             "publisher": _string_field(source, ["publisherHost"]),
             "url": _string_field(source, ["finalUrl", "requestedUrl"]),

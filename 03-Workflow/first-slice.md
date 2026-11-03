@@ -44,9 +44,28 @@ retrieval operation. Its naive HTML date was retained as unknown, then resolved
 from an explicit-zone JSON-LD publication date in a separate extraction receipt
 without refetching. One Copilot relevance call produced three validated quote
 anchors and `partially-relevant`, so the relevant-only policy produced an
-exception, not an admitted snapshot or completed assurance. This proves live
-retrieval/relevance and the negative gate; live positive admission remains
-unproven. Synthetic tests cover positive admission and source-assurance loading.
+exception, not an admitted snapshot or completed assurance. This proved live
+retrieval/relevance and the negative gate.
+
+A subsequent explicitly approved production v2 reassessment reused the saved
+article with zero fetches and one additional relevance call. It returned
+`relevant` and created a distinct approved snapshot. One source-assurance
+extraction under the existing v4 profile committed six observations and a
+human review package. SDK commit reopening initially rejected the real model
+identity; the validator was corrected to use the shared model-identity reader,
+and the package was prepared from the preserved commit without another call.
+The original capture, v1 verdict, admission result and open exception remain
+unchanged. This proves positive live admission and extraction, not completed
+source support review, synthesis or publication readiness. The current handoff
+is six observations awaiting the human support pass in the Evidence workspace.
+
+The support form now uses a versioned exception-focused contract: compare
+statements with quotes, explicitly confirm support, and explain only changed
+question links or flagged problems. The mandatory source questionnaire is
+replaced by an optional concern. A skipped source assessment remains
+`not-assessed` with a downstream caveat; rows-only confirmation is not an
+omission pass, credibility endorsement or publication approval. Historical
+reviews retain their original contract. The live review is still pending.
 
 The canonical target architecture in `memo-workflow.md` is not a fixed implementation contract. This completed slice remains the implementation baseline until a subsequent slice is accepted.
 

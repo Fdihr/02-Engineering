@@ -202,14 +202,17 @@ export const assembleSourceNote = (
     };
     if (human?.note) {
       entry.note = human.note;
+    } else if (reviewRecord.reviewPolicyVersion === "support-review-v2" &&
+        human?.disposition === model.disposition && model.note) {
+      entry.note = `Model coverage caveat: ${model.note}`;
     }
     irDispositions.push(entry);
 
     const gapDisposition = finalDisposition ?? model.disposition;
     if (gapDisposition === "partial" || gapDisposition === "silent") {
       const gap: NoteGap = { irId: requirement.irId, disposition: gapDisposition };
-      if (human?.note) {
-        gap.note = human.note;
+      if (entry.note) {
+        gap.note = entry.note;
       }
       gaps.push(gap);
     }
@@ -245,6 +248,7 @@ export const assembleSourceNote = (
   );
 
   const caveats = [
+    ...(reviewRecord.sourceConcern ? [`Reviewer source concern: ${reviewRecord.sourceConcern}`] : []),
     ...admitted.sourceLimitations,
     ...(reviewRecord.assessment && "limitations" in reviewRecord.assessment
       ? reviewRecord.assessment.limitations
@@ -278,6 +282,9 @@ export const assembleSourceNote = (
       "No omission pass was performed: the coverage picture is the model's alone and may miss source material relevant to an approved requirement."
     );
   }
+  if (!provisional && "status" in reviewRecord.assessment) {
+    caveats.push("Source reliability and reporting dependency were not assessed; quote-support review does not establish source credibility or independent corroboration.");
+  }
   if (!provisional && reviewRecord.irReviewBasis === "rows-only") {
     caveats.push(
       "Requirement dispositions were judged from the extracted observations alone, not from a fresh reading of the source, so a requirement wrongly recorded as silent would not have been detected."
@@ -308,6 +315,7 @@ export const assembleSourceNote = (
     sourceDocumentId: admitted.sourceDocument.id,
     sourceIdentity: admitted.sourceIdentity,
     reviewStatus: provisional ? "provisional" : "reviewed",
+    ...(reviewRecord.reviewPolicyVersion ? { reviewPolicyVersion: reviewRecord.reviewPolicyVersion } : {}),
     ...(input.supersededNote
       ? { supersedesNoteId: input.supersededNote.id }
       : {}),

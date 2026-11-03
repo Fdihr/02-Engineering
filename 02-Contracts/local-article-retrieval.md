@@ -72,6 +72,72 @@ New relevance requests use [prompt policy v2](question-relevance-policy.md):
 direct contribution to one material part can be relevant without answering
 the whole memo. Historical verdicts and consumed call budgets are unchanged.
 
+## Explicit production reassessment
+
+An operator-only migration path permits one additional production relevance
+call on a saved, reconstructed article whose completed v1 admission was
+nonpositive. It does not reuse the diagnostic calibration as evidence.
+The approved authorization has exactly:
+
+- `schemaVersion: "local-article-reassessment-v1"`, distinct path-safe `id`,
+  original `runId` and `sourceItemId`.
+- `capture`, `previousAssessment`, `previousAdmission`: exact artifact reference
+  and SHA-256 bindings to the saved capture, recorded v1 assessment, and original
+  completed admission result.
+- Non-empty `approvedBy`, timezone-qualified `approvedAt` after the original
+  admission, and a bounded `reason`.
+- `promptPolicyVersion: "question-relevance-prompt-v2"`, `maxFetches: 0`,
+  `maxModelCalls: 1`, `admission: "controller-relevant-only"`.
+
+Run from `app/`:
+
+```powershell
+py -3 -m dashboard.article_reassessment <approved-authorization.json>
+```
+
+The worker calls `article:reassessment prepare`, which reconstructs the original
+capture, question, canonical text, exact anchors, assessment and decision.
+It preserves the approved authorization and writes a capture-level
+`production-reassessment.json` reservation and a new standard v2 request.
+A different authorization ID cannot obtain another allowance on the same
+capture. Interrupted reservations require inspection; there is no automatic
+retry or unlock. Preparation alone makes no model call.
+
+Before calling the Settings-selected relevance model in the existing fresh,
+tool-disabled transport, the worker preserves the rendered prompt and an
+exclusive generation-attempt receipt. The raw invocation survives invalid
+output. The standard relevance recorder checks schema, provenance and anchors.
+Admission reconstructs these artifacts again and binds invocation identity,
+model and chronology to the separately reserved authorization. Only exact
+`relevant` creates a snapshot; other verdicts retain their normal exclusion or
+exception outcome. Transport/validation failures preserve explicit failures
+and consume the allowance.
+
+Reassessment outputs live under
+`article-admissions/<source-id>/reassessments/<authorization-id>/`, with a
+distinct decision/snapshot identity and controller actor. Candidate identity
+continues to identify the original article. Candidate lineage additionally
+binds the reserved reassessment authorization; the result also binds the prior
+admission. Original captures, consumed call attempt, verdict, admission result
+and exceptions are not edited or silently resolved. The dashboard retains all
+relevance records while showing the admitted assessment, or latest assessed
+request, in its single source row.
+
+The worker stops after admission. Source-assurance extraction has its own
+policy and stage invocation; support review and publication approval remain
+human decisions. The dashboard's ordinary Run with Copilot path retains its
+original capture-budget guard and cannot bypass it for reassessment.
+
+On 2026-11-03 one approved production reassessment of the saved Kyiv Post source
+returned exact `relevant` and created a distinct snapshot. It used one new
+relevance call and zero fetches. The subsequently authorized source-assurance
+extraction committed six observations under the existing v4 profile. Its
+review-package preparation exposed an SDK identity compatibility mismatch in
+commit reopening; that was corrected and the package was recovered from the
+saved commit, without another model call. Human support review remains pending.
+Checksums confirmed the original artifacts were unchanged and the original
+exception remains open; this new admission does not resolve it automatically.
+
 The CLI stops between stages; it does not automatically invoke models. The
 dashboard model transport reserves a write-once relevance-attempt marker at
 the capture level before generation, including failed attempts. It rejects
