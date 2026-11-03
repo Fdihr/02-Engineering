@@ -88,13 +88,61 @@ class EvidenceWorkspaceTests(unittest.TestCase):
         pipeline = view["pipeline"]
         self.assertEqual(pipeline["capturedSources"]["count"], 2)
         stages = {stage["key"]: stage["count"] for stage in pipeline["stages"]}
-        self.assertEqual(stages, {"relevant": 2, "admitted": 1, "reviewed": 2})
+        self.assertEqual(stages, {"relevant": 2, "admitted": 1, "reviewed": 1, "provisionallyReviewed": 1})
         self.assertFalse(pipeline["stagesExclusive"])
         self.assertTrue(all(stage["basis"] for stage in pipeline["stages"]))
         dispositions = {row["rowId"]: row["disposition"] for row in view["sourceExplorer"]}
         self.assertEqual(dispositions, {"row-a": "admitted", "row-b": "admitted", "row-c": "in-progress"})
         self.assertEqual([row["countsAsEvidence"] for row in view["sourceExplorer"]], [True, True, False])
         self.assertEqual(view["sourceExplorer"][0]["rowId"], admitted["id"])
+
+    def test_captured_sources_count_only_persisted_snapshots(self):
+        retrieved_no_snapshot = {
+            "id": "row-r",
+            "title": "Retrieved only",
+            "lead": None,
+            "retrieved": True,
+            "snapshotId": None,
+            "state": "in-progress",
+            "steps": steps(retrieve="done", relevance="done"),
+        }
+        same_snapshot = {**retrieved_no_snapshot, "id": "row-s", "snapshotId": "snap-9", "retrieved": True}
+        repost = {**same_snapshot, "id": "row-t"}
+        view = build_evidence_workspace(journey(sources=[retrieved_no_snapshot, same_snapshot, repost]), parts())
+        captured = view["pipeline"]["capturedSources"]
+        self.assertEqual(captured["count"], 1)
+        self.assertIn("persisted snapshots", captured["basis"])
+
+    def test_relevance_done_excludes_not_relevant_verdicts(self):
+        negative = {
+            "id": "row-n",
+            "title": "Off topic",
+            "lead": None,
+            "retrieved": True,
+            "snapshotId": None,
+            "state": "closed",
+            "steps": steps(retrieve="done", relevance="closed"),
+        }
+        view = build_evidence_workspace(journey(sources=[negative]), parts())
+        stages = {stage["key"]: stage["count"] for stage in view["pipeline"]["stages"]}
+        self.assertEqual(stages["relevant"], 0)
+        self.assertEqual(view["sourceExplorer"][0]["disposition"], "closed")
+
+    def test_provisional_review_is_not_counted_as_completed_review(self):
+        provisional = {
+            "id": "row-p",
+            "title": "Provisional",
+            "lead": None,
+            "retrieved": True,
+            "snapshotId": "snap-p",
+            "state": "provisional",
+            "steps": steps(retrieve="done", relevance="done", admit="done", review="provisional"),
+        }
+        view = build_evidence_workspace(journey(sources=[provisional]), parts())
+        stages = {stage["key"]: stage for stage in view["pipeline"]["stages"]}
+        self.assertEqual(stages["reviewed"]["count"], 0)
+        self.assertEqual(stages["provisionallyReviewed"]["count"], 1)
+        self.assertIn("not a completed review", stages["provisionallyReviewed"]["basis"])
 
     def test_questions_preserve_typed_coverage_and_unknown_relation_stays_unassessed(self):
         requirements = [

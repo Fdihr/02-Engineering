@@ -578,7 +578,8 @@ def _row(
     elif relevance:
         steps.append(_step("relevance", "Relevance", "ai", "Waiting for the AI relevance check", {"kind": "relevance", "item": relevance}))
     elif candidate:
-        steps.append(_step("relevance", "Relevance", "done", _humanise(candidate["verdict"]).capitalize()))
+        candidate_positive = candidate["verdict"] in ("relevant", "partially-relevant")
+        steps.append(_step("relevance", "Relevance", "done" if candidate_positive else "closed", _humanise(candidate["verdict"]).capitalize()))
     else:
         steps.append(_step("relevance", "Relevance", "failed", "Relevance check was not prepared"))
 

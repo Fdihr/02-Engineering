@@ -44,26 +44,33 @@ def _distinct_count(rows: list[dict[str, Any]]) -> int:
 
 def _pipeline(journey: dict[str, Any]) -> dict[str, Any]:
     rows = journey.get("sources", [])
-    retrieved = [r for r in rows if r.get("retrieved")]
+    captured = [r for r in rows if r.get("snapshotId")]
     relevant = [r for r in rows if _step_state(r, "relevance") == "done"]
     admitted = [r for r in rows if _step_state(r, "admit") == "done"]
-    reviewed = [r for r in rows if _step_state(r, "review") in ("done", "provisional")]
+    reviewed = [r for r in rows if _step_state(r, "review") == "done"]
+    provisional = [r for r in rows if _step_state(r, "review") == "provisional"]
     pending = int(journey.get("pendingRssLeadCount", 0))
     blocker = {"kind": "pending_rss", "leadCount": pending, "explanation": RSS_EXPLANATION} if pending else None
     return {
         "leads": {"count": len(journey.get("leads", [])), "basis": "distinct Seerist lead items"},
-        "capturedSources": {"count": _distinct_count(retrieved), "basis": "distinct snapshots of retrieved sources"},
+        "capturedSources": {
+            "count": len({r["snapshotId"] for r in captured}),
+            "basis": "distinct persisted snapshots; retrieved rows without a snapshot are not counted",
+        },
         "acquisitionBlocker": blocker,
         "stagesExclusive": False,
         "stages": [
             {"key": "relevant", "label": "Relevant", "count": _distinct_count(relevant),
-             "basis": "distinct sources whose relevance step is done"},
+             "basis": "distinct sources whose relevance step is done (positive verdict)"},
             {"key": "admitted", "label": "Admitted", "count": _distinct_count(admitted),
              "basis": "distinct sources whose admit step is done"},
             {"key": "reviewed", "label": "Reviewed", "count": _distinct_count(reviewed),
-             "basis": "distinct sources whose review step is done or provisional"},
+             "basis": "distinct sources with a completed review (done)"},
+            {"key": "provisionallyReviewed", "label": "Provisionally reviewed", "count": _distinct_count(provisional),
+             "basis": "distinct sources with a provisional review; support pass skipped, not a completed review"},
         ],
     }
+
 
 
 def _questions(journey: dict[str, Any]) -> list[dict[str, Any]]:
