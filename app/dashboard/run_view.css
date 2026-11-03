@@ -27,6 +27,14 @@ h2, h3, h4 { font-weight:500; color:var(--ink); }
 .empty { color:var(--ink-2); font-size:var(--text-meta); }
 .meta { color:var(--ink-2); font-size:var(--text-meta); overflow-wrap:anywhere; }
 .meta.fail { color:var(--fn-red); }
+.rss-collection { border-top:1px solid var(--rule); padding-top:16px; }
+.rss-batch-status { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 16px; padding:10px 0; border-top:1px solid var(--rule); }
+.rss-batch-status p { flex-basis:100%; margin:0; }
+.rss-batch-form { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px 24px; max-width:860px; padding-top:16px; }
+.rss-batch-form > p, .rss-batch-form > .btn-row, .rss-policy-approval { grid-column:1 / -1; }
+.rss-policy-approval { display:flex; gap:10px; align-items:flex-start; max-width:75ch; font-size:var(--text-meta); }
+.rss-policy-approval input { flex:none; margin-top:3px; }
+@media (max-width:640px) { .rss-batch-form { grid-template-columns:minmax(0, 1fr); } }
 .prose { max-width:68ch; }
 
 /* Run head and progress */

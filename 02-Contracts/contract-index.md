@@ -13,6 +13,7 @@ Use this file as the index of active contracts. Historical retrieval contracts a
 7. [Provisional source review and synthesis Build](synthesis-build.md)
 8. [Human surfaces, policy admission, exceptions, and calibration](human-surfaces-and-calibration.md)
 9. [Bounded key-judgement selection](key-judgement-selection.md)
+10. [Bounded RSS capture and opt-in batch policy admission](rss-capture.md)
 
 ## Retired acquisition contracts
 

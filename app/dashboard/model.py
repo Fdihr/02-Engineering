@@ -361,11 +361,16 @@ def _build_evidence_review(run_id: str, json_by_path: dict[str, Any], event_file
                     "relation": _string_field(entry, ["relationToQuestion"]),
                 })
         decision = decisions.get(f"runs/{run_id}/{rel_path}")
+        if decision is None:
+            suffix = f"/{run_id}/{rel_path}"
+            decision = next((value for ref, value in decisions.items() if ref.replace("\\", "/").endswith(suffix)), None)
+        rss_lineage = item.get("rssLineage") if _is_record(item.get("rssLineage")) else {}
         candidates.append({
             "candidateId": parts[1],
+            "rssItemId": rss_lineage.get("itemId", ""),
             "relPath": rel_path,
             "title": _string_field(source, ["title"]) or parts[1],
-            "url": _string_field(source, ["finalUrl", "requestedUrl"]),
+            "url": _string_field(source, ["articleUrl", "finalUrl", "requestedUrl"]),
             "publisher": _string_field(source, ["publisherHost"]),
             "verdict": _string_field(assessment, ["verdict"]) or "unknown",
             "rationale": _string_field(assessment, ["rationale"]),
@@ -848,7 +853,9 @@ def build_run_view(
         "aiQueue": ai_queue,
         "exceptions": exceptions,
     })
+    from .rss import project as project_rss
     return {
+        "rss": project_rss(full),
         "runId": run_id,
         "scannedAt": scanned_at,
         "journey": journey,

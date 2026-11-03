@@ -1,6 +1,6 @@
 # Canonical Source Document and Anchors
 
-Status: Active baseline for retrieved publisher and Seerist-native content
+Status: Active baseline for historical retrieved publisher, Seerist-native and bounded RSS content
 Validated: 2026-08-31
 Implementation: `../app/src/modules/source/source-document.ts`, `../app/src/modules/source/retrieved-source-adapter.ts`, `../app/src/modules/source/seerist-source-adapter.ts`, `../app/src/commands/canonicalize-source.ts`
 
@@ -18,7 +18,7 @@ Each source-specific adapter may only extract observed content and provenance in
 type CapturedSourceContent = {
   runId: string;
   sourceItemId: string;
-  sourceKind: "provider-captured" | "retrieved-publisher";
+  sourceKind: "provider-captured" | "retrieved-publisher" | "rss-feed";
   contentFormat: "markdown" | "plain-text";
   body: string;
   sourceArtifactRef: string;
@@ -32,12 +32,21 @@ type CapturedSourceContent = {
 
 The historical retrieval adapter reads only a stored canonical resolved `SourceRetrievalResult`; it makes no provider requests. The Seerist adapter reconstructs one persisted native intake from its checksum-bound `/v1/wod` response, route, and ledger, then extracts only an explicit `sanitizedBody` or `body`. Adapters do not assess relevance, quality, credibility, or truth.
 
+The RSS adapter consumes a capture receipt reconstructed from its persisted
+plan, catalogue, request, response, raw XML and approved intent. Only explicit
+non-empty `content:encoded` text with a known in-window publication date and an
+article URL is eligible. Versioned HTML text extraction precedes the shared
+canonicalizer; original markup and raw bytes remain available. This is
+feed-provided text, not a claim of full publisher-page capture. See
+[Bounded RSS capture](rss-capture.md).
+
 ## Command
 
 Run from `app/`:
 
 ```powershell
 npm run canonicalize:source -- <source-retrieval-result.json|seerist-intake-result.json>
+npm run canonicalize:source -- <rss-capture.json> <rss-item-id>
 ```
 
 The command confines input and referenced native raw content to the configured run directory, computes source checksums, invokes the matching narrow adapter and shared pure canonicalizer, and writes one non-overwritable document to:

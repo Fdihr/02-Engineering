@@ -1,6 +1,6 @@
 # Implemented Workflow Baseline
 
-Status: Publisher-page retrieval and retrieved-source candidate conversion are retired. Collection leads wait for the planned RSS-connected source list. Panel 2 exercised provisional review and then completed a human rows-only support pass. Panel 3 now has a bounded key-judgement selection contract and writer v2 path; the reviewed Build request still needs a fresh response, Challenge, and performed adjudication before selection can run.
+Status: Publisher-page retrieval and retrieved-source candidate conversion are retired. A bounded RSS capture adapter now reaches canonicalization and relevance proposals; existing collection leads remain pending until RSS candidate conversion is implemented. Panel 2 exercised provisional review and then completed a human rows-only support pass. Panel 3 now has a bounded key-judgement selection contract and writer v2 path; the reviewed Build request still needs a fresh response, Challenge, and performed adjudication before selection can run.
 
 Human references below are either one of the four target surfaces (intent, publication, pushed exceptions, governance), compatibility history, or an interim stand-in named in `memo-workflow.md`. Per-source review and manual model transport are not additional permanent human surfaces.
 
@@ -14,7 +14,7 @@ the superseded implementation, not the current executable path.
 
 This implementation is the first narrow slice of a general Seerist-plus-OSINT memo tool. Cyber threat intelligence and the CIA Director test question validate the workflow; they do not constrain future memo subjects. The target includes every Seerist endpoint approved for organizational use plus bounded OSINT search, discovery, and retrieval.
 
-The current baseline does not claim that breadth yet. It implements bounded `/v1/wod` collection and discovery and canonicalization of captured provider content. Leads route to `pending_rss`; RSS acquisition and new native-content candidate conversion remain incremental work. New endpoints and search mechanisms must be added from observed responses through explicit role mapping, provenance-preserving adapters, and focused tests. The downstream question, evidence, source-assurance, synthesis, and memo contracts remain domain-neutral unless a selected memo profile adds stricter requirements.
+The current baseline does not claim that breadth yet. It implements bounded `/v1/wod` collection and discovery, one-shot capture of two observed RSS feeds, and canonicalization of captured provider or eligible feed content. Leads still route to `pending_rss`; RSS and native-content candidate conversion remain incremental work. New endpoints and search mechanisms must be added from observed responses through explicit role mapping, provenance-preserving adapters, and focused tests. The downstream question, evidence, source-assurance, synthesis, and memo contracts remain domain-neutral unless a selected memo profile adds stricter requirements.
 
 The canonical target architecture in `memo-workflow.md` is not a fixed implementation contract. This completed slice remains the implementation baseline until a subsequent slice is accepted.
 
@@ -90,12 +90,86 @@ The command confines the intake and raw artifact to its configured run root, has
 
 Initial command integration used synthetic artifacts in an isolated temporary directory. After that validation, human reviewer `FDIHR` approved the real retrieved-source candidate `nv-candidate-question-relevance-001` as decision `nv-evidence-review-001`.
 
-## Current slice: collection leads pending RSS
+## Current slice: bounded RSS capture, no database
+
+The version-2 proposed feed catalogue can now be supplied to a one-shot command.
+Only the observed RSS 2.0 endpoints for Industrial Cyber and CISA are supported;
+other catalogue entries are not silently enabled. No feed is polled by default.
+Raw XML, exact inputs, response metadata, parsed items and checksum lineage are
+write-once artifacts. There is no database, scheduler, linked-page fetch, model
+call or evidence-admission side effect.
+
+Create a plan with the actual approved run/question IDs and a real permission
+review reference. This operator confirmation is not inferred from feed access:
+
+```json
+{
+  "schemaVersion": "rss-collection-plan-v1",
+  "id": "rss-batch-001",
+  "runId": "<approved-run-id>",
+  "researchQuestionId": "<approved-question-id>",
+  "feedId": "industrial-cyber",
+  "selectionReason": "<why this feed fits the approved question>",
+  "permission": {
+    "reference": "<permission or retention review reference>",
+    "confirmedBy": "<operator-id>",
+    "confirmedAt": "<ISO-8601 confirmation time>"
+  }
+}
+```
+
+Run from `app/`, passing the actual catalogue path (it may be outside the run
+root; an exact snapshot is preserved inside the capture):
+
+```powershell
+npm run collect:rss -- <rss-plan.json> <rss-feed-catalogue.json> <approved-research-question.json>
+npm run match:rss -- <rss-capture.json> <seerist-intake-result.json>
+npm run canonicalize:source -- <rss-capture.json> <rss-item-id>
+npm run prepare:question-relevance -- <source-document.json>
+```
+
+Inspect `rss-capture.json` to select an item ID. Description-only entries remain
+leads even when long. Only explicit content text, a valid article URL and an
+unambiguous in-window publication date allow canonicalization. Content is
+untrusted feed text, not certified full article content. Matching verifies an
+existing Seerist lead and uses exact article URLs only; missing and conflicting
+matches remain unresolved. Match receipts never rewrite the lead's route.
+
+The default root is `app/runs/`. Set `RSS_RUN_DIR` for capture and matching;
+when using a custom root also set `SOURCE_DOCUMENT_RUN_DIR` and
+`QUESTION_RELEVANCE_RUN_DIR` to that same root for downstream commands.
+Intent artifacts and referenced scope must reside under the configured root.
+The approved question and scope are reopened and checked before any HTTP call.
+
+The transport uses an 8 MiB response cap, a 20-second total timeout, at most
+three same-origin HTTPS redirects, public-address validation at connection
+time, and safe UTF-8 XML parsing without DTDs or custom/external entities. Live structural checks
+observed content-bearing Industrial Cyber entries and description-only CISA
+entries; these checks establish neither usage rights nor source assurance.
+Details and limits are in `../02-Contracts/rss-capture.md`.
+
+### Remaining acquisition boundary
 
 Collection leads retain their provider metadata and approved-question lineage,
 but route to `pending_rss`. The dashboard displays "Waiting for RSS" and
-does not offer publisher-page retrieval. The planned RSS-connected source list
-is not implemented; no replacement retrieval provider is silently substituted.
+does not offer publisher-page retrieval. The Evidence page now offers an
+on-demand RSS batch: one observed feed, an explicit permission reference and
+versioned policy approval, and a budget of 1-5 eligible sources/relevance calls.
+Code reopens capture, canonical document, question, model request/response,
+assessment and exact anchors before writing an RSS candidate and standard
+approved snapshot for an exactly `relevant` verdict. Partial/uncertain results
+remain exceptions; exclusions and deferred sources remain inspectable.
+
+The batch stops at admission. Existing source assurance remains separate.
+There is no polling, database or automatic retry; an interrupted batch is
+reported as interrupted. File artifacts remain authoritative and replaying
+admission for the same run/item is rejected. For terminal use, the narrow
+commands are `npm run rss:batch -- prepare <capture> <policy>` and
+`npm run rss:batch -- admit <selection> <recorded-assessment>`.
+
+These controls do not clear historical Seerist blockers or infer article
+identity. No replacement retrieval provider is silently substituted, and a
+current feed cannot be assumed to recover retrospective leads.
 
 The former retrieval and candidate-conversion commands, HTTP client, and
 credential configuration have been removed. Stored historical results remain
@@ -135,7 +209,8 @@ The real NV source completed this path as `partially-relevant` with three exact 
 
 ## Historical slice: positive-assessment candidate conversion (retired)
 
-Future RSS candidates require their own observed, mapped, tested source adapter and approved workflow boundary.
+RSS now has its own observed adapter and explicit bounded batch policy; see
+`../02-Contracts/rss-capture.md`. The historical conversion below remains retired.
 
 One resolved retrieval result + its verified source-lead lineage + one validated positive question-relevance assessment -> one new evidence candidate routed to pending policy admission or compatibility review.
 

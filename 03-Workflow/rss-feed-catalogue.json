@@ -1,0 +1,434 @@
+{
+  "catalogueVersion": 2,
+  "status": "proposed-not-connected",
+  "checkedOn": "2026-11-03",
+  "purpose": "CTI-first source selection for question-led Vestas memos, retaining optional sources for other memo profiles. This is a proposed catalogue, not runtime configuration.",
+  "language": "en",
+  "appFit": {
+    "basis": [
+      "03-Workflow/first-slice.md",
+      "03-Workflow/europe-vestas-execution-plan.md",
+      "03-Workflow/memo-house-template.md",
+      "app/src/modules/routing/routing.ts",
+      "app/src/modules/relevance/question-relevance.ts",
+      "app/src/modules/discovery/policies/source-tiers-v1.json",
+      "app/dashboard/journey.py"
+    ],
+    "currentWorkflow": "Approved scope, research question and information requirements bound collection. Seerist discovery produces leads; native captured provider content can be canonicalized and assessed for question relevance. Publisher-linked collection leads wait at pending_rss.",
+    "ctiUseCase": "The planned Europe run assesses cyber and geopolitical developments over two months and their implications for Vestas operations, supply chains and energy infrastructure. The proposed house template covers alerts, posture updates, incident assessments, actor profiles, outlooks, policy and business exposure.",
+    "rssPurpose": "Prioritize captured reporting that can support exact-quote, question-specific analysis of threat activity and relevant infrastructure developments. More headlines alone do not unblock source assurance.",
+    "organizationalBoundary": "External reporting cannot establish which products Vestas uses, whether its assets are exposed, or whether Vestas was targeted. Organizational implications require governed context; the Europe plan lists that stage as future implementation.",
+    "profileBoundary": "CTI-first selection does not restrict the domain-neutral memo engine or remove broader memo profiles.",
+    "selectionMeaning": "Groups help choose sources for an approved question. They do not enable polling, assign evidence authority or replace the existing source-tier policy."
+  },
+  "selectionGroups": [
+    {
+      "id": "core-cyber",
+      "label": "Start here: cyber activity and advisories",
+      "useFor": "Exploitation, ransomware, espionage, actor campaigns, official warnings and changes in cyber posture. Select entries relevant to the question; an advisory alone does not establish exploitation or Vestas exposure.",
+      "feedIds": ["cisa-advisories", "uk-ncsc-all", "cert-eu-advisories", "industrial-cyber", "the-record", "welivesecurity", "bleepingcomputer", "krebs-on-security", "securityweek"],
+      "limitations": ["US, UK and EU-level advisories do not replace national Nordic, Baltic, German or Polish assessments.", "Vendor research and media may describe the same underlying investigation; preserve origin and dependence."]
+    },
+    {
+      "id": "energy-and-infrastructure",
+      "label": "Add for wind, OT and infrastructure questions",
+      "useFor": "Wind-sector developments, energy assets, maritime incidents and logistics dependencies that may intersect with the approved CTI question. Industrial Cyber in the core group supplies specialist OT security reporting.",
+      "feedIds": ["offshore-wind", "factor-this", "gcaptain"],
+      "limitations": ["Project, market or shipping news is not automatically a security incident.", "Sector relevance is not proof of a Vestas dependency or affected asset."]
+    },
+    {
+      "id": "geopolitical-context",
+      "label": "Add when the question needs geopolitical or energy context",
+      "useFor": "Hybrid activity, conflict, state intent, policy developments and energy context surrounding the threat question. Only captured, admitted and assured material can support external memo claims.",
+      "feedIds": ["bbc-world", "guardian-world", "al-jazeera-all", "dw-english", "un-news", "iaea-top-news", "eia-today-in-energy", "carbon-brief"],
+      "limitations": ["Broad world-news feeds are noisy; topic and geography labels cannot establish question relevance.", "Official statements and analytical commentary must remain distinguishable from independently reported events."]
+    },
+    {
+      "id": "optional-other-profiles",
+      "label": "Optional: broader risk memos, not the default CTI set",
+      "useFor": "Enable selection only when the approved question explicitly concerns health, economic policy, general trade, freight or natural hazards. Retained from the original broad catalogue.",
+      "feedIds": ["who-news", "supply-chain-dive", "freightwaves", "wto-news", "federal-reserve-press", "ecb-press", "usgs-earthquakes-day"],
+      "limitations": ["Do not poll every source just because the memo engine can support its subject.", "These sources may support a bounded CTI question, but are not routine cyber coverage."]
+    }
+  ],
+  "collectionConstraints": [
+    "Select feeds against approved question, geography, time window and information requirements, not a permanent keyword such as Vestas or cyber.",
+    "For an existing Seerist lead, future matching must preserve the exact original article identity and source URL. A similar topic, title or publisher is not enough; uncertain or missing matches remain unresolved.",
+    "RSS commonly retains only recent entries. The planned two-month retrospective cannot be assumed recoverable from a feed fetched today; record coverage gaps instead of inventing archive coverage.",
+    "Inspect actual captured text. Headlines, excerpts and links may yield leads or insufficient support, not a full source suitable for quote-anchored claims.",
+    "After capture, retain raw provenance, canonicalize, assess question relevance and apply admission and assurance controls. New RSS candidate conversion is not implemented.",
+    "Source groups are not the routing context_only role. Workflow classification depends on the captured item and approved contract, not its catalogue group."
+  ],
+  "priorityCoverageGaps": [
+    {
+      "area": "Nordic and European national authorities",
+      "why": "The Europe execution plan names Denmark, Germany, Poland, the UK and Baltic states; the current official feeds do not directly cover all of them.",
+      "researchTargets": ["Current Danish cyber authority and intelligence-service publications", "German BSI", "CERT Polska", "Baltic national CERTs", "Norwegian and Swedish national security authorities"],
+      "status": "Publisher feed discovery, language and permission checks still required; no endpoints claimed."
+    },
+    {
+      "area": "Primary OT and threat-actor research",
+      "why": "Actor capability, exploitation and energy/industrial targeting need original technical research alongside media coverage.",
+      "researchTargets": ["Dragos", "Claroty", "Nozomi Networks", "Microsoft threat research", "Google Threat Intelligence"],
+      "status": "Find publisher-supported feeds and inspect actual text availability. Vendor claims require explicit attribution and source assurance."
+    },
+    {
+      "area": "Hybrid incidents and energy disruption",
+      "why": "The CTI house template includes cable damage, GNSS interference, supply-chain compromise and energy-infrastructure warnings.",
+      "researchTargets": ["National police and security-service releases", "Grid and energy-sector authorities", "Maritime and telecommunications authorities", "Original supplier security advisories"],
+      "status": "Question-specific coverage needed. No claim of comprehensive regional coverage."
+    }
+  ],
+  "verification": {
+    "method": "Public HTTP GET followed by XML parsing; feed root and at least one item or entry observed.",
+    "scope": "Endpoint availability and first-entry field presence only. Not a freshness, completeness, accuracy, licensing, or source-assurance assessment.",
+    "bodyFields": "observedFirstEntryBodyFields records XML local names, not a guarantee of full article text. content and encoded may be namespaced extension elements.",
+    "dates": "Publisher date formats vary. Observed IAEA, CISA, CERT-EU and EIA date strings need explicit adapter handling; USGS entries expose updated rather than a publication date."
+  },
+  "boundaries": [
+    "No feed is connected or enabled by this catalogue. Collection leads remain pending_rss.",
+    "sourceKind, suggestedUse and profiles are catalogue labels, not approved routing enums, evidence roles, trust scores or source approvals.",
+    "Official material establishes what the issuing organization says; it does not independently corroborate the organization's claims.",
+    "Treat all feed content as untrusted input. Publication rights and retention permissions require review before ingestion or redistribution.",
+    "A link or description is a discovery lead, not a captured publisher article. Do not fetch linked pages or silently substitute another retrieval provider.",
+    "Before activation, define an approved narrow adapter and tests preserving feed URL, item URL, item identity, publisher timestamps, receipt time and raw-artifact checksum.",
+    "Canonicalization, question relevance, evidence admission, source assurance and publication controls still apply. Feed inclusion cannot advance workflow state.",
+    "Do not count syndicated or copied reporting as independent corroboration. Deduplicate identities and preserve original attribution.",
+    "Use bounded polling, response-size limits, conditional requests where supported, safe XML parsing without external entities, and validated redirects.",
+    "This English-language starter set has global reporting but uneven regional and local-language coverage. It is not exhaustive coverage of every country or memo profile."
+  ],
+  "feeds": [
+    {
+      "id": "industrial-cyber",
+      "name": "Industrial Cyber",
+      "url": "https://industrialcyber.co/feed/",
+      "format": "rss",
+      "sourceKind": "specialist-media",
+      "suggestedUse": "reporting-lead",
+      "profiles": ["cyber", "ot-ics", "critical-infrastructure"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["description", "encoded"],
+      "limitations": ["Full-text completeness has not been assessed. Reporting may depend on vendor research or official advisories."]
+    },
+    {
+      "id": "the-record",
+      "name": "The Record from Recorded Future News",
+      "url": "https://therecord.media/feed",
+      "format": "rss",
+      "sourceKind": "specialist-media",
+      "suggestedUse": "reporting-lead",
+      "profiles": ["cyber", "geopolitical-risk", "critical-infrastructure"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["description"],
+      "limitations": ["Only five entries were observed in the checked response; do not assume two-month retrospective coverage."]
+    },
+    {
+      "id": "welivesecurity",
+      "name": "WeLiveSecurity (ESET)",
+      "url": "https://www.welivesecurity.com/en/rss/feed/",
+      "format": "rss",
+      "sourceKind": "security-vendor-research",
+      "suggestedUse": "attributed-vendor-research",
+      "profiles": ["cyber", "threat-actors", "espionage"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["description"],
+      "limitations": ["The feed mixes research and general security content. Vendor attribution is not independent confirmation of actor identity or intent."]
+    },
+    {
+      "id": "offshore-wind",
+      "name": "Offshore Wind",
+      "url": "https://www.offshorewind.biz/feed",
+      "format": "rss",
+      "sourceKind": "specialist-media",
+      "suggestedUse": "reporting-lead",
+      "profiles": ["energy", "renewables", "critical-infrastructure", "supply-chain-risk"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["description", "content"],
+      "limitations": ["Candidate URL with a trailing slash redirected to this URL.", "Mostly sector and project reporting; security relevance requires assessment against the approved question."]
+    },
+    {
+      "id": "bbc-world",
+      "name": "BBC News - World",
+      "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+      "format": "rss",
+      "sourceKind": "public-service-media",
+      "suggestedUse": "reporting-lead",
+      "profiles": ["geopolitical-risk", "country-risk", "physical-security"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["description"]
+    },
+    {
+      "id": "guardian-world",
+      "name": "The Guardian - World",
+      "url": "https://www.theguardian.com/world/rss",
+      "format": "rss",
+      "sourceKind": "news-media",
+      "suggestedUse": "reporting-lead",
+      "profiles": ["geopolitical-risk", "country-risk", "physical-security"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["description", "content"]
+    },
+    {
+      "id": "al-jazeera-all",
+      "name": "Al Jazeera - All News",
+      "url": "https://www.aljazeera.com/xml/rss/all.xml",
+      "format": "rss",
+      "sourceKind": "news-media",
+      "suggestedUse": "reporting-lead",
+      "profiles": ["geopolitical-risk", "country-risk", "physical-security"],
+      "geographicFocus": ["global", "middle-east"],
+      "observedFirstEntryBodyFields": ["description"]
+    },
+    {
+      "id": "dw-english",
+      "name": "Deutsche Welle - English",
+      "url": "https://rss.dw.com/rdf/rss-en-all",
+      "format": "rss-rdf",
+      "sourceKind": "public-service-media",
+      "suggestedUse": "reporting-lead",
+      "profiles": ["geopolitical-risk", "country-risk", "physical-security"],
+      "geographicFocus": ["global", "europe"],
+      "observedFirstEntryBodyFields": ["description"]
+    },
+    {
+      "id": "un-news",
+      "name": "UN News",
+      "url": "https://news.un.org/feed/subscribe/en/news/all/rss.xml",
+      "format": "rss",
+      "sourceKind": "intergovernmental",
+      "suggestedUse": "official-reporting",
+      "profiles": ["geopolitical-risk", "country-risk", "physical-security", "humanitarian-risk"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["description"]
+    },
+    {
+      "id": "who-news",
+      "name": "World Health Organization - News",
+      "url": "https://www.who.int/rss-feeds/news-english.xml",
+      "format": "rss",
+      "sourceKind": "intergovernmental",
+      "suggestedUse": "official-reporting",
+      "profiles": ["public-health", "country-risk", "business-continuity"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["description"],
+      "limitations": ["General news feed, not a dedicated outbreak-alert feed."]
+    },
+    {
+      "id": "iaea-top-news",
+      "name": "IAEA - Top News",
+      "url": "https://www.iaea.org/feeds/topnews",
+      "format": "rss",
+      "sourceKind": "intergovernmental",
+      "suggestedUse": "official-reporting",
+      "profiles": ["energy", "physical-security", "geopolitical-risk"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["description"]
+    },
+    {
+      "id": "cisa-advisories",
+      "name": "CISA - All Cybersecurity Advisories",
+      "url": "https://www.cisa.gov/cybersecurity-advisories/all.xml",
+      "format": "rss",
+      "sourceKind": "government",
+      "suggestedUse": "official-reporting",
+      "profiles": ["cyber", "ot-ics", "critical-infrastructure"],
+      "geographicFocus": ["united-states", "global-relevance"],
+      "observedFirstEntryBodyFields": ["description"]
+    },
+    {
+      "id": "uk-ncsc-all",
+      "name": "UK NCSC - All Feed",
+      "url": "https://www.ncsc.gov.uk/api/1/services/v1/all-rss-feed.xml",
+      "format": "rss",
+      "sourceKind": "government",
+      "suggestedUse": "official-reporting",
+      "profiles": ["cyber", "critical-infrastructure", "business-continuity"],
+      "geographicFocus": ["united-kingdom", "global-relevance"],
+      "observedFirstEntryBodyFields": ["description"]
+    },
+    {
+      "id": "cert-eu-advisories",
+      "name": "CERT-EU - Security Advisories",
+      "url": "https://www.cert.europa.eu/publications/security-advisories-rss",
+      "format": "rss",
+      "sourceKind": "eu-institutional",
+      "suggestedUse": "official-reporting",
+      "profiles": ["cyber", "critical-infrastructure"],
+      "geographicFocus": ["european-union", "global-relevance"],
+      "observedFirstEntryBodyFields": ["description"]
+    },
+    {
+      "id": "bleepingcomputer",
+      "name": "BleepingComputer",
+      "url": "https://www.bleepingcomputer.com/feed/",
+      "format": "rss",
+      "sourceKind": "specialist-media",
+      "suggestedUse": "reporting-lead",
+      "profiles": ["cyber", "business-continuity"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["description"]
+    },
+    {
+      "id": "krebs-on-security",
+      "name": "Krebs on Security",
+      "url": "https://krebsonsecurity.com/feed/",
+      "format": "rss",
+      "sourceKind": "independent-journalism",
+      "suggestedUse": "reporting-lead",
+      "profiles": ["cyber", "fraud", "supply-chain-risk"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["description", "encoded"]
+    },
+    {
+      "id": "securityweek",
+      "name": "SecurityWeek",
+      "url": "https://www.securityweek.com/feed/",
+      "format": "rss",
+      "sourceKind": "specialist-media",
+      "suggestedUse": "reporting-lead",
+      "profiles": ["cyber", "ot-ics", "critical-infrastructure"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["description"]
+    },
+    {
+      "id": "eia-today-in-energy",
+      "name": "US EIA - Today in Energy",
+      "url": "https://www.eia.gov/rss/todayinenergy.xml",
+      "format": "rss",
+      "sourceKind": "government",
+      "suggestedUse": "analytical-context",
+      "profiles": ["energy", "economic-risk", "supply-chain-risk"],
+      "geographicFocus": ["united-states", "global-energy-markets"],
+      "observedFirstEntryBodyFields": ["description"]
+    },
+    {
+      "id": "carbon-brief",
+      "name": "Carbon Brief",
+      "url": "https://www.carbonbrief.org/feed",
+      "format": "rss",
+      "sourceKind": "specialist-media",
+      "suggestedUse": "analytical-context",
+      "profiles": ["climate-risk", "energy", "regulatory-risk"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["description", "encoded"],
+      "limitations": ["Candidate URL with a trailing slash redirected to this URL."]
+    },
+    {
+      "id": "factor-this",
+      "name": "Factor This (Renewable Energy World feed endpoint)",
+      "url": "https://www.renewableenergyworld.com/feed/",
+      "format": "rss",
+      "sourceKind": "specialist-media",
+      "suggestedUse": "reporting-lead",
+      "profiles": ["energy", "renewables", "critical-infrastructure"],
+      "geographicFocus": ["global", "united-states"],
+      "observedFirstEntryBodyFields": ["description", "content"],
+      "limitations": ["Observed feed title is Factor This, despite the legacy endpoint hostname."]
+    },
+    {
+      "id": "supply-chain-dive",
+      "name": "Supply Chain Dive",
+      "url": "https://www.supplychaindive.com/feeds/news/",
+      "format": "rss",
+      "sourceKind": "specialist-media",
+      "suggestedUse": "reporting-lead",
+      "profiles": ["supply-chain-risk", "logistics", "business-continuity"],
+      "geographicFocus": ["united-states", "global-trade"],
+      "observedFirstEntryBodyFields": ["description"]
+    },
+    {
+      "id": "freightwaves",
+      "name": "FreightWaves",
+      "url": "https://www.freightwaves.com/feed",
+      "format": "rss",
+      "sourceKind": "specialist-media",
+      "suggestedUse": "reporting-lead",
+      "profiles": ["supply-chain-risk", "logistics", "economic-risk"],
+      "geographicFocus": ["north-america", "global-trade"],
+      "observedFirstEntryBodyFields": ["description", "content", "encoded"]
+    },
+    {
+      "id": "gcaptain",
+      "name": "gCaptain",
+      "url": "https://gcaptain.com/feed/",
+      "format": "rss",
+      "sourceKind": "specialist-media",
+      "suggestedUse": "reporting-lead",
+      "profiles": ["maritime-security", "supply-chain-risk", "physical-security", "energy"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["description"]
+    },
+    {
+      "id": "wto-news",
+      "name": "World Trade Organization - Latest News",
+      "url": "https://www.wto.org/library/rss/latest_news_e.xml",
+      "format": "rss",
+      "sourceKind": "intergovernmental",
+      "suggestedUse": "official-reporting",
+      "profiles": ["trade-policy", "regulatory-risk", "supply-chain-risk", "economic-risk"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["description", "content"]
+    },
+    {
+      "id": "federal-reserve-press",
+      "name": "US Federal Reserve - All Press Releases",
+      "url": "https://www.federalreserve.gov/feeds/press_all.xml",
+      "format": "rss",
+      "sourceKind": "central-bank",
+      "suggestedUse": "official-reporting",
+      "profiles": ["economic-risk", "country-risk", "regulatory-risk"],
+      "geographicFocus": ["united-states", "global-financial-markets"],
+      "observedFirstEntryBodyFields": ["description"]
+    },
+    {
+      "id": "ecb-press",
+      "name": "European Central Bank - Press",
+      "url": "https://www.ecb.europa.eu/rss/press.html",
+      "format": "rss",
+      "sourceKind": "central-bank",
+      "suggestedUse": "official-reporting",
+      "profiles": ["economic-risk", "country-risk", "regulatory-risk"],
+      "geographicFocus": ["euro-area", "global-financial-markets"],
+      "observedFirstEntryBodyFields": [],
+      "limitations": ["First entry contained no description or content field; treat as metadata-only."]
+    },
+    {
+      "id": "usgs-earthquakes-day",
+      "name": "USGS - Magnitude 2.5+ Earthquakes, Past Day",
+      "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.atom",
+      "format": "atom",
+      "sourceKind": "government",
+      "suggestedUse": "official-reporting",
+      "profiles": ["natural-hazards", "physical-security", "business-continuity", "supply-chain-risk"],
+      "geographicFocus": ["global"],
+      "observedFirstEntryBodyFields": ["summary"],
+      "limitations": ["Rolling one-day window, not a historical archive. Reporting completeness varies by region and magnitude; event records may be revised."]
+    }
+  ],
+  "excludedCandidates": [
+    {
+      "name": "Dragos - candidate feed",
+      "url": "https://www.dragos.com/feed/",
+      "observation": "HTTP 404 during the CTI-focused endpoint check.",
+      "nextStep": "Discover a current publisher-supported research feed. The guessed endpoint is not a usable source; do not replace it with page scraping."
+    },
+    {
+      "name": "Securelist - candidate feed",
+      "url": "https://securelist.com/feed/",
+      "observation": "Fetch failed in this environment; no usable response observed.",
+      "nextStep": "Recheck availability and publisher-supported access before inclusion. A failed fetch is not a source-quality judgement."
+    },
+    {
+      "name": "ReliefWeb - Updates",
+      "url": "https://reliefweb.int/updates/rss.xml",
+      "observation": "HTTP 406 during the endpoint check.",
+      "nextStep": "Recheck the publisher-supported feed endpoint and acceptable client request before inclusion; do not bypass access controls."
+    },
+    {
+      "name": "GDACS",
+      "url": "https://www.gdacs.org/xml/rss.xml",
+      "observation": "Returned an HTML administration page, not a usable RSS or Atom document.",
+      "nextStep": "Find and verify the current publisher-supported public alert feed before inclusion."
+    }
+  ]
+}

@@ -21,7 +21,7 @@ from string import Template
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from . import auth, settings
+from . import auth, settings, rss
 from .model import RELEVANCE_REQUEST_PATH, ai_stage_for, build_run_view
 from .relevance_bridge import build_relevance_prompt, build_response, parse_model_answer
 from .scan import _fs_path, list_available_runs, read_artifact_text, resolve_inside_run, scan_run_directory
@@ -163,7 +163,7 @@ def _run_npm_script(script_name: str, args: list[str], timeout_sec: int = 90, *,
         env = {**os.environ, **{key: str(runs_root) for key in (
             "RESEARCH_RUN_DIR", "SOURCE_ASSURANCE_RUN_DIR", "QUESTION_RELEVANCE_RUN_DIR",
             "SOURCE_REINTAKE_RUN_DIR", "SEERIST_RUN_DIR", "SOURCE_DOCUMENT_RUN_DIR",
-            "EVIDENCE_RUN_DIR",
+            "EVIDENCE_RUN_DIR", "RSS_RUN_DIR",
         )}}
     npm_cmd = "npm.cmd" if os.name == "nt" else "npm"
     cmd = [npm_cmd, "run", script_name, "--", *args]
@@ -557,7 +557,7 @@ def _handle_ai_stage(runs_root: Path, payload: dict[str, Any], invocation: dict[
 
 def _generate_and_preserve(runs_root: Path, request_file: Path, request: dict[str, Any], prompt: dict[str, str], stage: str) -> dict[str, Any]:
     """Keep the original output even when downstream validation rejects it."""
-    request_bytes = request_file.read_bytes()
+    request_bytes = Path(_fs_path(request_file)).read_bytes()
     if json.loads(request_bytes) != request:
         raise CopilotError("The prepared request changed before generation. Refresh the analysis before retrying.")
     checksum = hashlib.sha256(request_bytes).hexdigest()
@@ -569,7 +569,7 @@ def _generate_and_preserve(runs_root: Path, request_file: Path, request: dict[st
         "requestId": request.get("id"),
         "requestArtifactSha256": checksum,
     })
-    if hashlib.sha256(request_file.read_bytes()).hexdigest() != checksum:
+    if hashlib.sha256(Path(_fs_path(request_file)).read_bytes()).hexdigest() != checksum:
         raise CopilotError("The request changed during generation. The original output is preserved, but no answer was recorded.")
     return invocation
 
@@ -732,9 +732,10 @@ def _handle_run_ai(runs_root: Path, payload: dict[str, Any]) -> tuple[int, dict[
     text = read_artifact_text(request_file, MAX_ARTIFACT_BYTES) if request_file else None
     if text is None:
         return 404, {"ok": False, "error": "AI request not found in this run."}
-    if (request_file.parent / "copilot-recorded.json").exists():
+    if Path(_fs_path(request_file.parent / "copilot-recorded.json")).exists():
         return 409, {"ok": False, "error": "This request has already been recorded. Continue to the next workflow step."}
-    if relevance and (request_file.parent / "assessments").is_dir() and any((request_file.parent / "assessments").iterdir()):
+    assessments = Path(_fs_path(request_file.parent / "assessments"))
+    if relevance and assessments.is_dir() and any(assessments.iterdir()):
         return 409, {"ok": False, "error": "Relevance has already been assessed for this request."}
     if stage == "extract" and (request_file.parent / "checks.json").is_file():
         return 409, {"ok": False, "error": "This extraction attempt is recorded. Continue the workflow or authorise a new attempt."}
@@ -904,6 +905,8 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
 
 def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     action = payload.get("action")
+    if action == "collect-rss-batch":
+        return rss.start_batch(runs_root, payload, _run_npm_script, _handle_run_ai, COPILOT_LOCK)
     if action == "save-copilot-settings":
         if "stages" in payload and not isinstance(payload["stages"], dict):
             return 400, {"ok": False, "error": "Stage overrides must be an object. Refresh Settings and retry."}
@@ -1257,6 +1260,11 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
                 view = build_run_view(target_id, scan["files"], scan["jsons"], scan["events"], scanned_at)
                 view["truncated"] = scan["truncated"]
                 view["availableRuns"] = list_available_runs(runs_root)
+                view["rss"]["feeds"] = rss.feeds()
+                for batch in view["rss"]["batches"]:
+                    if batch["status"] == "running" and batch["id"] not in rss.ACTIVE:
+                        batch["status"] = "interrupted"
+                        batch["error"] = "The server stopped before a completion receipt was written. Inspect the batch artifacts before retrying."
                 cache[target_id] = {"at": time.monotonic(), "view": view}
                 return view
 

@@ -20,7 +20,24 @@ python -m unittest discover -s dashboard -p "test_*.py" -v
 
 The workbench is organised around the analyst's job, not the artefact tree. `journey.py` derives, from persisted artefacts only, six phases (frame, collect, admit evidence, assure sources, synthesise, memo), one ordered work queue (each item says whether you decide, run Copilot or execute deterministic work), a lifecycle per source (lead → pending RSS source list → relevance → admitted → extracted → reviewed → in synthesis; historical retrieval artifacts remain readable), synthesis rounds (build → challenge → adjudicate → key judgements → memo, with superseded rounds marked), and the latest memo with claim → source → quote traces and plain-language publication blockers. The Audit tab keeps the file-inferred artefact board, exceptions and events. Nothing in the projection advances the workflow.
 
-`POST /api/action` supports explicit scope approval and question drafting, final question/requirements approval, bounded Seerist discovery, provider item classification, analyst decisions, local Copilot execution or manual paste-back for each AI stage, re-preparing a key-judgement or memo-writer request when the automatic chain did not, and `run:next`. Publisher pages are not fetched. Collection leads stay pending until the planned RSS-connected source list is implemented; native captured provider content can still be canonicalized and assessed for relevance. Recording relevance no longer creates a retrieved-source candidate automatically. These actions delegate validation and approval recording to TypeScript commands; they do not automate the full analysis loop. A scope-approved run can resume question drafting or complete question approval only against the same approved scope. Existing approvals cannot be overwritten. Partial command failures retain completed artifacts and must be inspected before retrying.
+`POST /api/action` supports explicit scope approval and question drafting, final question/requirements approval, bounded Seerist discovery, provider item classification, analyst decisions, local Copilot execution or manual paste-back for each AI stage, opt-in RSS batches, re-preparing a key-judgement or memo-writer request when the automatic chain did not, and `run:next`. Publisher pages are not fetched. Existing Seerist leads remain pending until an exact captured source resolves them; native captured provider content can still be canonicalized and assessed for relevance. Recording relevance alone never admits evidence. These actions delegate validation and approval recording to TypeScript commands; they do not automate the full analysis loop. A scope-approved run can resume question drafting or complete question approval only against the same approved scope. Existing approvals cannot be overwritten. Partial command failures retain completed artifacts and must be inspected before retrying.
+
+**Evidence → Collect a bounded batch** selects one of the two observed feeds,
+records a real permission-review reference, and explicitly approves a one-shot
+RSS batch policy under the operator's analyst ID. Choose 1-5 sources/relevance
+calls (default one). The worker captures once, retains all feed items, processes
+eligible in-window feed text in publisher order, uses the Relevance model from
+Settings, verifies exact anchors, and admits only `relevant` items under code
+control. Partial/uncertain results go to exceptions. The batch stops at admission,
+not source assurance. It never schedules polling or fetches linked pages.
+
+Policy, selection, progress, raw feed, model provenance and outcomes remain
+inspectable files; failures and interrupted batches are explicit and never
+automatically resumed. A lightweight metadata index keeps large feed captures
+visible without raising the dashboard's bounded JSON-scan limit. The supplied
+catalogue is copied unchanged to `03-Workflow/rss-feed-catalogue.json`; catalogue
+membership grants no authority and other feeds are not enabled. Existing
+`pending_rss` Seerist routes remain unchanged. See [the executable RSS slice](../../03-Workflow/first-slice.md#current-slice-bounded-rss-capture-no-database).
 
 Settings can store Seerist credentials, Microsoft Entra tenant/application IDs, and an Azure AI Foundry HTTPS endpoint in Windows user environment variables. Once both Entra IDs are configured, the loopback-only dashboard requires tenant-restricted sign-in; first sign-in provisions workbench access for an existing tenant account. Entra accounts remain managed in Microsoft Entra, session data stays in memory, and signing out or restarting the server clears the local session. Configure the Entra app as a public client with `http://localhost` as a redirect URI and delegated `User.Read` permission. The dashboard refuses non-loopback bindings while Entra sign-in is enabled. Foundry model calls are not implemented.
 
