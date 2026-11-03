@@ -166,7 +166,20 @@ export type RetrievedSourceEvidenceCandidate = {
 export type EvidenceCandidate =
   | SeeristEvidenceCandidate
   | RetrievedSourceEvidenceCandidate
-  | RssEvidenceCandidate;
+  | RssEvidenceCandidate
+  | LocalArticleEvidenceCandidate;
+
+export type LocalArticleEvidenceCandidate = Omit<
+  RetrievedSourceEvidenceCandidate, "provider" | "endpoint" | "retrievalLineage"
+> & {
+  provider: "local_article";
+  endpoint: string;
+  rawArtifactSha256: string;
+  articleLineage: {
+    capture: SourceArtifactLineage;
+    plan: SourceArtifactLineage;
+  };
+};
 
 export type RssEvidenceCandidate = Omit<
   RetrievedSourceEvidenceCandidate,

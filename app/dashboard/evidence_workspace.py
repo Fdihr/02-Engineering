@@ -11,7 +11,7 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 UNASSESSED = "unassessed"
-RSS_EXPLANATION = "These Seerist leads have no resolved captured source. RSS feeds may not contain historical articles; publisher pages are not fetched."
+RSS_EXPLANATION = "These Seerist leads have no resolved captured source. RSS feeds may not contain historical articles. Local article retrieval requires an explicitly approved exact-URL plan; it does not automatically resolve these historical leads."
 
 
 def _step_state(row: dict[str, Any], key: str) -> str:

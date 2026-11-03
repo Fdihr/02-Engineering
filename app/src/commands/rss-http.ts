@@ -68,12 +68,12 @@ export const readRssBytes = async (
   return Buffer.concat(chunks);
 };
 
-const getResponse = (url: string, signal: AbortSignal): Promise<IncomingMessage> =>
+const getResponse = (url: string, signal: AbortSignal, accept: string): Promise<IncomingMessage> =>
   new Promise((resolve, reject) => {
     const req = request(url, {
       method: "GET", signal, lookup: publicLookup, agent: false,
       headers: {
-        accept: "application/rss+xml, application/xml, text/xml",
+        accept,
         "accept-encoding": "identity", "user-agent": "EvidenceMemo-RSS/1.0"
       }
     }, resolve);
@@ -82,14 +82,15 @@ const getResponse = (url: string, signal: AbortSignal): Promise<IncomingMessage>
   });
 
 export const fetchRssFeed = async (
-  url: string, requestedAt = new Date().toISOString()
+  url: string, requestedAt = new Date().toISOString(),
+  accept = "application/rss+xml, application/xml, text/xml"
 ): Promise<{ raw: Buffer; response: RssResponse }> => {
   if (!isPublicFeedUrl(url)) throw new Error("RSS requires a public HTTPS feed URL.");
   const signal = AbortSignal.timeout(RSS_TIMEOUT_MS);
   const redirects: string[] = [];
   let current = url;
   for (;;) {
-    const response = await getResponse(current, signal);
+    const response = await getResponse(current, signal, accept);
     try {
       const status = response.statusCode ?? 0;
       if ([301, 302, 303, 307, 308].includes(status)) {

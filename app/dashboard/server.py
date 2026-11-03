@@ -766,6 +766,31 @@ def _handle_run_ai(runs_root: Path, payload: dict[str, Any]) -> tuple[int, dict[
               "user": build_relevance_prompt(request)} if relevance else request.get("prompt")
     if not isinstance(prompt, dict) or not all(isinstance(prompt.get(key), str) and prompt[key].strip() for key in ("system", "user")):
         return 400, {"ok": False, "error": "The AI request has no valid bounded prompt."}
+    document = request.get("sourceDocument")
+    if relevance and isinstance(document, dict) and document.get("sourceKind") == "retrieved-publisher":
+        reference = document.get("sourceArtifactRef")
+        capture_file = (APP_DIR / reference).resolve() if isinstance(reference, str) else None
+        try:
+            capture_rel = capture_file.relative_to(run_dir.resolve()).as_posix() if capture_file else ""
+        except ValueError:
+            capture_rel = ""
+        if capture_rel.startswith("article-captures/"):
+            capture_file = resolve_inside_run(run_dir, capture_rel)
+            capture_text = read_artifact_text(capture_file, MAX_ARTIFACT_BYTES) if capture_file else None
+            capture = json.loads(capture_text) if capture_text else None
+            if (not isinstance(capture, dict) or capture.get("schemaVersion") != "local-article-capture-v1"
+                    or capture.get("id") != request.get("sourceItemId")
+                    or not isinstance(capture.get("plan"), dict) or capture["plan"].get("maxModelCalls") != 1):
+                return 400, {"ok": False, "error": "Local article capture or one-call plan is invalid."}
+            attempt = capture_file.parent / "relevance-attempt.json"
+            try:
+                _write_json(attempt, {
+                    "requestId": request["id"], "requestPath": rel_path,
+                    "startedAt": datetime.now(timezone.utc).isoformat(),
+                    "status": "reserved", "basis": "Consumes the one-call budget even if generation or recording fails.",
+                })
+            except FileExistsError:
+                return 409, {"ok": False, "error": "This article's relevance-call budget is already consumed. Inspect the preserved attempt; no automatic retry."}
     invocation = _generate_and_preserve(runs_root, request_file, request, prompt, "relevance" if relevance else stage)
     recorded_payload = {**payload, "answer": invocation["content"], "freshSession": True}
     status, response = (_handle_record_relevance(runs_root, recorded_payload, invocation)

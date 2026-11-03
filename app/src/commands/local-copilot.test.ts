@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { localSessionConfig } from "./local-copilot.js";
+import { localSessionConfig, SOURCE_TRUST_RULES } from "./local-copilot.js";
 import { readModelIdentity } from "../core/model-identity.js";
 
 test("local Copilot sessions have no tools, permissions, plugins or inherited instructions", async () => {
@@ -16,7 +16,7 @@ test("local Copilot sessions have no tools, permissions, plugins or inherited in
   }
   assert.equal(config.skipCustomInstructions, true);
   assert.deepEqual(config.infiniteSessions, { enabled: false });
-  assert.deepEqual(config.systemMessage, { mode: "replace", content: "Bounded task" });
+  assert.deepEqual(config.systemMessage, { mode: "replace", content: `Bounded task\n\n${SOURCE_TRUST_RULES}` });
   assert.deepEqual(await config.onPermissionRequest?.(
     { kind: "read", path: "untrusted-file", intention: "Untrusted read" }, { sessionId: "session-1" }
   ), { kind: "reject" });
