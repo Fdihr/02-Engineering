@@ -451,7 +451,7 @@ export type QuestionRelevanceRequest = {
   schemaVersion: "question-relevance-request-v1";
   id: string;
   status: "prepared";
-  promptPolicyVersion: "question-relevance-prompt-v1";
+  promptPolicyVersion: "question-relevance-prompt-v1" | "question-relevance-prompt-v2";
   preparedAt: string;
   runId: string;
   sourceItemId: string;
@@ -473,7 +473,7 @@ export type ModelInvocationProvenance = {
   id: string;
   provider: string;
   model: string;
-  promptPolicyVersion: "question-relevance-prompt-v1";
+  promptPolicyVersion: "question-relevance-prompt-v1" | "question-relevance-prompt-v2";
   promptArtifactRef: string;
   promptArtifactSha256: string;
   responseArtifactRef: string;

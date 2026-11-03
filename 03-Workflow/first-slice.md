@@ -235,6 +235,18 @@ npm run record:question-relevance -- <question-relevance-request.json> <copilot-
 
 The model-ready request contains the complete canonical source, fixed untrusted-content instructions, the approved question, provenance, limitations, verdict definitions, and exact output requirements. Response validation rejects altered quotes, mismatched questions or requests, unknown prompt policy, duplicate anchors, positive verdicts without support, and extra model-authored fields. Only deterministic code derives `evidence_candidate_proposal`, `audited_exclusion`, or `human_exception_triage`; no route can produce approval.
 
+New requests use prompt policy v2: direct material contribution to one part of
+the question can be `relevant`; incomplete overall memo coverage is recorded
+as a limitation. Indirect read-across remains `partially-relevant`, not
+automatic admission. Existing v1 requests and assessments reconstruct unchanged;
+old verdicts, exceptions and consumed budgets are not reset. See
+`../02-Contracts/question-relevance-policy.md`. One separately authorized v2
+calibration reused the saved Kyiv Post source with no refetch and returned
+`relevant` with three validated exact anchors. It treated the factory plot as
+direct narrow evidence and missing wider coverage as limitations. This was
+diagnostic only: the original v1 verdict, exception and consumed budget were
+preserved, and no snapshot or source-assurance result was created.
+
 The dashboard's Settings workflow map lists the locally authenticated Copilot account's models and saves a shared default plus optional per-stage overrides for all seven implemented AI stages. Human gates and deterministic steps remain read-only in the map. Legacy single-model settings remain the default for every stage. Foundry is visibly not connected; its endpoint setting does not enable model calls. **Run with Copilot** resolves the stage's saved model, invokes a fresh, tool-disabled SDK session, preserves raw output and explicit stage/session/model provenance, then runs the existing recorder. It does not approve evidence or execute the entire analysis loop. Manual paste-back remains supported with `github-copilot-vscode` / `not-exposed-by-host`; SDK responses record `github-copilot-sdk` with the explicit selected model. See `../app/dashboard/README.md` for local setup, draft-only planning previews, failure handling and retained human gates.
 
 The real NV source completed this path as `partially-relevant` with three exact anchors and destination `evidence_candidate_proposal / pending_human_review`. It reports the visit, possible purposes, Ratcliffe-to-Bortnikov participation, and Baltic hybrid-threat implications, but does not establish that the visit occurred specifically on 27 August or provide explicit cyber implications.

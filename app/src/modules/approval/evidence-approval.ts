@@ -213,7 +213,8 @@ const isPositiveQuestionRelevance = (
     !nonEmptyString(invocation.id) ||
     !nonEmptyString(invocation.provider) ||
     !nonEmptyString(invocation.model) ||
-    invocation.promptPolicyVersion !== "question-relevance-prompt-v1" ||
+    (invocation.promptPolicyVersion !== "question-relevance-prompt-v1" &&
+      invocation.promptPolicyVersion !== "question-relevance-prompt-v2") ||
     !nonEmptyString(invocation.promptArtifactRef) ||
     !sha256(invocation.promptArtifactSha256) ||
     !nonEmptyString(invocation.responseArtifactRef) ||
