@@ -52,7 +52,8 @@ class RssBatchTests(unittest.TestCase):
             path.write_text("{}", encoding="utf-8")
         else:
             return {"ok": True, "stdout": "Outcome: approved", "stderr": ""}
-        return {"ok": True, "stdout": f"Output: {path}", "stderr": ""}
+        label = "RSS capture" if script == "collect:rss" else "Output"
+        return {"ok": True, "stdout": f"{label}: {path}", "stderr": ""}
 
     def ai(self, root, payload):
         self.calls.append(payload)
@@ -147,6 +148,19 @@ class RssBatchTests(unittest.TestCase):
         self.assertTrue(all(not row["snapshotId"] for row in rows))
         self.assertEqual(view["journey"]["evidenceWorkspace"]["pipeline"]["capturedSources"]["count"], 0)
         self.assertFalse(any(row["state"] == "failed" for row in rows))
+
+    def test_inspected_recovery_keeps_original_failure_and_projects_completion_receipt(self):
+        prefix = "rss-batches/b-1"
+        values = {
+            prefix + "/policy.json": {"id": "b-1", "approvedAt": "2026-01-01"},
+            prefix + "/result.json": {"status": "failed", "error": "Output label mismatch"},
+            prefix + "/recovery-result.json": {"status": "completed", "outcomes": [{"outcome": "exception"}]},
+        }
+        batch = rss.project(values)["batches"][0]
+        self.assertEqual(batch["status"], "completed")
+        self.assertTrue(batch["recovered"])
+        self.assertEqual(batch["resultPath"], prefix + "/recovery-result.json")
+        self.assertEqual(values[prefix + "/result.json"]["status"], "failed")
 
     def test_controller_event_resolves_rss_candidate_under_a_custom_run_root(self):
         path = "source-reintakes/rss-candidate-a/intake-result.json"

@@ -43,13 +43,17 @@ def project(jsons: dict[str, Any]) -> dict[str, Any]:
         if not re.fullmatch(r"rss-batches/[^/]+/policy.json", path) or not isinstance(value, dict):
             continue
         prefix = path.rsplit("/", 1)[0]
-        result = jsons.get(prefix + "/result.json", {})
+        original_result = jsons.get(prefix + "/result.json", {})
+        recovered = jsons.get(prefix + "/recovery-result.json", {})
+        result = recovered or original_result
         selection = jsons.get(prefix + "/selection.json", {})
         batches.append({
             "id": value.get("id"), "feedId": value.get("feedId"), "approvedAt": value.get("approvedAt"),
             "maxItems": value.get("maxItems"), "relPath": prefix + "/policy.json",
             "status": result.get("status", "running"), "error": result.get("error", ""),
-            "outcomes": result.get("outcomes", []), "resultPath": prefix + "/result.json" if result else "",
+            "outcomes": result.get("outcomes", []),
+            "resultPath": prefix + ("/recovery-result.json" if recovered else "/result.json") if result else "",
+            "recovered": bool(recovered),
             "eligible": selection.get("eligible"), "deferred": selection.get("deferred"),
             "alreadyProcessed": selection.get("alreadyProcessed"),
         })
@@ -127,7 +131,7 @@ def start_batch(
             path.relative_to(run_dir.resolve())
             return path
         try:
-            capture = output(execute("collect:rss", [str(directory / "plan.json"), str(CATALOGUE), str(question)]))
+            capture = output(execute("collect:rss", [str(directory / "plan.json"), str(CATALOGUE), str(question)]), "RSS capture")
             selection_path = output(execute("rss:batch", ["prepare", str(capture), str(directory / "policy.json")]))
             selection = json.loads(selection_path.read_text(encoding="utf-8"))
             item_ids = selection.get("itemIds")

@@ -557,7 +557,7 @@ def _handle_ai_stage(runs_root: Path, payload: dict[str, Any], invocation: dict[
 
 def _generate_and_preserve(runs_root: Path, request_file: Path, request: dict[str, Any], prompt: dict[str, str], stage: str) -> dict[str, Any]:
     """Keep the original output even when downstream validation rejects it."""
-    request_bytes = request_file.read_bytes()
+    request_bytes = Path(_fs_path(request_file)).read_bytes()
     if json.loads(request_bytes) != request:
         raise CopilotError("The prepared request changed before generation. Refresh the analysis before retrying.")
     checksum = hashlib.sha256(request_bytes).hexdigest()
@@ -569,7 +569,7 @@ def _generate_and_preserve(runs_root: Path, request_file: Path, request: dict[st
         "requestId": request.get("id"),
         "requestArtifactSha256": checksum,
     })
-    if hashlib.sha256(request_file.read_bytes()).hexdigest() != checksum:
+    if hashlib.sha256(Path(_fs_path(request_file)).read_bytes()).hexdigest() != checksum:
         raise CopilotError("The request changed during generation. The original output is preserved, but no answer was recorded.")
     return invocation
 
@@ -732,9 +732,10 @@ def _handle_run_ai(runs_root: Path, payload: dict[str, Any]) -> tuple[int, dict[
     text = read_artifact_text(request_file, MAX_ARTIFACT_BYTES) if request_file else None
     if text is None:
         return 404, {"ok": False, "error": "AI request not found in this run."}
-    if (request_file.parent / "copilot-recorded.json").exists():
+    if Path(_fs_path(request_file.parent / "copilot-recorded.json")).exists():
         return 409, {"ok": False, "error": "This request has already been recorded. Continue to the next workflow step."}
-    if relevance and (request_file.parent / "assessments").is_dir() and any((request_file.parent / "assessments").iterdir()):
+    assessments = Path(_fs_path(request_file.parent / "assessments"))
+    if relevance and assessments.is_dir() and any(assessments.iterdir()):
         return 409, {"ok": False, "error": "Relevance has already been assessed for this request."}
     if stage == "extract" and (request_file.parent / "checks.json").is_file():
         return 409, {"ok": False, "error": "This extraction attempt is recorded. Continue the workflow or authorise a new attempt."}

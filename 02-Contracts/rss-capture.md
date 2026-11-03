@@ -108,6 +108,13 @@ batch as interrupted rather than resuming it or claiming completion. The
 global Copilot stage lock prevents overlapping model batches. Captured metadata
 and deferred sources remain inspectable; Seerist lead routes are not cleared.
 
+An operator-inspected continuation after an integration failure may preserve a
+separate write-once `recovery-result.json`, binding the original failed receipt,
+policy, selection and completed per-item outcomes. The dashboard displays that
+completion receipt without rewriting the original failure. This is not an
+automatic retry or a new call budget; existing invocation artifacts must be
+checked before continuing.
+
 ## Existing Seerist leads
 
 A separate read-only match command verifies the persisted Seerist intake

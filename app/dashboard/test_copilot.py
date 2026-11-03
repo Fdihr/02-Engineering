@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -8,7 +9,7 @@ from unittest.mock import patch
 
 from dashboard.copilot import COPILOT_PROVIDER, STAGE_IDS, CopilotError, call_copilot, generate, load_settings, resolve_model, save_model
 from dashboard.server import COPILOT_LOCK, STAGE_RESPONSES, _handle_analyst_action
-from dashboard.scan import list_available_runs
+from dashboard.scan import _fs_path, list_available_runs
 
 
 def invocation(content='{"statements": []}'):
@@ -25,6 +26,7 @@ class CopilotTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
 
     def tearDown(self):
+        shutil.rmtree(_fs_path(self.root))
         self.temporary.cleanup()
 
     def test_plan_generation_creates_drafts_only_with_thesis_bound_questions_and_searches(self):
@@ -253,6 +255,27 @@ class CopilotTests(unittest.TestCase):
         self.assertEqual(response["schemaVersion"], "question-relevance-copilot-sdk-response-v1")
         self.assertEqual(response["model"], "test-model")
         self.assertFalse((run / "evidence-admission").exists())
+
+    def test_content_addressed_relevance_paths_preserve_output_and_reject_repeat_calls(self):
+        run = self.root / "long-path-run"
+        rel = ("sources/rss-" + "a" * 64 + "/source-document-" + "b" * 64 +
+               "/question-relevance/question-relevance-request-" + "c" * 64 +
+               "/question-relevance-request.json")
+        request = Path(_fs_path(run / rel))
+        request.parent.mkdir(parents=True)
+        request.write_text('{"id":"long-request","preparedAt":"2026-01-01T00:00:00.000Z"}', encoding="utf-8")
+        self.assertGreater(len(str(request)), 260)
+        answer = {"verdict": "not-relevant", "rationale": "Outside the question", "support": [], "limitations": []}
+        with patch("dashboard.server.generate", return_value=invocation(json.dumps(answer))) as transport, \
+                patch("dashboard.server._run_npm_script", return_value={"ok": True, "stderr": "", "stdout": ""}):
+            payload = {"action": "run-ai-stage", "runId": run.name, "reviewerId": "analyst", "requestPath": rel}
+            status, result = _handle_analyst_action(self.root, run, payload)
+            self.assertEqual(status, 200, result)
+            self.assertTrue((request.parent / "copilot-recorded.json").is_file())
+            self.assertEqual(len(list(request.parent.glob("copilot-invocation-*.json"))), 1)
+            status, _ = _handle_analyst_action(self.root, run, payload)
+            self.assertEqual(status, 409)
+            self.assertEqual(transport.call_count, 1)
 
     def test_invalid_answers_remain_auditable_and_do_not_advance(self):
         run = self.root / "bad-output"
