@@ -51,3 +51,23 @@ fixture proposals and existing end-to-end admission/exclusion behavior. These
 are deterministic contract tests, not evidence that a model will classify
 every case correctly. Live v2 calibration needs a separately approved bounded
 call and must retain the actual verdict rather than force a positive outcome.
+
+## Bounded live calibration
+
+On 2026-11-03 the user authorized one additional diagnostic relevance call
+using the saved Kyiv Post article, with zero fetches and no authority to admit
+evidence or supersede the original assessment. The Settings-selected Copilot
+model returned `relevant` with three validated exact anchors. Its rationale
+recognized the alleged factory plot as a direct narrow contribution while
+retaining missing coverage, attribution and corroboration caveats.
+
+Write-once authorization, request, rendered prompt, reserved attempt,
+invocation, response and deterministic validation are retained in the
+non-committed run folder
+`app/runs/_relevance-calibrations/poland-article-v2-20261103-01/`.
+Checksums confirmed that the original request, response, assessment, captures,
+raw HTML, consumed attempt and admission result were unchanged. No recorder
+or admission command was invoked; the diagnostic routing output was not applied
+to the workflow. The original exception remains open. This proves one live
+classification and anchor-validation case, not general model accuracy,
+positive production admission, source assurance or publication readiness.
