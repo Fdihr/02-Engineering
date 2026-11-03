@@ -16,6 +16,8 @@
     drafts: {},
     promptAt: {},
     sourceFilter: '',
+    sourceQuery: '',
+    evidenceQuestion: '',
     homeFilter: 'all',
     homeSel: '',
     leadFilter: 'pending',
