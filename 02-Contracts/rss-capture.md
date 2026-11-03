@@ -1,7 +1,7 @@
 # Bounded RSS Capture
 
-Status: First artifact-based acquisition slice. No polling service, database,
-publisher-page fetch, candidate admission, or automatic state advancement.
+Status: Artifact-based capture and opt-in bounded dashboard-to-admission batch.
+No polling service, database or publisher-page fetch.
 
 ## Supported surface
 
@@ -60,7 +60,53 @@ Only an in-window item with explicit non-empty content can become an
 `rss-feed` canonical source document. Its checksum lineage includes the request,
 response, raw feed, catalogue, plan and approved question. It can enter the
 existing question-relevance proposal path, never evidence admission by itself.
-This slice deliberately stops before new RSS candidate conversion.
+Capture and relevance alone do not admit an item. Candidate conversion is only
+available through the explicitly approved batch below.
+
+## On-demand dashboard batch
+
+The Evidence page offers one feed per batch and an explicit budget of 1-5
+source items / relevance calls. The default is one. An operator must provide a
+permission-review reference and approve the versioned `rss-batch-policy-v1`
+before starting. This approval is scoped to the batch, run, approved question,
+feed and budget; it is not inferred from intent approval, catalogue membership,
+an AI answer or a missing settings field. Existing admission defaults remain
+unchanged. No batch has a schedule or automatic retry.
+
+The command reopens the capture and policy, selects only eligible feed text,
+and writes `rss-batches/<id>/selection.json`. Feed order is a processing order,
+not an evidence ranking. All unselected material is retained; deferred and
+already-processed counts are explicit. Run/item identities are consumed
+write-once across batches. Incomplete prior admission directories fail
+explicitly and require inspection, rather than silently retrying an admission.
+
+Each selected source is canonicalized, receives at most one relevance model
+call using Settings, and has its response recorded by the existing validator.
+Before admission, code reconstructs the capture, canonical document, approved
+question, request, model response, exact quote anchors, assessment and routing
+decision, and rechecks selection membership and budget. Only exact `relevant`
+is admitted. Partial/uncertain relevance creates an exception; `not-relevant`
+is retained as an exclusion. Failed validation never produces an approved
+snapshot.
+
+RSS candidates use provider `rss`, source type `captured_feed_item`, and
+checksum-bound `rssLineage` for the capture, policy, selection and item. They
+are never represented as Firecrawl retrievals. The source identity is the actual
+feed host; `articleUrl` is only a reported
+link, not a fetched/final URL or proof that the linked publisher authored the
+captured feed text.
+Standard evidence decisions and
+snapshots are written under `rss-admissions/<id>/`, with a controller actor and
+an evidence event. They can enter existing source assurance, but the batch
+stops at admission. Admission is not completed source assurance, publication
+approval or a claim that feed text is a complete publisher article.
+
+The dashboard launches a bounded background worker and preserves policy, plan,
+selection, progress, per-item admission receipts and final result as files.
+Failures are displayed explicitly; a server restart reports an unfinished
+batch as interrupted rather than resuming it or claiming completion. The
+global Copilot stage lock prevents overlapping model batches. Captured metadata
+and deferred sources remain inspectable; Seerist lead routes are not cleared.
 
 ## Existing Seerist leads
 

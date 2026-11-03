@@ -165,7 +165,30 @@ export type RetrievedSourceEvidenceCandidate = {
 
 export type EvidenceCandidate =
   | SeeristEvidenceCandidate
-  | RetrievedSourceEvidenceCandidate;
+  | RetrievedSourceEvidenceCandidate
+  | RssEvidenceCandidate;
+
+export type RssEvidenceCandidate = Omit<
+  RetrievedSourceEvidenceCandidate,
+  "provider" | "endpoint" | "sourceType" | "retrievalLineage" | "source"
+> & {
+  provider: "rss";
+  endpoint: string;
+  sourceType: "captured_feed_item";
+  rawArtifactSha256: string;
+  source: {
+    feedUrl: string;
+    articleUrl: string;
+    publisherHost: string;
+    title: string;
+  };
+  rssLineage: {
+    capture: SourceArtifactLineage;
+    policy: SourceArtifactLineage;
+    selection: SourceArtifactLineage;
+    itemId: string;
+  };
+};
 
 export type CollectionLead = ProviderItemBase & {
   role: "collection_lead";

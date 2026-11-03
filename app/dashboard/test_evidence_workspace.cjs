@@ -40,7 +40,10 @@ const C = {
   when: () => '',
   plural,
   panes: {},
-  actButton: text => new Element('button', text),
+  actButton: (text, cls, callback) => { const node = new Element('button', text); node.addEventListener('click', callback); return node; },
+  analyst: () => 'test-operator',
+  field: (label, input) => { const node = new Element('label', label); node.appendChild(input); return node; },
+  setBlocked: (node, blocked) => { node.disabled = blocked; },
   linkButton: (text, callback) => { const node = new Element('button', text); node.addEventListener('click', callback); return node; },
   sectionHead: text => new Element('h2', text),
   artifactLink: (url, text) => new Element('a', text),
@@ -244,6 +247,42 @@ test('run_panes registers the sources pane and the evidence helpers', () => {
 function nodes(node) {
   return [node, ...node.children.flatMap(nodes)];
 }
+
+test('RSS form requires permission, explicit policy approval and a measured budget; approvals do not cross runs', () => {
+  C.state.runId = 'rss-run-1';
+  C.state.rssOpen = true;
+  C.state.evidenceView = 'coverage';
+  C.state.view = { rss: { feeds: [{ id: 'industrial-cyber', name: 'Industrial Cyber' }], batches: [] } };
+  C.journey = () => journey({ brief: { question: { id: 'rq-1' }, requirements: [] }, evidenceWorkspace: projected() });
+  C.panes.sources();
+  let all = nodes(C.rendered);
+  const permission = all.find(n => n.id === 'rss-permission');
+  const budget = all.find(n => n.id === 'rss-budget');
+  const approval = all.find(n => n.id === 'rss-policy-approval');
+  let submit = all.find(n => n.textContent === 'Capture and process RSS');
+  assert.equal(submit.disabled, true);
+  assert.equal(String(budget.value), '1');
+  permission.value = 'permission-review-ref';
+  approval.checked = true;
+  budget.value = '6';
+  budget.events.input();
+  assert.equal(submit.disabled, true);
+  budget.value = '2';
+  budget.events.input();
+  assert.equal(submit.disabled, false);
+  C.state.view.rss.batches = [{ id: 'b-1', feedId: 'industrial-cyber', status: 'running', maxItems: 2 }];
+  C.panes.sources();
+  submit = nodes(C.rendered).find(n => n.textContent === 'Capture and process RSS');
+  assert.equal(submit.disabled, true);
+  C.state.view.rss.batches = [];
+  C.state.runId = 'rss-run-2';
+  C.panes.sources();
+  all = nodes(C.rendered);
+  assert.equal(all.find(n => n.id === 'rss-policy-approval').checked, false);
+  assert.equal(all.find(n => n.id === 'rss-permission').value, '');
+  C.state.rssOpen = false;
+  C.state.view = {};
+});
 
 test('rendered coverage is primary and null links do not claim an evidence gap', () => {
   C.state.evidenceView = 'coverage';

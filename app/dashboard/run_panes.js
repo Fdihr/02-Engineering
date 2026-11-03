@@ -1248,6 +1248,73 @@
 
   C.evidence = { model: evidenceModel, filterExplorer: filterExplorer, coverageLabel: coverageLabel };
 
+  function rssCollection(j) {
+    var data = (state.view && state.view.rss) || {};
+    var feeds = data.feeds || [];
+    if (!feeds.length && !(data.batches || []).length) return null;
+    var section = el('section', 'rss-collection');
+    var running = (data.batches || []).some(function (b) { return b.status === 'running'; });
+    var head = C.sectionHead('RSS collection', 'h3');
+    add(head, C.linkButton(state.rssOpen ? 'Close batch setup' : 'Collect a bounded batch', function () {
+      state.rssOpen = !state.rssOpen; C.render(true);
+    }));
+    add(section, head);
+    add(section, el('p', 'meta prose', 'On demand only. One feed capture, up to five relevance calls, then code-controlled admission under your approved batch policy. No publisher-page fetch or recurring polling.'));
+    (data.batches || []).slice(0, 3).forEach(function (batch) {
+      var line = el('div', 'rss-batch-status');
+      var admitted = (batch.outcomes || []).filter(function (o) { return o.outcome === 'approved'; }).length;
+      add(line, el('strong', null, capital(humanise(batch.status)) + ' · ' + humanise(batch.feedId)),
+        el('span', 'meta', when(batch.approvedAt) + ' · budget ' + batch.maxItems + ' source(s) / relevance call(s)'),
+        batch.status === 'completed' ? el('span', 'meta', admitted + ' admitted · ' + (batch.deferred || 0) + ' deferred · ' + (batch.alreadyProcessed || 0) + ' already processed') : null,
+        batch.error ? el('p', 'meta fail', batch.error) : null,
+        C.artifactLink(batch.resultPath || batch.relPath, batch.resultPath ? 'Batch result' : 'Approved policy'));
+      add(section, line);
+    });
+    if (!state.rssOpen) return section;
+    var question = (j.brief || {}).question;
+    if (!question || !question.id) {
+      add(section, el('p', 'meta', 'Approve an analysis brief before collecting RSS.'));
+      return section;
+    }
+    if (!state.rssDraft || state.rssDraft.runId !== state.runId) state.rssDraft = { runId: state.runId, feedId: '', maxItems: 1, permission: '', approved: false };
+    var draft = state.rssDraft;
+    var form = el('form', 'rss-batch-form');
+    var feed = el('select', 'select-input');
+    feed.id = 'rss-feed';
+    feeds.forEach(function (item) { var option = el('option', null, item.name); option.value = item.id; feed.appendChild(option); });
+    feed.value = draft.feedId || feeds[0].id;
+    var budget = el('input', 'text-input');
+    budget.id = 'rss-budget'; budget.type = 'number'; budget.min = '1'; budget.max = '5'; budget.step = '1'; budget.required = true; budget.value = draft.maxItems;
+    var permission = el('input', 'text-input');
+    permission.id = 'rss-permission'; permission.type = 'text'; permission.maxLength = 500; permission.minLength = 3; permission.required = true; permission.value = draft.permission;
+    permission.placeholder = 'Reference to your feed-usage permission review';
+    add(form, C.field('Observed feed (2 of the catalogue feeds enabled)', feed), C.field('Maximum sources / relevance calls', budget),
+      C.field('Permission-review reference', permission, true));
+    add(form, el('p', 'meta prose', 'Feeds are processed in publisher order, not ranked as evidence. Unselected items remain captured for later batches; description-only and out-of-window items are never admitted. The policy does not approve feed membership as source authority.'));
+    var approval = el('input');
+    approval.id = 'rss-policy-approval'; approval.type = 'checkbox'; approval.checked = draft.approved;
+    add(form, add(el('label', 'rss-policy-approval'), approval, el('span', null,
+      'I confirm permitted feed usage and approve this one-shot policy: admit only relevant, code-validated captured feed text for the approved question within this budget. Partial/uncertain relevance goes to exceptions. This does not complete source assurance or publication approval.')));
+    var submit = C.actButton('Capture and process RSS', 'btn-primary', function () {
+      if (!form.reportValidity() || !approval.checked) return;
+      C.postAction({ action: 'collect-rss-batch', runId: state.runId, questionId: question.id, reviewerId: C.analyst(),
+        feedId: feed.value, maxItems: Number(budget.value), permissionReference: permission.value, approvePolicy: approval.checked
+      }, 'Starting bounded RSS batch').then(function (result) {
+        if (result && result.ok) { draft.approved = false; state.rssOpen = false; C.render(true); }
+      });
+    }, true);
+    function update() {
+      draft.feedId = feed.value; draft.maxItems = budget.value; draft.permission = permission.value; draft.approved = approval.checked;
+      C.setBlocked(submit, running || !approval.checked || permission.value.trim().length < 3 || !Number.isInteger(Number(budget.value)) || Number(budget.value) < 1 || Number(budget.value) > 5);
+    }
+    [feed, budget, permission, approval].forEach(function (input) { input.addEventListener('input', update); input.addEventListener('change', update); });
+    form.addEventListener('submit', function (event) { event.preventDefault(); });
+    add(form, add(el('div', 'btn-row'), submit, el('span', 'meta', running ? 'An RSS batch is running. Wait for its result.' : 'Uses the Relevance model selected in Settings. Stops after admission.')));
+    update();
+    add(section, form);
+    return section;
+  }
+
   C.panes.sources = function () {
     var j = C.journey();
     var host = $('pane-sources');
@@ -1260,7 +1327,7 @@
     var question = model.questions.filter(function (q) { return q.id === state.evidenceQuestion; })[0] || model.questions[0] || null;
     state.evidenceQuestion = question ? question.id : '';
 
-    add(frag, analysisTabs('sources', j), evidenceStrip(model));
+    add(frag, analysisTabs('sources', j), evidenceStrip(model), rssCollection(j));
 
     var views = el('div', 'filters ev-views');
     views.setAttribute('role', 'group');

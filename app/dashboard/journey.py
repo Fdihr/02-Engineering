@@ -528,6 +528,35 @@ def _source_rows(
         lead_id = lead_of_candidate.get(candidate["candidateId"], "")
         rows.append(_row(candidate["candidateId"], leads.get(lead_id), None, 0, "", None, candidate,
                          snapshot_by_candidate, review_by_snapshot, note_by_snapshot, ai_queue, full, in_build, claims_per_note))
+    rss_candidates = {candidate.get("rssItemId") for candidate in evidence_review if candidate.get("rssItemId")}
+    rss_items = {}
+    for path, capture in full.items():
+        if _rec(capture).get("schemaVersion") in ("rss-capture-v1", "rss-capture-index-v1"):
+            for item in capture.get("items", []):
+                if _rec(item).get("id") and item["id"] not in rss_candidates:
+                    rss_items[item["id"]] = (item, path, capture)
+    for item_id, (item, path, capture) in rss_items.items():
+        relevance = relevance_by_retrieval.get(item_id)
+        row = _row(item_id, None, None, 0, "", relevance, None,
+                   snapshot_by_candidate, review_by_snapshot, note_by_snapshot, ai_queue, full, in_build, claims_per_note)
+        eligible = item.get("contentStatus") == "captured-feed-text" and item.get("timeStatus") == "in-window" and item.get("articleUrl")
+        detail = "Captured feed text; deferred within the processing budget" if eligible else (
+            "Feed text outside the approved time window" if item.get("timeStatus") == "out-of-window" else
+            "Metadata only, missing URL or unknown publication date; not eligible for admission")
+        row.update({"title": item.get("title") or item_id, "publisher": _rec(capture.get("feed")).get("name", ""),
+                    "url": item.get("articleUrl") or "", "retrieved": bool(eligible),
+                    "artifacts": [{"label": "RSS capture", "relPath": path}] + row["artifacts"]})
+        row["steps"][0] = _step("lead", "RSS item", "done", "Captured directly from the selected feed")
+        row["steps"][1] = _step("retrieve", "Feed text", "done" if eligible else "closed", detail)
+        if relevance is None:
+            row["steps"][2] = _step("relevance", "Relevance", "todo" if eligible else "closed", detail)
+        elif relevance.get("verdict") in ("partially-relevant", "uncertain"):
+            row["steps"][3] = _step("admit", "Admitted", "closed", "Not admitted; relevance exception requires a decision")
+        row["steps"] = _settle(row["steps"])
+        row["state"], current = _summary(row["steps"])
+        row["current"] = {key: current[key] for key in ("key", "label", "state", "detail")}
+        row["action"] = current["action"] if row["state"] in ("action", "failed", "ready", "provisional") else None
+        rows.append(row)
     order = {"action": 0, "failed": 1, "ready": 2, "progress": 3, "pending": 4, "provisional": 5, "done": 6, "closed": 7}
     rows.sort(key=lambda r: (order.get(r["state"], 9), -(r["lead"] or {}).get("score", 0), r["title"]))
     return rows

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
@@ -10,7 +10,9 @@ import { RSS_MAX_BYTES, rssSha256 } from "../modules/collection/rss-capture.js";
 import { processSource } from "../workflow/process-source.js";
 import { collectRss } from "./collect-rss.js";
 import { matchRss } from "./match-rss.js";
-import { artifactRef, loadJsonArtifact } from "./assurance-io.js";
+import { artifactRef, loadAdmittedSource, loadJsonArtifact } from "./assurance-io.js";
+import { admitRss, prepareRssBatch } from "./rss-batch.js";
+import { readRssBatchPolicy } from "../workflow/admit-rss-evidence.js";
 import { loadRssCapture } from "./rss-io.js";
 import { isPublicRssAddress, readRssBytes, rssRedirect } from "./rss-http.js";
 
@@ -93,7 +95,7 @@ const invoke = (command: string, args: string[], runRoot: string) => spawnSync(
   { encoding: "utf8", env: { ...process.env, RSS_RUN_DIR: runRoot, SOURCE_DOCUMENT_RUN_DIR: runRoot, QUESTION_RELEVANCE_RUN_DIR: runRoot } }
 );
 
-test("RSS capture persists raw provenance, reconstructs, canonicalizes and prepares relevance without approval", async () => {
+test("RSS capture through verified relevance and explicitly governed admission preserves provenance", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "rss-command-"));
   try {
     const f = await setup(root);
@@ -147,6 +149,48 @@ test("RSS capture persists raw provenance, reconstructs, canonicalizes and prepa
     assert.equal(recorded.status, 0, recorded.stderr);
     assert.match(recorded.stdout, /Destination: evidence_candidate_proposal/);
     assert.match(recorded.stdout, /Approval: pending_human_review/);
+    const policyPath = resolve(f.run, "rss-batches", "batch-1", "policy.json");
+    await mkdir(resolve(f.run, "rss-batches", "batch-1"), { recursive: true });
+    const policy = {
+      schemaVersion: "rss-batch-policy-v1", id: "batch-1", runId: "rss-test",
+      researchQuestionId: "rq-1", feedId: "industrial-cyber", maxItems: 1, maxModelCalls: 1,
+      admission: "controller-relevant-only", approvedBy: "test-operator", approvedAt: "2026-01-01T00:00:01Z",
+      permissionReference: "test-only-permission"
+    };
+    for (const changes of [{ maxItems: 0 }, { maxItems: 6 }, { maxModelCalls: 2 }, { approvedBy: "" }, { admission: "model" }]) {
+      assert.equal(readRssBatchPolicy({ ...policy, ...changes }).ok, false);
+    }
+    await writeFile(policyPath, JSON.stringify({ ...policy, feedId: "wrong-feed" }));
+    await assert.rejects(prepareRssBatch(f.runRoot, capturePath, policyPath), /does not bind/);
+    await writeFile(policyPath, JSON.stringify(policy));
+    const selectionPath = resolve(await prepareRssBatch(f.runRoot, capturePath, policyPath));
+    const selection = JSON.parse(await readFile(selectionPath, "utf8"));
+    assert.deepEqual(selection.itemIds, [id]);
+    assert.equal(selection.eligible, 1, "description-only item must not consume a relevance call");
+    await assert.rejects(prepareRssBatch(f.runRoot, capturePath, policyPath), /EEXIST/);
+    const assessmentPath = resolve(recorded.stdout.match(/Output: (.+)/)?.[1]?.trim() ?? "missing");
+    const assessmentOriginal = await readFile(assessmentPath, "utf8");
+    const tampered = JSON.parse(assessmentOriginal);
+    tampered.verdict = "partially-relevant";
+    await writeFile(assessmentPath, JSON.stringify(tampered));
+    await assert.rejects(admitRss(f.runRoot, selectionPath, assessmentPath), /does not reconstruct/);
+    await writeFile(assessmentPath, assessmentOriginal);
+    const selectionOriginal = await readFile(selectionPath, "utf8");
+    await writeFile(selectionPath, JSON.stringify({ ...selection, itemIds: [id, id] }));
+    await assert.rejects(admitRss(f.runRoot, selectionPath, assessmentPath), /approved budget/);
+    await writeFile(selectionPath, selectionOriginal);
+    const admitted = await admitRss(f.runRoot, selectionPath, assessmentPath);
+    assert.equal(admitted.outcome, "approved");
+    assert.ok(admitted.snapshotRef);
+    const snapshot = JSON.parse(await readFile(resolve(admitted.snapshotRef), "utf8"));
+    assert.equal(snapshot.item.provider, "rss");
+    assert.equal(snapshot.item.rssLineage.capture.artifactSha256, loaded.artifact.binding.artifactSha256);
+    assert.match(snapshot.admittedBy, /^controller:rss-batch-policy-v1:/);
+    const assured = await loadAdmittedSource(f.runRoot, resolve(admitted.snapshotRef), new Date().toISOString());
+    assert.equal(assured.sourceDocument.sourceKind, "rss-feed");
+    assert.deepEqual(assured.sourceIdentity, { kind: "publisher", publisherHost: "industrialcyber.co" });
+    assert.equal(snapshot.item.source.finalUrl, undefined, "Unfetched article URLs must not masquerade as resolved retrievals");
+    await assert.rejects(admitRss(f.runRoot, selectionPath, assessmentPath), /EEXIST/);
     const leadOnly = invoke("canonicalize-source.ts", [capturePath, loaded.capture.items[1]!.id], f.runRoot);
     assert.notEqual(leadOnly.status, 0);
     assert.match(leadOnly.stderr, /RSS_ITEM_IS_LEAD_ONLY/);
@@ -176,6 +220,66 @@ test("RSS checks approvals and scope checksums before HTTP, and retains rejected
     assert.equal(await readFile(rawPath, "utf8"), "<bad>");
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+for (const verdict of ["partially-relevant", "uncertain", "not-relevant"] as const) {
+  test(`RSS bounded batch records ${verdict} without approving a snapshot`, async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "rss-verdict-"));
+    try {
+      const f = await setup(root);
+      const capturePath = await collectRss([f.planPath, f.cataloguePath, f.questionPath], f.runRoot, fakeFetch);
+      const loaded = await loadRssCapture(f.runRoot, capturePath);
+      const itemId = loaded.capture.items[0]!.id;
+      const canonical = invoke("canonicalize-source.ts", [capturePath, itemId], f.runRoot);
+      assert.equal(canonical.status, 0, canonical.stderr);
+      const documentPath = canonical.stdout.match(/Output: (.+)/)![1]!.trim();
+      const prepared = invoke("prepare-question-relevance.ts", [documentPath], f.runRoot);
+      assert.equal(prepared.status, 0, prepared.stderr);
+      const requestPath = prepared.stdout.match(/Output: (.+)/)![1]!.trim();
+      const request = JSON.parse(await readFile(resolve(requestPath), "utf8"));
+      const segment = request.sourceDocument.segments[0];
+      const responsePath = resolve(f.run, "test-response.json");
+      await writeFile(responsePath, JSON.stringify({
+        schemaVersion: "question-relevance-copilot-poc-response-v1", requestId: request.id,
+        invocationId: "test-relevance-response", startedAt: request.preparedAt,
+        completedAt: new Date().toISOString(),
+        proposal: {
+          verdict, rationale: "Synthetic verdict exercises the bounded controller; no live source claim.",
+          support: verdict === "partially-relevant" ? [{
+            anchor: {
+              sourceDocumentId: request.sourceDocument.id,
+              sourceDocumentArtifactRef: request.sourceDocumentArtifactRef,
+              sourceDocumentArtifactSha256: request.sourceDocumentArtifactSha256,
+              segmentId: segment.id, segmentSha256: segment.textSha256, quote: segment.text,
+              quoteStartUtf8Byte: 0, quoteEndUtf8Byte: Buffer.byteLength(segment.text)
+            }, relationToQuestion: "Test-only partial relation."
+          }] : [], limitations: ["Synthetic test data."]
+        }
+      }));
+      const recorded = invoke("record-question-relevance.ts", [requestPath, responsePath], f.runRoot);
+      assert.equal(recorded.status, 0, recorded.stderr);
+      const assessmentPath = recorded.stdout.match(/Output: (.+)/)![1]!.trim();
+      const policyPath = resolve(f.run, "rss-batches", "batch-1", "policy.json");
+      await mkdir(resolve(f.run, "rss-batches", "batch-1"), { recursive: true });
+      await writeFile(policyPath, JSON.stringify({
+        schemaVersion: "rss-batch-policy-v1", id: "batch-1", runId: "rss-test",
+        researchQuestionId: "rq-1", feedId: "industrial-cyber", maxItems: 1, maxModelCalls: 1,
+        admission: "controller-relevant-only", approvedBy: "test-operator", approvedAt: "2026-01-01T00:00:01Z",
+        permissionReference: "test-only-permission"
+      }));
+      const selectionPath = await prepareRssBatch(f.runRoot, capturePath, policyPath);
+      const result = await admitRss(f.runRoot, selectionPath, assessmentPath);
+      assert.equal(result.outcome, verdict === "not-relevant" ? "not-relevant" : "exception");
+      assert.equal(result.snapshotRef, undefined);
+      const directories = await readdir(resolve(f.run, "rss-admissions"));
+      for (const id of directories) {
+        await assert.rejects(readFile(resolve(f.run, "rss-admissions", id, "approved-evidence-snapshot.json")), /ENOENT/);
+      }
+      if (verdict !== "not-relevant") {
+        assert.equal((await readdir(resolve(f.run, "exceptions"))).length, 1, "Do not duplicate the recorder's relevance exception");
+      }
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+}
 
 test("RSS reload verifies raw checksums, request bindings, scope and path confinement", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "rss-tamper-"));

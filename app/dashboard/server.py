@@ -21,7 +21,7 @@ from string import Template
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from . import auth, settings
+from . import auth, settings, rss
 from .model import RELEVANCE_REQUEST_PATH, ai_stage_for, build_run_view
 from .relevance_bridge import build_relevance_prompt, build_response, parse_model_answer
 from .scan import _fs_path, list_available_runs, read_artifact_text, resolve_inside_run, scan_run_directory
@@ -163,7 +163,7 @@ def _run_npm_script(script_name: str, args: list[str], timeout_sec: int = 90, *,
         env = {**os.environ, **{key: str(runs_root) for key in (
             "RESEARCH_RUN_DIR", "SOURCE_ASSURANCE_RUN_DIR", "QUESTION_RELEVANCE_RUN_DIR",
             "SOURCE_REINTAKE_RUN_DIR", "SEERIST_RUN_DIR", "SOURCE_DOCUMENT_RUN_DIR",
-            "EVIDENCE_RUN_DIR",
+            "EVIDENCE_RUN_DIR", "RSS_RUN_DIR",
         )}}
     npm_cmd = "npm.cmd" if os.name == "nt" else "npm"
     cmd = [npm_cmd, "run", script_name, "--", *args]
@@ -904,6 +904,8 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
 
 def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     action = payload.get("action")
+    if action == "collect-rss-batch":
+        return rss.start_batch(runs_root, payload, _run_npm_script, _handle_run_ai, COPILOT_LOCK)
     if action == "save-copilot-settings":
         if "stages" in payload and not isinstance(payload["stages"], dict):
             return 400, {"ok": False, "error": "Stage overrides must be an object. Refresh Settings and retry."}
@@ -1257,6 +1259,11 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
                 view = build_run_view(target_id, scan["files"], scan["jsons"], scan["events"], scanned_at)
                 view["truncated"] = scan["truncated"]
                 view["availableRuns"] = list_available_runs(runs_root)
+                view["rss"]["feeds"] = rss.feeds()
+                for batch in view["rss"]["batches"]:
+                    if batch["status"] == "running" and batch["id"] not in rss.ACTIVE:
+                        batch["status"] = "interrupted"
+                        batch["error"] = "The server stopped before a completion receipt was written. Inspect the batch artifacts before retrying."
                 cache[target_id] = {"at": time.monotonic(), "view": view}
                 return view
 

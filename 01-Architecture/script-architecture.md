@@ -114,7 +114,13 @@ Publisher pages are not fetched. The first RSS adapter captures one explicitly
 selected observed feed into immutable artifacts, preserves exact-URL lead-match
 receipts, and permits eligible feed-provided content to enter canonicalization
 and relevance proposals. It has no database or automatic polling. Collection
-leads remain pending because RSS candidate conversion/admission is not wired.
+leads retain unresolved historical gaps. An explicitly approved on-demand batch
+now processes at most 1-5 eligible RSS items/relevance calls, reconstructs all
+lineage and exact anchors, and admits only `relevant` feed text under a
+batch-scoped versioned controller policy. Partial/uncertain results become
+exceptions. File-based progress and completion receipts expose failures and
+interrupted batches without automatic retries. RSS has its own provider and
+feed-host identity; it never masquerades as a fetched publisher page.
 No historical retrieval/re-intake command or retrieval credential is restored.
 
 The implemented connection creates the provider-neutral source document defined in `../02-Contracts/source-document-and-anchors.md`, then runs a bounded AI assessment against the exact approved research question. Deterministic code validates the typed assessment, exact anchors, model provenance, and artifact lineage. An assessment alone cannot create a new candidate or approve evidence. Existing candidates retain the compatibility evidence gate.

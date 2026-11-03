@@ -152,11 +152,24 @@ Details and limits are in `../02-Contracts/rss-capture.md`.
 
 Collection leads retain their provider metadata and approved-question lineage,
 but route to `pending_rss`. The dashboard displays "Waiting for RSS" and
-does not offer publisher-page retrieval. The RSS adapter is command-only and
-does not clear that blocker: candidate conversion/admission and dashboard
-collection controls are not implemented. No replacement retrieval provider is
-silently substituted, and a current feed cannot be assumed to recover the
-existing retrospective leads.
+does not offer publisher-page retrieval. The Evidence page now offers an
+on-demand RSS batch: one observed feed, an explicit permission reference and
+versioned policy approval, and a budget of 1-5 eligible sources/relevance calls.
+Code reopens capture, canonical document, question, model request/response,
+assessment and exact anchors before writing an RSS candidate and standard
+approved snapshot for an exactly `relevant` verdict. Partial/uncertain results
+remain exceptions; exclusions and deferred sources remain inspectable.
+
+The batch stops at admission. Existing source assurance remains separate.
+There is no polling, database or automatic retry; an interrupted batch is
+reported as interrupted. File artifacts remain authoritative and replaying
+admission for the same run/item is rejected. For terminal use, the narrow
+commands are `npm run rss:batch -- prepare <capture> <policy>` and
+`npm run rss:batch -- admit <selection> <recorded-assessment>`.
+
+These controls do not clear historical Seerist blockers or infer article
+identity. No replacement retrieval provider is silently substituted, and a
+current feed cannot be assumed to recover retrospective leads.
 
 The former retrieval and candidate-conversion commands, HTTP client, and
 credential configuration have been removed. Stored historical results remain
@@ -196,7 +209,8 @@ The real NV source completed this path as `partially-relevant` with three exact 
 
 ## Historical slice: positive-assessment candidate conversion (retired)
 
-Future RSS candidates require their own observed, mapped, tested source adapter and approved workflow boundary.
+RSS now has its own observed adapter and explicit bounded batch policy; see
+`../02-Contracts/rss-capture.md`. The historical conversion below remains retired.
 
 One resolved retrieval result + its verified source-lead lineage + one validated positive question-relevance assessment -> one new evidence candidate routed to pending policy admission or compatibility review.
 
