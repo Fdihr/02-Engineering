@@ -163,6 +163,13 @@ class ModelTests(unittest.TestCase):
         self.assertEqual((leads[0]["providerItemId"], leads[0]["tier"], leads[0]["shortlisted"]), ("cr-1", 1, False))
         self.assertEqual(len(view["panel1"]["candidates"]), 61)
         self.assertEqual(view["panel1"]["candidates"][0]["tier"], 1)
+        journey = view["journey"]
+        self.assertEqual(journey["pendingRssLeadCount"], 61)
+        self.assertEqual(len(journey["sources"]), 61)
+        self.assertTrue(all(lead["pendingRss"] for lead in leads))
+        self.assertTrue(all(row["state"] == "pending" and row["action"] is None for row in journey["sources"]))
+        self.assertEqual(next(f for f in journey["funnel"] if f["key"] == "pending_rss")["value"], 61)
+        self.assertFalse(any("pull" in item["title"].lower() for item in journey["queue"]))
 
     def test_run_view_groups_synthesis_exceptions_and_waiting(self):
         files = [
@@ -211,14 +218,16 @@ class ModelTests(unittest.TestCase):
         }
         view = build_run_view("r", [file_entry(p) for p in docs], [{"relPath": p, "value": v} for p, v in docs.items()], [], "t")
         journey = view["journey"]
-        self.assertEqual(len(journey["sources"]), 1)
+        self.assertEqual(len(journey["sources"]), 2)
         row = journey["sources"][0]
         self.assertEqual((row["id"], row["duplicates"], row["state"]), ("lead-1", 1, "action"))
         self.assertEqual(row["current"]["key"], "admit")
         self.assertEqual([s["state"] for s in row["steps"]], ["done", "done", "done", "you", "todo", "todo", "todo"])
         self.assertEqual(journey["queue"][0]["title"], "Decide whether to admit as evidence")
         self.assertEqual(sum(1 for q in journey["queue"] if q["phase"] == "evidence"), 1)
-        self.assertEqual([lead["rowId"] for lead in journey["leads"]], ["lead-1", ""])
+        self.assertEqual([lead["rowId"] for lead in journey["leads"]], ["lead-1", "lead-2"])
+        self.assertEqual([lead["pendingRss"] for lead in journey["leads"]], [False, True])
+        self.assertEqual(journey["pendingRssLeadCount"], 1)
 
     def test_journey_marks_memo_out_of_date_when_a_newer_round_exists(self):
         def build(index, at):

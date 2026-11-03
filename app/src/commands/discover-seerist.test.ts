@@ -11,7 +11,7 @@ const { scripts }: { scripts: Record<string, string> } = JSON.parse(
   await readFile(new URL("../../package.json", import.meta.url), "utf8")
 );
 
-for (const name of ["collect:seerist", "discover:seerist", "probe:seerist", "retrieve:source"]) {
+for (const name of ["collect:seerist", "discover:seerist", "probe:seerist"]) {
   test(`${name} reaches argument validation without a worktree .env`, async () => {
     const tempRoot = await mkdtemp(resolve(tmpdir(), "provider-startup-"));
     try {
@@ -29,9 +29,7 @@ for (const name of ["collect:seerist", "discover:seerist", "probe:seerist", "ret
         env: {
           ...process.env,
           SEERIST_API_KEY: "",
-          FIRECRAWL_API_KEY: "",
-          SEERIST_RUN_DIR: resolve(tempRoot, "seerist-runs"),
-          SOURCE_RETRIEVAL_RUN_DIR: resolve(tempRoot, "retrieval-runs")
+          SEERIST_RUN_DIR: resolve(tempRoot, "seerist-runs")
         }
       });
       assert.equal(result.status, 1, result.stderr);

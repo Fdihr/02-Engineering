@@ -19,7 +19,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from .model import RELEVANCE_REQUEST_PATH, ai_stage_for, build_run_view
-from .relevance_bridge import build_relevance_prompt, build_response, candidate_id_for, parse_model_answer
+from .relevance_bridge import build_relevance_prompt, build_response, parse_model_answer
 from .scan import _fs_path, list_available_runs, read_artifact_text, resolve_inside_run, scan_run_directory
 from .copilot import CopilotError, available_models, generate, load_settings, save_model
 
@@ -151,7 +151,7 @@ def _run_npm_script(script_name: str, args: list[str], timeout_sec: int = 90, *,
         env = {**os.environ, **{key: str(runs_root) for key in (
             "RESEARCH_RUN_DIR", "SOURCE_ASSURANCE_RUN_DIR", "QUESTION_RELEVANCE_RUN_DIR",
             "SOURCE_REINTAKE_RUN_DIR", "SEERIST_RUN_DIR", "SOURCE_DOCUMENT_RUN_DIR",
-            "SOURCE_RETRIEVAL_RUN_DIR", "EVIDENCE_RUN_DIR",
+            "EVIDENCE_RUN_DIR",
         )}}
     npm_cmd = "npm.cmd" if os.name == "nt" else "npm"
     cmd = [npm_cmd, "run", script_name, "--", *args]
@@ -295,15 +295,6 @@ def _handle_record_relevance(runs_root: Path, payload: dict[str, Any], invocatio
     steps.append(recorded)
     if not recorded["ok"]:
         return 400, {"ok": False, "runId": run_id, "steps": steps, "error": recorded["stderr"]}
-    verdict = (re.search(r"Verdict:\s*(\S+)", recorded["stdout"]) or [None, ""])[1]
-    assessment_ref = (re.search(r"Output:\s*(\S+)", recorded["stdout"]) or [None, ""])[1]
-    source_item_id = str(request.get("sourceItemId", ""))
-    retrieval_ref = f"runs/{run_id}/source-retrievals/{source_item_id}/source-retrieval-result.json"
-    if verdict in ("relevant", "partially-relevant") and assessment_ref and _valid_id(source_item_id) \
-            and Path(_fs_path(run_dir / "source-retrievals" / source_item_id / "source-retrieval-result.json")).is_file():
-        candidate_id = candidate_id_for(source_item_id)
-        if not Path(_fs_path(run_dir / "source-reintakes" / candidate_id)).exists():
-            steps.append(_run_npm_script("reintake:source", [retrieval_ref, assessment_ref, candidate_id], runs_root=runs_root))
     succeeded = all(step["ok"] for step in steps)
     return (200 if succeeded else 400), {"ok": succeeded, "runId": run_id, "steps": steps, "error": "" if succeeded else steps[-1]["stderr"]}
 
@@ -1072,7 +1063,6 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
         raw_ref = str(payload.get("rawArtifactRef") or "").strip()
         item_id = _valid_id(payload.get("providerItemId"))
         question_id = _valid_id(payload.get("questionId"))
-        source_url = str(payload.get("sourceUrl") or "").strip()
         if not (raw_ref and item_id and question_id):
             return 400, {"ok": False, "error": "Raw artifact reference, provider item ID, and question ID are required."}
         try:
@@ -1099,20 +1089,20 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
             match = re.search(r"Output:\s*(\S+)", step1["stdout"])
             intake_ref = match.group(1).strip() if match else ""
 
-        if intake_ref and source_url.startswith("https://"):
-            step2 = _run_npm_script("retrieve:source", [intake_ref, source_url], timeout_sec=90)
-            steps.append(step2)
-            if step2["ok"]:
-                match_ret = re.search(r"Output:\s*(\S+)", step2["stdout"])
-                if match_ret:
-                    step3 = _run_npm_script("canonicalize:source", [match_ret.group(1).strip()])
-                    steps.append(step3)
-                    if step3["ok"]:
-                        match_doc = re.search(r"Output:\s*(\S+)", step3["stdout"])
-                        if match_doc:
-                            step4 = _run_npm_script("prepare:question-relevance", [match_doc.group(1).strip()])
-                            steps.append(step4)
-        elif intake_ref:
+        if not intake_ref:
+            return 400, {"ok": False, "runId": run_id, "steps": steps, "error": "Provider intake did not return an artifact reference."}
+        intake_path = _command_output_in_run(runs_root / run_id, steps[-1])
+        if intake_path is None:
+            return 400, {"ok": False, "runId": run_id, "steps": steps, "error": "Provider intake artifact is missing or outside the selected run."}
+        intake = json.loads(Path(_fs_path(intake_path)).read_text(encoding="utf-8"))
+        item = intake.get("item") or {}
+        if item.get("role") == "collection_lead":
+            return 200, {
+                "ok": True, "runId": run_id, "steps": steps,
+                "status": "pending_rss_source",
+                "message": "Lead retained pending the RSS-connected source list. Publisher pages are not fetched.",
+            }
+        if item.get("role") == "evidence_candidate" and item.get("contentCompleteness") == "captured_content":
             step2 = _run_npm_script("canonicalize:source", [intake_ref])
             steps.append(step2)
             if step2["ok"]:

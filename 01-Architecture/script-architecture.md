@@ -21,10 +21,8 @@ flowchart LR
     Operation --> Reader[API or artifact reader]
     Reader[API or artifact reader] --> Intake[Provider intake]
     Intake --> Workflow
-    Intake --> RetrievalGate[Validate exact source retrieval]
-    RetrievalGate --> Firecrawl[One fixed Firecrawl scrape]
-    Firecrawl --> Receipt[Untrusted retrieval artifact]
-    Receipt --> Canonicalize[Lossless source document + stable anchors]
+    Intake --> Pending[Collection lead pending RSS source list]
+    Intake --> Canonicalize[Captured provider content + stable anchors]
     Canonicalize --> Relevance[AI question-relevance proposal]
     Relevance --> Reintake[Validate pending source candidate]
     Reintake --> Admission[Controller policy admission]
@@ -97,13 +95,11 @@ approved research question + bound provider operation
   -> validate observed envelope
   -> extract provider-neutral facts
   -> classify as evidence candidate | collection lead | context
-  -> route native captured content to canonicalization, leads to retrieval, and context to context-only handling
-  -> for one approved collection lead, retrieve one exact source URL and stop
+  -> route native captured content to canonicalization, leads to pending RSS source list, and context to context-only handling
   -> losslessly canonicalize captured content into stable content-addressed segments
   -> assess one canonical source against the approved question with a bounded AI call
   -> validate assessment schema, exact anchors, model provenance, and source/question lineage
-  -> re-intake relevant or partially relevant material as a pending proposal
-  -> route the new candidate to policy admission or compatibility review
+  -> stop at a relevance proposal; new native-content candidate conversion remains incremental work
   -> create ledger event data
   -> command persists output
 ```
@@ -112,13 +108,13 @@ Provider credentials and HTTP remain inaccessible until the research-intent gate
 
 Bounded discovery is sequential, capped by explicit query, page, call, and result limits, and preserves each raw page. It is not a general batch runner and does not automatically advance any candidate into intake.
 
-One-source retrieval validates the persisted intake result before reading `FIRECRAWL_API_KEY`. It sends one fixed, Markdown-only `/v2/scrape` request, preserves the bounded raw response, records publisher and access-provider provenance separately, and stops with `approvalStatus: "not_requested"`. Retrieved text is untrusted data.
+Publisher pages are not fetched. Collection leads remain pending until the planned RSS-connected source list is implemented. No retrieval credential or executable retrieval/re-intake command is configured.
 
-The implemented connection first creates the provider-neutral source document defined in `../02-Contracts/source-document-and-anchors.md`, then runs a bounded AI assessment against the exact approved research question. Deterministic code validates the typed assessment, exact anchors, model provenance, and complete artifact lineage before persisting a pending candidate. The AI cannot approve evidence or start `Find`; controller mode applies the approved admission policy, while human mode retains the compatibility evidence gate as an interim stand-in rather than a fifth permanent surface.
+The implemented connection creates the provider-neutral source document defined in `../02-Contracts/source-document-and-anchors.md`, then runs a bounded AI assessment against the exact approved research question. Deterministic code validates the typed assessment, exact anchors, model provenance, and artifact lineage. An assessment alone cannot create a new candidate or approve evidence. Existing candidates retain the compatibility evidence gate.
 
 Canonicalization changes addressing, not evidence content or quality. Every admitted source still passes through independent `Find`, blind `Sweep`, `Judge`, and `Write` before cross-source synthesis. Scaling uses independent source state streams, reusable adapters, checksum deduplication, and bounded scheduling rather than skipped stages.
 
-Initial native Seerist evidence candidates cannot enter evidence admission. They route through the provider-neutral canonical document and relevance assessment first. The `reintake:source` command accepts a persisted question-relevance assessment, reconstructs its positive verdict and sibling decision, verifies retrieval, canonical-document, model-request, model-response, assessment, and decision checksums, and creates only a pending candidate. The real NV assessment completed the compatibility path on 2026-09-01 and was approved as decision `nv-evidence-review-001`.
+Initial native Seerist evidence candidates cannot enter evidence admission. They route through the provider-neutral canonical document and relevance assessment first. The retired retrieved-source conversion command is not a native-content admission path. Existing historical candidates and approved snapshots remain checksum-validated and readable.
 
 The dashboard can execute these prepared requests through the local GitHub Copilot SDK using the PC's existing sign-in and an explicitly saved model from the live catalog. `app/src/commands/local-copilot.ts` owns runtime/authentication/network side effects; sessions run in empty mode with no tools or permission grants. The dashboard persists raw output and session/model provenance, then delegates to the existing deterministic recorders. This transport also serves thesis-bound question drafting, extraction, Build, Challenge, key judgements and memo writing. It cannot grant human approvals. Manual VS Code paste-back remains a compatibility transport and honestly records that its underlying model is not exposed. Future approved transports can reuse the same request and authority boundaries.
 

@@ -1,9 +1,9 @@
 ---
-name: open-app
-description: Start or reuse the redesigned CTI Bench dashboard and open it in the integrated browser. Use for /open-app or requests to open or launch this repository's app.
+name: startcti
+description: Start or reuse the redesigned CTI Bench dashboard and open it in the integrated browser. Use for /startcti or requests to open or launch this repository's app.
 ---
 
-# Open CTI Bench
+# Start CTI Bench
 
 Open the redesigned, live Python dashboard, not the legacy workbench, the
 TypeScript command help, or the static interface concepts.

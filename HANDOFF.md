@@ -1,5 +1,18 @@
 # CTI Engineering Handoff
 
+## Current acquisition boundary
+
+Publisher-page retrieval and automatic retrieved-source candidate conversion
+have been retired. Collection leads now route to `pending_rss_source` and wait
+for the planned RSS-connected source list; RSS acquisition is not implemented.
+The old retrieval and re-intake npm commands and credential configuration have
+been removed. Native captured Seerist content can still be canonicalized and
+assessed for question relevance. Existing snapshots and stored artifacts remain
+readable without granting new evidence authority.
+
+The dated retrieval milestones below are historical records, not launch or
+implementation instructions. See `03-Workflow/first-slice.md` for current scope.
+
 Date: 2026-09-03
 Status: Bounded key-judgement selection and writer v2 implemented; reviewed NV Build awaits a fresh response, Challenge, and performed adjudication
 Workspace root: `CTI/`

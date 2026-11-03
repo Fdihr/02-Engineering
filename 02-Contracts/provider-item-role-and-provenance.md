@@ -69,7 +69,7 @@ An evidence candidate requires a provider item ID. Classification uses endpoint,
 | Role | Destination | Approval status |
 | --- | --- | --- |
 | Native `evidence_candidate` | `source_canonicalization` | `not_applicable` |
-| `collection_lead` | `source_retrieval` | `not_applicable` |
+| `collection_lead` | `pending_rss_source` | `not_applicable` |
 | `context` | `context_only` | `not_applicable` |
 
 No initial intake route can enter evidence admission. Native captured material must first become a canonical source document and receive a validated question-relevance assessment. Positive-assessment candidate conversion remains a separate explicit transition; only that future converted candidate may reach the human gate.

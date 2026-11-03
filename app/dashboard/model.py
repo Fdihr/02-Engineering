@@ -46,7 +46,7 @@ RULES: dict[str, Any] = {
         ("human intent gate", re.compile(r"memo-scope|research-question|requirement|^proposals/", re.IGNORECASE)),
         ("bounded seerist collection", re.compile(r"discover|provider-operation|collection-request|raw-pages|raw-provider|raw-response", re.IGNORECASE)),
         ("classify provider item", re.compile(r"provider-intake|intake-result|intake-summary|normalized-sources|observed-structure", re.IGNORECASE)),
-        ("resolve + canonicalize source", re.compile(r"source-retrieval|raw-firecrawl|source-document", re.IGNORECASE)),
+        ("canonicalize captured source", re.compile(r"source-retrieval|source-document", re.IGNORECASE)),
         ("ai question-relevance", re.compile(r"question-relevance", re.IGNORECASE)),
         ("policy admission", re.compile(r"source-reintake|evidence-decision|approved-evidence-snapshot", re.IGNORECASE)),
     ),

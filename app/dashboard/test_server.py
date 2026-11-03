@@ -143,7 +143,7 @@ class ServerTests(unittest.TestCase):
             }) + "\n", encoding="utf-8")
             self.assertEqual(_handle_analyst_action(runs_root, run_dir, base)[0], 409)
 
-    def test_record_relevance_anchors_answer_then_records_and_creates_candidate(self):
+    def test_record_relevance_anchors_answer_without_creating_a_candidate(self):
         runs_root = self.run_dir / "runs-root"
         run_id = "run-r"
         rel = "sources/source-retrieval-1/doc-1/question-relevance/req-1/question-relevance-request.json"
@@ -163,7 +163,6 @@ class ServerTests(unittest.TestCase):
         outputs = [
             {"ok": True, "command": "npm run record:question-relevance", "exitCode": 0, "stderr": "",
              "stdout": "Verdict: partially-relevant\nOutput: runs/run-r/assessment.json"},
-            {"ok": True, "command": "npm run reintake:source", "exitCode": 0, "stderr": "", "stdout": "Candidate: c"},
         ]
         run_dir = runs_root / run_id
         with patch("dashboard.server._run_npm_script", side_effect=outputs) as runner:
@@ -172,7 +171,8 @@ class ServerTests(unittest.TestCase):
             runner.assert_not_called()
             status, result = _handle_analyst_action(runs_root, run_dir, base)
         self.assertEqual(status, 200, result)
-        self.assertEqual([call.args[0] for call in runner.call_args_list], ["record:question-relevance", "reintake:source"])
+        self.assertEqual([call.args[0] for call in runner.call_args_list], ["record:question-relevance"])
+        self.assertFalse((runs_root / run_id / "source-reintakes").exists())
         written = list(request_file.parent.glob("copilot-response-*.json"))
         self.assertEqual(len(written), 1)
         anchor = json.loads(written[0].read_text(encoding="utf-8"))["proposal"]["support"][0]["anchor"]
@@ -180,6 +180,56 @@ class ServerTests(unittest.TestCase):
 
         (request_file.parent / "assessments" / "a1").mkdir(parents=True)
         self.assertEqual(_handle_analyst_action(runs_root, run_dir, base)[0], 409)
+
+    def test_collection_lead_stays_pending_without_fetching_publisher_or_canonicalizing(self):
+        run_id = "run-pending"
+        runs_root = self.run_dir / "runs"
+        run_dir = runs_root / run_id
+        intake_ref = f"runs/{run_id}/provider-intakes/op-1/lead-1/intake-result.json"
+        intake_path = self.run_dir / intake_ref
+        intake_path.parent.mkdir(parents=True)
+        intake_path.write_text(json.dumps({
+            "item": {"role": "collection_lead", "contentCompleteness": "summary_only"},
+        }), encoding="utf-8")
+        payload = {
+            "action": "intake-candidate", "runId": run_id, "rawArtifactRef": "raw.json",
+            "providerItemId": "lead-1", "questionId": "rq-1",
+            "sourceUrl": "https://publisher.example/article",
+        }
+        with patch("dashboard.server._ensure_provider_operation_manifest", return_value=("manifest.json", "op-1")), \
+                patch("dashboard.server._run_npm_script") as runner:
+            status, result = _handle_analyst_action(runs_root, run_dir, payload)
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result["status"], "pending_rss_source")
+        self.assertIn("Publisher pages are not fetched", result["message"])
+        runner.assert_not_called()
+
+    def test_captured_native_content_still_canonicalizes_without_publisher_retrieval(self):
+        run_id = "run-native"
+        runs_root = self.run_dir / "runs"
+        run_dir = runs_root / run_id
+        intake_ref = f"runs/{run_id}/provider-intakes/op-1/native-1/intake-result.json"
+        intake_path = self.run_dir / intake_ref
+        intake_path.parent.mkdir(parents=True)
+        intake_path.write_text(json.dumps({
+            "item": {"role": "evidence_candidate", "contentCompleteness": "captured_content"},
+        }), encoding="utf-8")
+        payload = {
+            "action": "intake-candidate", "runId": run_id, "rawArtifactRef": "raw.json",
+            "providerItemId": "native-1", "questionId": "rq-1",
+            "sourceUrl": "https://publisher.example/article",
+        }
+        outputs = [
+            {"ok": True, "stdout": f"Output: runs/{run_id}/sources/doc/source-document.json", "stderr": ""},
+            {"ok": True, "stdout": "Request prepared", "stderr": ""},
+        ]
+        with patch("dashboard.server._ensure_provider_operation_manifest", return_value=("manifest.json", "op-1")), \
+                patch("dashboard.server._run_npm_script", side_effect=outputs) as runner:
+            status, result = _handle_analyst_action(runs_root, run_dir, payload)
+        self.assertEqual(status, 200, result)
+        self.assertEqual([call.args[0] for call in runner.call_args_list], [
+            "canonicalize:source", "prepare:question-relevance",
+        ])
 
     def test_assurance_review_shapes_response_and_chains_assemble_and_measure(self):
         runs_root = self.run_dir / "runs-root"

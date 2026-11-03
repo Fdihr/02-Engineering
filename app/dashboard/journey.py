@@ -109,6 +109,9 @@ def _settle(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _summary(steps: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
+    pending = next((s for s in steps if s["state"] == "pending"), None)
+    if pending:
+        return "pending", pending
     for state in ("you", "ai"):
         found = next((s for s in steps if s["state"] == state), None)
         if found:
@@ -510,6 +513,8 @@ def _source_rows(
         groups[retrieval["leadId"] or retrieval_id].append(retrieval_id)
     keys = list(groups)
     keys += [lead_id for lead_id in intakes if lead_id not in groups]
+    orphan_lead_ids = {lead_of_candidate[candidate["candidateId"]] for candidate in orphan_candidates}
+    keys += [lead_id for lead_id in leads if lead_id not in keys and lead_id not in orphan_lead_ids]
     rows = []
     for key in keys:
         retrieval_ids = sorted(groups.get(key, []), key=rank, reverse=True)
@@ -522,7 +527,7 @@ def _source_rows(
         lead_id = lead_of_candidate.get(candidate["candidateId"], "")
         rows.append(_row(candidate["candidateId"], leads.get(lead_id), None, 0, "", None, candidate,
                          snapshot_by_candidate, review_by_snapshot, note_by_snapshot, ai_queue, full, in_build, claims_per_note))
-    order = {"action": 0, "failed": 1, "ready": 2, "progress": 3, "provisional": 4, "done": 5, "closed": 6}
+    order = {"action": 0, "failed": 1, "ready": 2, "progress": 3, "pending": 4, "provisional": 5, "done": 6, "closed": 7}
     rows.sort(key=lambda r: (order.get(r["state"], 9), -(r["lead"] or {}).get("score", 0), r["title"]))
     return rows
 
@@ -553,17 +558,16 @@ def _row(
     if intake_rel:
         artifacts.append({"label": "Lead classification", "relPath": intake_rel})
 
-    pull = {"kind": "pull", "lead": lead} if lead else None
     if retrieval:
         artifacts.append({"label": "Retrieval result", "relPath": retrieval["relPath"]})
         if retrieval["outcome"] == "resolved":
             steps.append(_step("retrieve", "Retrieved", "done", retrieval["publisher"] or "Article retrieved"))
         else:
-            steps.append(_step("retrieve", "Retrieved", "failed", _humanise(retrieval["reason"] or retrieval["outcome"]) or "Not retrieved", pull))
+            steps.append(_step("retrieve", "Retrieved", "failed", _humanise(retrieval["reason"] or retrieval["outcome"]) or "Not retrieved"))
     elif candidate:
         steps.append(_step("retrieve", "Retrieved", "done", candidate["publisher"] or "Retrieved"))
     else:
-        steps.append(_step("retrieve", "Retrieved", "failed", "The article was not retrieved", pull))
+        steps.append(_step("retrieve", "RSS source", "pending", "Waiting for the RSS-connected source list"))
 
     if relevance and relevance["status"] == "assessed":
         positive = relevance["verdict"] in ("relevant", "partially-relevant")
@@ -640,6 +644,7 @@ def _row(
         "url": (retrieval or {}).get("url") or (candidate or {}).get("url") or (lead or {}).get("sourceUrl", ""),
         "lead": lead,
         "duplicates": duplicates,
+        "retrieved": bool(retrieval and retrieval["outcome"] == "resolved" or candidate),
         "candidate": candidate,
         "relevance": relevance,
         "review": review,
@@ -670,12 +675,13 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> d
     requirement_text = {r["id"]: r["text"] for r in panel1.get("requirements", []) if r.get("status") == "approved"}
     memo = _memo_view(run_id, full, rounds, notes, requirement_text)
 
-    pulled_ids = {row["lead"]["providerItemId"] for row in rows if row["lead"]}
+    pending_by_lead = {row["lead"]["providerItemId"]: row["state"] == "pending" for row in rows if row["lead"]}
     lead_list = sorted(leads.values(), key=lambda l: l["providerTimestamp"], reverse=True)
     lead_list.sort(key=lambda l: (l["tier"], -l["score"]))
     row_by_lead = {row["lead"]["providerItemId"]: row["id"] for row in rows if row["lead"]}
     for lead in lead_list:
         lead["rowId"] = row_by_lead.get(lead["providerItemId"], "")
+        lead["pendingRss"] = pending_by_lead.get(lead["providerItemId"], False)
 
     scope = panel1.get("scope")
     approved_question = next((q for q in panel1.get("questions", []) if q.get("status") == "approved"), None)
@@ -704,8 +710,6 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> d
         queue.append(_queue_item("frame", "you", "Information requirements are missing", "Extraction needs approved requirements. Record them with npm run approve:requirements, or start a new analysis.", {"tab": "brief"}, weight=1))
     if framed and not discoveries:
         queue.append(_queue_item("collect", "you", "Collect Seerist leads", "Run the first bounded Seerist search for the approved question.", {"tab": "brief", "focus": "collect"}))
-    elif framed and leads and not rows:
-        queue.append(_queue_item("evidence", "you", "Choose leads to pull", f"{len(leads)} ranked leads are ready. Pull the most promising ones to retrieve the full articles.", {"tab": "sources", "focus": "leads"}))
     elif discoveries and not leads:
         queue.append(_queue_item("collect", "you", "Searches returned no leads", "Broaden the Seerist queries or lower the minimum score.", {"tab": "brief", "focus": "collect"}))
     titles = {
@@ -752,13 +756,9 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> d
         silent = [g["irId"] for g in memo["gaps"] if g["disposition"] == "silent"]
         if silent:
             suggestions.append({"title": f"{len(silent)} requirement(s) have no evidence", "detail": "Collect for " + ", ".join(silent) + " with narrower Seerist queries.", "target": {"tab": "brief", "focus": "collect"}})
-    unpulled = len(leads) - len(pulled_ids)
-    if framed and unpulled and rows:
-        suggestions.append({"title": "Strengthen the evidence base", "detail": f"{unpulled} ranked leads have not been pulled yet.", "target": {"tab": "sources", "focus": "leads"}})
-
     funnel = [
         {"key": "leads", "label": "Leads", "value": len(leads)},
-        {"key": "pulled", "label": "Pulled", "value": len(rows)},
+        {"key": "pending_rss", "label": "Waiting for RSS", "value": sum(1 for lead in lead_list if lead["pendingRss"])},
         {"key": "relevant", "label": "Relevant", "value": sum(1 for r in rows if next(s for s in r["steps"] if s["key"] == "relevance")["state"] == "done")},
         {"key": "admitted", "label": "Admitted", "value": sum(1 for r in rows if next(s for s in r["steps"] if s["key"] == "admit")["state"] == "done")},
         {"key": "reviewed", "label": "Reviewed", "value": sum(1 for r in rows if next(s for s in r["steps"] if s["key"] == "review")["state"] in ("done", "provisional"))},
@@ -786,7 +786,8 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> d
             state, summary = ("todo", "") if not framed else ("done", f"{len(leads)} leads from {len(discoveries)} search plan(s)") if leads else ("attention", "Searches returned no leads") if discoveries else ("active", "No search run yet")
         elif key == "evidence":
             state = "active" if busy else "done" if admitted else "todo"
-            summary = f"{admitted} admitted of {len(rows)} pulled" if rows else ("Choose leads to pull" if leads else "")
+            captured = sum(1 for row in rows if row["retrieved"])
+            summary = f"{admitted} admitted of {captured} captured sources" if captured else ("Waiting for RSS-connected source list" if leads else "")
         elif key == "assure":
             state = "active" if busy else "done" if reviewed else "todo"
             summary = f"{reviewed} reviewed" + (f" · {readiness['provisionalNotes']} provisional" if readiness["provisionalNotes"] else "") if reviewed or busy else ""
@@ -824,7 +825,7 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> d
             "framed": framed,
         },
         "leads": lead_list,
-        "pulledLeadCount": len(pulled_ids),
+        "pendingRssLeadCount": sum(1 for lead in lead_list if lead["pendingRss"]),
         "sources": rows,
         "readiness": readiness,
         "rounds": rounds,

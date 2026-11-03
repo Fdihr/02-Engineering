@@ -1,6 +1,9 @@
 # Source Content Retrieval
 
-Status: Active contract for one-hop retrieval of one exact source URL from an approved Seerist collection lead.
+Status: Retired. Historical artifact specification only; the retrieval command,
+HTTP client, and credential configuration have been removed. Collection leads
+remain pending for the planned RSS-connected source list. Nothing below is an
+instruction to enable publisher-page retrieval.
 
 ## Purpose
 
