@@ -1,6 +1,9 @@
 # Source Content Retrieval
 
-Status: Historical only. The Firecrawl retrieval command and transport have been removed; collection leads currently route to `pending_rss`.
+Status: Retired. Historical artifact specification only; the retrieval command,
+HTTP client, and credential configuration have been removed. Collection leads
+remain pending for the planned RSS-connected source list. Nothing below is an
+instruction to enable publisher-page retrieval.
 
 ## Purpose
 

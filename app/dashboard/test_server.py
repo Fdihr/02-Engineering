@@ -1,4 +1,5 @@
 import json
+import subprocess
 import os
 import tempfile
 import threading
@@ -42,6 +43,7 @@ class ServerTests(unittest.TestCase):
         self.assertIn("Dark theme", page)
         self.assertIn("/design_system.css", page)
         self.assertIn("/run_view.js", page)
+        self.assertIn('id="integration-settings"', page)
         for script in ("/run_view.js", "/run_panes.js"):
             with urlopen(self.base + script) as response:
                 self.assertIn("text/javascript", response.headers.get("Content-Type"))
@@ -62,6 +64,63 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(view["runId"], "test-run")
         self.assertEqual(view["sources"][0]["snapshotId"], "snapshot-test-001")
         self.assertEqual(view["counts"]["events"], 1)
+
+    def test_frontend_initialization_keeps_approval_gates_and_copilot_settings(self):
+        script = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const elements = new Map();
+const document = {
+  getElementById(id) {
+    if (!elements.has(id)) elements.set(id, {
+      id, value: '', checked: false, disabled: true, hidden: false,
+      listeners: {}, classList: { add() {}, toggle() {} },
+      setAttribute() {}, focus() {},
+      addEventListener(name, callback) { this.listeners[name] = callback; }
+    });
+    return elements.get(id);
+  },
+  querySelectorAll() { return []; }
+};
+let analyst = 'test-analyst';
+const C = {
+  state: { drafts: {}, busy: false, route: 'settings' }, panes: {},
+  analyst: () => analyst,
+  el: () => ({ setAttribute() {} }),
+  replace: (host) => assert.equal(host.id, 'integration-settings')
+};
+vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), {
+  window: { CTI: C }, document,
+  fetch: () => new Promise(() => {})
+});
+C.initBrief();
+const confirm = document.getElementById('approve-confirm');
+const approve = document.getElementById('btn-approve-only');
+const collect = document.getElementById('btn-approve-collect');
+confirm.checked = true;
+confirm.listeners.change();
+assert.equal(approve.disabled, false);
+assert.equal(collect.disabled, false);
+C.state.busy = true;
+confirm.listeners.change();
+assert.equal(approve.disabled, true);
+C.state.busy = false;
+analyst = '';
+confirm.listeners.change();
+assert.equal(collect.disabled, true);
+analyst = 'test-analyst';
+document.getElementById('btn-edit-intent').listeners.click();
+assert.equal(confirm.checked, false);
+assert.equal(approve.disabled, true);
+document.createDocumentFragment = () => ({ appendChild() {} });
+C.panes.settings();
+"""
+        result = subprocess.run(
+            ["node", "-e", script, str(Path(__file__).parent / "run_panes.js")],
+            capture_output=True, text=True, timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_artifacts_are_confined_and_server_rejects_writes(self):
         with urlopen(self.base + "/api/artifact?" + urlencode({"path": "note.json"})) as response:
@@ -304,7 +363,7 @@ class ServerTests(unittest.TestCase):
             }) + "\n", encoding="utf-8")
             self.assertEqual(_handle_analyst_action(runs_root, run_dir, base)[0], 409)
 
-    def test_record_relevance_anchors_answer_then_records_without_reintake(self):
+    def test_record_relevance_anchors_answer_without_creating_a_candidate(self):
         runs_root = self.run_dir / "runs-root"
         run_id = "run-r"
         rel = "sources/source-retrieval-1/doc-1/question-relevance/req-1/question-relevance-request.json"
@@ -330,12 +389,63 @@ class ServerTests(unittest.TestCase):
             status, result = _handle_analyst_action(runs_root, run_dir, base)
         self.assertEqual(status, 200, result)
         self.assertEqual([call.args[0] for call in runner.call_args_list], ["record:question-relevance"])
+        self.assertFalse((runs_root / run_id / "source-reintakes").exists())
         written = list(request_file.parent.glob("copilot-response-*.json"))
         self.assertEqual(len(written), 1)
         anchor = json.loads(written[0].read_text(encoding="utf-8"))["proposal"]["support"][0]["anchor"]
         self.assertEqual((anchor["quoteStartUtf8Byte"], anchor["quoteEndUtf8Byte"]), (0, 10))
         (request_file.parent / "assessments" / "a1").mkdir(parents=True)
         self.assertEqual(_handle_analyst_action(runs_root, run_dir, base)[0], 409)
+
+    def test_collection_lead_stays_pending_without_fetching_publisher_or_canonicalizing(self):
+        run_id = "run-pending"
+        runs_root = self.run_dir / "runs"
+        run_dir = runs_root / run_id
+        intake_ref = f"runs/{run_id}/provider-intakes/op-1/lead-1/intake-result.json"
+        intake_path = self.run_dir / intake_ref
+        intake_path.parent.mkdir(parents=True)
+        intake_path.write_text(json.dumps({
+            "item": {"role": "collection_lead", "contentCompleteness": "summary_only"},
+        }), encoding="utf-8")
+        payload = {
+            "action": "intake-candidate", "runId": run_id, "rawArtifactRef": "raw.json",
+            "providerItemId": "lead-1", "questionId": "rq-1",
+            "sourceUrl": "https://publisher.example/article",
+        }
+        with patch("dashboard.server._ensure_provider_operation_manifest", return_value=("manifest.json", "op-1")), \
+                patch("dashboard.server._run_npm_script") as runner:
+            status, result = _handle_analyst_action(runs_root, run_dir, payload)
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result["status"], "pending_rss")
+        self.assertIn("Publisher pages are not fetched", result["message"])
+        runner.assert_not_called()
+
+    def test_captured_native_content_still_canonicalizes_without_publisher_retrieval(self):
+        run_id = "run-native"
+        runs_root = self.run_dir / "runs"
+        run_dir = runs_root / run_id
+        intake_ref = f"runs/{run_id}/provider-intakes/op-1/native-1/intake-result.json"
+        intake_path = self.run_dir / intake_ref
+        intake_path.parent.mkdir(parents=True)
+        intake_path.write_text(json.dumps({
+            "item": {"role": "evidence_candidate", "contentCompleteness": "captured_content"},
+        }), encoding="utf-8")
+        payload = {
+            "action": "intake-candidate", "runId": run_id, "rawArtifactRef": "raw.json",
+            "providerItemId": "native-1", "questionId": "rq-1",
+            "sourceUrl": "https://publisher.example/article",
+        }
+        outputs = [
+            {"ok": True, "stdout": f"Output: runs/{run_id}/sources/doc/source-document.json", "stderr": ""},
+            {"ok": True, "stdout": "Request prepared", "stderr": ""},
+        ]
+        with patch("dashboard.server._ensure_provider_operation_manifest", return_value=("manifest.json", "op-1")), \
+                patch("dashboard.server._run_npm_script", side_effect=outputs) as runner:
+            status, result = _handle_analyst_action(runs_root, run_dir, payload)
+        self.assertEqual(status, 200, result)
+        self.assertEqual([call.args[0] for call in runner.call_args_list], [
+            "canonicalize:source", "prepare:question-relevance",
+        ])
 
     def test_collection_lead_stays_pending_without_publisher_fetch(self):
         runs_root = self.run_dir / "runs-root"

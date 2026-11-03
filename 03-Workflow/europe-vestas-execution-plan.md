@@ -1,7 +1,7 @@
 # Execution Plan: Europe 2-Month Cyber & Geopolitical Analysis with Vestas Relevance
 
 Date: 2026-10-26
-Status: Planned — ready to execute Stage 1
+Status: Planned; collection leads are blocked pending the RSS-connected source list, and new native-content candidate conversion remains incremental work.
 Reference Board: `01-Architecture/memo-workflow-board.svg`
 Target Workflow: `03-Workflow/memo-workflow.md`
 Implemented Baseline: `03-Workflow/first-slice.md`
@@ -10,7 +10,7 @@ Implemented Baseline: `03-Workflow/first-slice.md`
 
 Produce an end-to-end, evidence-grounded intelligence memo analyzing the last two months of cyber and geopolitical activity in Europe and what it means for Vestas, using:
 
-1. Live Seerist API discovery and collection (`/v1/wod`) plus exact-URL source retrieval (Firecrawl v2).
+1. Live Seerist API discovery and collection (`/v1/wod`); collection leads wait for the planned RSS-connected source list without fetching publisher pages.
 2. Deterministic canonicalization, question-relevance validation, and evidence admission (Panel 1).
 3. Stage-owned source assurance producing reviewed `source-note.json` artifacts with anchored observations and IR dispositions (Panel 2).
 4. Cross-source synthesis (`Build -> Challenge -> Adjudicate`) sealing external facts first (Panel 3).
@@ -21,7 +21,7 @@ Produce an end-to-end, evidence-grounded intelligence memo analyzing the last tw
 
 ## Current Baseline vs. `memo-workflow-board.svg`
 
-- **Panel 1 (Intent, collection, and admission):** Complete and proven live (`approve:scope`, `approve:question`, `approve:requirements`, `collect:seerist`, `discover:seerist`, `intake:seerist`, `retrieve:source`, `canonicalize:source`, `prepare:question-relevance`, `record:question-relevance`, `reintake:source`, `review:evidence`, and controller admission).
+- **Panel 1 (Intent, collection, and admission):** Intent, collection, native-content canonicalization and relevance are implemented. Publisher-page retrieval and retrieved-source candidate conversion are retired. Existing candidates retain compatibility admission; new native-content candidate conversion is not yet implemented.
 - **Panel 2 (Stage-owned source assurance):** Complete through `Extract`, exact-span quote locator, rows-only review, source note assembly, and metrics (`prepare:assurance-extract`, `record:assurance-extract`, `prepare:assurance-review`, `record:assurance-review`, `assemble:assurance`, `measure:assurance`).
 - **Panel 3 (Synthesis, relevance, quality, and publication):**
   - Implemented: `Build`, `Challenge`, `Adjudicate`, bounded `Key Judgements` (`KJ1-KJ8`), `Memo Writer v2`, deterministic verification, and publication calibration.
@@ -59,18 +59,16 @@ Produce an end-to-end, evidence-grounded intelligence memo analyzing the last tw
   1. Execute bounded Seerist `/v1/wod` discovery and collection across the 2-month European window.
   2. Classify returned Seerist items (`intake:seerist`):
      - Native Seerist analyst reports with full bodies route directly to `canonicalize:source`.
-     - Collection leads with publisher URLs route through `retrieve:source` (Firecrawl v2) and then `canonicalize:source`.
-  3. Run AI question-relevance (`prepare:question-relevance` -> `record:question-relevance`) and admit validated sources into `approved-evidence-snapshot.json` artifacts.
+     - Collection leads with publisher URLs route to `pending_rss`; publisher pages are not fetched.
+  3. Run AI question-relevance (`prepare:question-relevance` -> `record:question-relevance`) for captured content. This cannot itself create a new evidence candidate; native-content candidate conversion remains incremental work. Existing validated candidates retain explicit admission.
 - **Commands:**
   ```powershell
   npm run discover:seerist -- <discovery-plan.json> <approved-research-question.json>
   npm run collect:seerist -- <provider-operation.json> <approved-research-question.json>
   npm run intake:seerist -- <raw-provider-artifact.json> <provider-item-id> <approved-research-question.json>
-  npm run retrieve:source -- <intake-result.json> <exact-source-url>
   npm run canonicalize:source -- <source-retrieval-result.json|seerist-intake-result.json>
   npm run prepare:question-relevance -- <source-document.json>
   npm run record:question-relevance -- <question-relevance-request.json> <copilot-response.json>
-  npm run reintake:source -- <source-retrieval-result.json> <question-relevance-assessment.json> [candidate-id]
   npm run review:evidence -- <intake-result.json> approve <reviewer-id> <reason> [decision-id]
   ```
 - **Done when:** Multiple independent European sources are canonicalized and admitted as `approved-evidence-snapshot.json` artifacts.

@@ -1,8 +1,10 @@
 # Retrieved Source Relevance and Re-intake
 
-Status: Historical only. This Firecrawl-dependent assessment/re-intake path is removed; no current source retrieval or re-intake command is available.
+Status: Historical candidate-conversion contract. The re-intake command and
+automatic candidate conversion have been removed. Question-relevance preparation
+and recording remain implemented, but cannot create or approve evidence.
 Validated: 2026-09-01
-Implementation: `../app/src/modules/relevance/question-relevance.ts`, `../app/src/modules/intake/retrieved-source-intake.ts`, `../app/src/commands/prepare-question-relevance.ts`, `../app/src/commands/record-question-relevance.ts`, `../app/src/commands/reintake-source.ts`
+Retained implementation: `../app/src/modules/relevance/question-relevance.ts`, `../app/src/commands/prepare-question-relevance.ts`, `../app/src/commands/record-question-relevance.ts`
 
 ## Purpose
 
@@ -12,7 +14,7 @@ Retrieval success does not establish relevance, credibility, factuality, or appr
 
 This is question relevance, not Vestas relevance. The AI may propose whether and how the source addresses the approved question. It cannot admit evidence, expand scope, or infer organizational impact.
 
-## Implemented commands
+## Historical commands (re-intake retired)
 
 Run from `app/`:
 

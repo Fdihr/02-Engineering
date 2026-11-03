@@ -171,6 +171,13 @@ class ModelTests(unittest.TestCase):
         self.assertEqual((leads[0]["providerItemId"], leads[0]["tier"], leads[0]["shortlisted"]), ("cr-1", 1, False))
         self.assertEqual(len(view["panel1"]["candidates"]), 61)
         self.assertEqual(view["panel1"]["candidates"][0]["tier"], 1)
+        journey = view["journey"]
+        self.assertEqual(journey["pendingRssLeadCount"], 61)
+        self.assertEqual(len(journey["sources"]), 61)
+        self.assertTrue(all(lead["pendingRss"] for lead in leads))
+        self.assertTrue(all(row["state"] == "pending" and row["action"] is None for row in journey["sources"]))
+        self.assertEqual(next(f for f in journey["funnel"] if f["key"] == "pending_rss")["value"], 61)
+        self.assertFalse(any("pull" in item["title"].lower() for item in journey["queue"]))
 
     def test_run_view_groups_synthesis_exceptions_and_waiting(self):
         files = [
@@ -226,6 +233,7 @@ class ModelTests(unittest.TestCase):
         self.assertEqual([s["state"] for s in row["steps"]], ["done", "done", "done", "you", "todo", "todo", "todo"])
         self.assertEqual(journey["queue"][0]["title"], "Decide whether to admit as evidence")
         self.assertEqual(sum(1 for q in journey["queue"] if q["phase"] == "evidence"), 1)
+        self.assertEqual([lead["pendingRss"] for lead in journey["leads"]], [False, True])
         self.assertEqual((journey["sources"][1]["id"], journey["sources"][1]["state"]), ("lead-2", "pending"))
         self.assertEqual(journey["funnel"][1], {"key": "pending_rss", "label": "Waiting for RSS", "value": 1})
         self.assertEqual(journey["pendingRssLeadCount"], 1)

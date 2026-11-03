@@ -75,7 +75,7 @@ test("routes a captured analyst report to source canonicalization", () => {
   assert.equal(result.value.ledgerEntry.occurredAt, occurredAt);
 });
 
-test("keeps a source-linked news summary pending for RSS", () => {
+test("keeps a source-linked news summary pending the RSS source list", () => {
   const result = processSource(
     runId,
     occurredAt,

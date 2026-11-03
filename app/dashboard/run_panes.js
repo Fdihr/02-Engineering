@@ -189,7 +189,17 @@
     };
   }
   function lines(text) { return String(text || '').split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean); }
-  function invalidateReview() { state.drafts['intent:confirm'] = ''; }
+  function invalidateReview() {
+    state.drafts['intent:confirm'] = '';
+    $('approval-review').hidden = true;
+    $('approve-confirm').checked = false;
+    syncApproveButtons();
+  }
+  function syncApproveButtons() {
+    var enabled = $('approve-confirm').checked && !state.busy && Boolean(C.analyst());
+    $('btn-approve-collect').disabled = !enabled;
+    $('btn-approve-only').disabled = !enabled;
+  }
   function intentProblems() {
     var p = intentPayload(true);
     var irs = lines(p.requirements);
@@ -2291,7 +2301,7 @@
     return sec;
   }
   function renderSettings() {
-    var host = document.getElementById('pane-settings');
+    var host = document.getElementById('integration-settings');
     var frag = document.createDocumentFragment();
     var status = el('p', 'meta', settingsState.loading && !settingsState.data ? 'Loading settings…' : settingsState.error || settingsState.note);
     status.setAttribute('role', 'status');

@@ -192,7 +192,7 @@
   var ACTION_TITLES = {
     'approve-intent': 'Approving the analysis',
     'discover-seerist': 'Collecting Seerist leads',
-    'intake-candidate': 'Pulling the article',
+    'intake-candidate': 'Classifying the provider item',
     'review-evidence': 'Recording your admission decision',
     'record-relevance': 'Recording the AI relevance check',
     'record-assurance-review': 'Recording your source review',

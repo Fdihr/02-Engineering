@@ -30,7 +30,7 @@ type CapturedSourceContent = {
 };
 ```
 
-The historical retrieval adapter reads only a canonical resolved `SourceRetrievalResult`, never the raw Firecrawl schema; it remains for compatibility with existing run artifacts, not new retrieval. The Seerist adapter reconstructs one persisted native intake from its checksum-bound `/v1/wod` response, route, and ledger, then extracts only an explicit `sanitizedBody` or `body`. Adapters do not assess relevance, quality, credibility, or truth.
+The historical retrieval adapter reads only a stored canonical resolved `SourceRetrievalResult`; it makes no provider requests. The Seerist adapter reconstructs one persisted native intake from its checksum-bound `/v1/wod` response, route, and ledger, then extracts only an explicit `sanitizedBody` or `body`. Adapters do not assess relevance, quality, credibility, or truth.
 
 ## Command
 
@@ -139,7 +139,9 @@ Deterministic code owns extraction from canonical artifacts, normalization, segm
 
 ## Reuse boundary
 
-Downstream modules depend only on `SourceDocument`, `SourceAnchor`, approved-question lineage, and their own typed input. They must not import Firecrawl response types, Seerist payload shapes, or source-specific parsers. New publisher-source collection requires an approved adapter; collection leads currently remain pending for RSS.
+Downstream modules depend only on `SourceDocument`, `SourceAnchor`, approved-question lineage, and their own typed input. They must not import retrieval-provider response types, Seerist payload shapes, or source-specific parsers.
+
+New publisher-source collection requires an approved adapter; collection leads currently remain pending for RSS.
 
 A new source mechanism requires only:
 

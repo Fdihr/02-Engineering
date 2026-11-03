@@ -163,7 +163,7 @@ def _run_npm_script(script_name: str, args: list[str], timeout_sec: int = 90, *,
         env = {**os.environ, **{key: str(runs_root) for key in (
             "RESEARCH_RUN_DIR", "SOURCE_ASSURANCE_RUN_DIR", "QUESTION_RELEVANCE_RUN_DIR",
             "SOURCE_REINTAKE_RUN_DIR", "SEERIST_RUN_DIR", "SOURCE_DOCUMENT_RUN_DIR",
-            "SOURCE_RETRIEVAL_RUN_DIR", "EVIDENCE_RUN_DIR",
+            "EVIDENCE_RUN_DIR",
         )}}
     npm_cmd = "npm.cmd" if os.name == "nt" else "npm"
     cmd = [npm_cmd, "run", script_name, "--", *args]
@@ -1101,21 +1101,28 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
             match = re.search(r"Output:\s*(\S+)", step1["stdout"])
             intake_ref = match.group(1).strip() if match else ""
 
-        if intake_ref:
-            intake_path = Path(_fs_path(runs_root / run_id / "provider-intakes" / op_id / item_id / "intake-result.json"))
-            try:
-                intake = json.loads(intake_path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                return 400, {"ok": False, "runId": run_id, "steps": steps, "error": "Intake result is not available."}
-            decision = intake.get("decision") if isinstance(intake, dict) else None
-            if isinstance(decision, dict) and decision.get("destination") == "pending_rss":
-                return 200, {
-                    "ok": True,
-                    "runId": run_id,
-                    "steps": steps,
-                    "pendingRss": True,
-                    "message": "Lead retained pending the RSS-connected source list.",
-                }
+        if not intake_ref:
+            return 400, {"ok": False, "runId": run_id, "steps": steps, "error": "Provider intake did not return an artifact reference."}
+        intake_path = _command_output_in_run(runs_root / run_id, steps[-1])
+        if intake_path is None:
+            return 400, {"ok": False, "runId": run_id, "steps": steps, "error": "Provider intake artifact is missing or outside the selected run."}
+        try:
+            intake = json.loads(Path(_fs_path(intake_path)).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return 400, {"ok": False, "runId": run_id, "steps": steps, "error": "Intake result is not available."}
+        if not isinstance(intake, dict):
+            return 400, {"ok": False, "runId": run_id, "steps": steps, "error": "Intake result must be a JSON object."}
+        item = intake.get("item") or {}
+        decision = intake.get("decision") or {}
+        if not isinstance(item, dict) or not isinstance(decision, dict):
+            return 400, {"ok": False, "runId": run_id, "steps": steps, "error": "Intake item and decision must be JSON objects."}
+        if item.get("role") == "collection_lead" or decision.get("destination") == "pending_rss":
+            return 200, {
+                "ok": True, "runId": run_id, "steps": steps,
+                "status": "pending_rss", "pendingRss": True,
+                "message": "Lead retained pending the RSS-connected source list. Publisher pages are not fetched.",
+            }
+        if item.get("role") == "evidence_candidate" and item.get("contentCompleteness") == "captured_content":
             step2 = _run_npm_script("canonicalize:source", [intake_ref])
             steps.append(step2)
             if step2["ok"]:

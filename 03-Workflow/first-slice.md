@@ -1,6 +1,6 @@
 # Implemented Workflow Baseline
 
-Status: Panel 1 is complete. Panel 2 exercised provisional review and then completed a human rows-only support pass. Panel 3 now has a bounded key-judgement selection contract and writer v2 path; the reviewed Build request still needs a fresh response, Challenge, and performed adjudication before selection can run.
+Status: Publisher-page retrieval and retrieved-source candidate conversion are retired. Collection leads wait for the planned RSS-connected source list. Panel 2 exercised provisional review and then completed a human rows-only support pass. Panel 3 now has a bounded key-judgement selection contract and writer v2 path; the reviewed Build request still needs a fresh response, Challenge, and performed adjudication before selection can run.
 
 Human references below are either one of the four target surfaces (intent, publication, pushed exceptions, governance), compatibility history, or an interim stand-in named in `memo-workflow.md`. Per-source review and manual model transport are not additional permanent human surfaces.
 
@@ -14,7 +14,7 @@ the superseded implementation, not the current executable path.
 
 This implementation is the first narrow slice of a general Seerist-plus-OSINT memo tool. Cyber threat intelligence and the CIA Director test question validate the workflow; they do not constrain future memo subjects. The target includes every Seerist endpoint approved for organizational use plus bounded OSINT search, discovery, and retrieval.
 
-The current baseline does not claim that breadth yet. It proves bounded `/v1/wod` collection and discovery; collection leads are routed to `pending_rss` until the RSS-connected source list is implemented. No live OSINT retrieval command is available. New endpoints and search mechanisms must be added incrementally from observed responses through explicit role mapping, provenance-preserving adapters, and focused tests. The downstream question, evidence, source-assurance, synthesis, and memo contracts remain domain-neutral unless a selected memo profile adds stricter requirements.
+The current baseline does not claim that breadth yet. It implements bounded `/v1/wod` collection and discovery and canonicalization of captured provider content. Leads route to `pending_rss`; RSS acquisition and new native-content candidate conversion remain incremental work. New endpoints and search mechanisms must be added from observed responses through explicit role mapping, provenance-preserving adapters, and focused tests. The downstream question, evidence, source-assurance, synthesis, and memo contracts remain domain-neutral unless a selected memo profile adds stricter requirements.
 
 The canonical target architecture in `memo-workflow.md` is not a fixed implementation contract. This completed slice remains the implementation baseline until a subsequent slice is accepted.
 
@@ -88,25 +88,17 @@ The command confines the intake and raw artifact to its configured run root, has
 
 Initial command integration used synthetic artifacts in an isolated temporary directory. After that validation, human reviewer `FDIHR` approved the real retrieved-source candidate `nv-candidate-question-relevance-001` as decision `nv-evidence-review-001`.
 
-## Retired slice: one-source Firecrawl retrieval
+## Current slice: collection leads pending RSS
 
-This execution path was removed on 2026-11-02. `retrieve:source`, its HTTP transport, and `reintake:source`
-are no longer available. Seerist collection leads route to `pending_rss`; publisher URLs are retained as
-lead metadata and are not fetched. Previously collected artifacts are left untouched for historical review.
+Collection leads retain their provider metadata and approved-question lineage,
+but route to `pending_rss`. The dashboard displays "Waiting for RSS" and
+does not offer publisher-page retrieval. The planned RSS-connected source list
+is not implemented; no replacement retrieval provider is silently substituted.
 
-One approved Seerist collection lead -> validate exact listed HTTPS URL -> one fixed Firecrawl v2 scrape -> bounded raw response -> canonical resolved or unresolved receipt.
-
-Run from `app/`:
-
-```powershell
-npm run retrieve:source -- <intake-result.json> <exact-source-url>
-```
-
-The command validates intake route and approved research-question lineage before reading `FIRECRAWL_API_KEY`. It requests Markdown only, forces fresh retrieval, disables Firecrawl cache storage, requires TLS verification, performs no actions or LLM extraction, rejects cross-origin target redirects, and limits the response to 5 MiB.
-
-Firecrawl is recorded as the access provider while the publisher remains the source. Retrieved text is stored as untrusted content under the ignored run directory. `resolved` means content was captured; every result remains `approvalStatus: "not_requested"` and cannot enter evidence admission directly.
-
-The historical contract is `../02-Contracts/source-content-retrieval.md`. At the time, deterministic and strict-TypeScript validation passed. On 2026-08-31, the selected NV lead completed one live exact-URL retrieval: Firecrawl returned HTTP 200, the final URL matched the requested publisher URL, and the canonical outcome was `resolved` with reason `content_retrieved`. Approval remained `not_requested`.
+The former retrieval and candidate-conversion commands, HTTP client, and
+credential configuration have been removed. Stored historical results remain
+readable through the canonicalization and evidence compatibility readers.
+`../02-Contracts/source-content-retrieval.md` describes historical artifacts only.
 
 ## Implemented slice: canonical source document and anchors
 
@@ -118,7 +110,7 @@ Run from `app/`:
 npm run canonicalize:source -- <source-retrieval-result.json|seerist-intake-result.json>
 ```
 
-The shared pure module is provider-neutral. Firecrawl-specific and Seerist-specific structures end in narrow adapters; later relevance and assurance modules depend only on canonical `SourceDocument` and `SourceAnchor` types. The command confines input and native raw references to the run root, verifies checksums, writes one non-overwritable document, and emits controller-attributed events without source text.
+The shared pure module is provider-neutral. Historical retrieval artifacts and Seerist-specific structures end in narrow adapters; later relevance and assurance modules depend only on canonical `SourceDocument` and `SourceAnchor` types. The command confines input and native raw references to the run root, verifies checksums, writes one non-overwritable document, and emits controller-attributed events without source text. Reading a historical retrieval artifact does not make a provider request.
 
 The active boundary is `../02-Contracts/source-document-and-anchors.md`. Focused tests cover deterministic reproduction, CRLF normalization, multilingual UTF-8 offsets, long-block splitting, altered-document and anchor rejection, both source adapters, path confinement, and non-overwrite behavior. The real NV retrieval produced a validated 76-segment document with an exact source-artifact checksum match.
 
@@ -139,24 +131,20 @@ The dashboard's Settings chooser lists the locally authenticated Copilot account
 
 The real NV source completed this path as `partially-relevant` with three exact anchors and destination `evidence_candidate_proposal / pending_human_review`. It reports the visit, possible purposes, Ratcliffe-to-Bortnikov participation, and Baltic hybrid-threat implications, but does not establish that the visit occurred specifically on 27 August or provide explicit cyber implications.
 
-## Retired slice: positive-assessment retrieved-source conversion
+## Historical slice: positive-assessment candidate conversion (retired)
 
-This Firecrawl-dependent re-intake path was removed with source retrieval. Future RSS candidates require
-their own observed, mapped, tested source adapter and approved workflow boundary.
+Future RSS candidates require their own observed, mapped, tested source adapter and approved workflow boundary.
 
 One resolved retrieval result + its verified source-lead lineage + one validated positive question-relevance assessment -> one new evidence candidate routed to pending policy admission or compatibility review.
 
-Run from `app/`:
-
-```powershell
-npm run reintake:source -- <source-retrieval-result.json> <question-relevance-assessment.json> [candidate-id]
-```
+The former re-intake command and automatic conversion have been removed.
+The following describes historical candidates, not an executable current path.
 
 The command confines every referenced artifact to the run root; verifies source-intake, retrieval-request, raw-response, retrieval-result, canonical-document, assessment, decision, model-request, and model-response checksums; reconstructs the assessment and exact anchors; and writes a non-overwritable canonical intake plus a body-free receipt. `not-relevant` and `uncertain` assessments cannot become candidates. It cannot approve itself; in compatibility `human` mode, `npm run review:evidence` remains a separate explicit decision and interim stand-in, not a fifth target human surface.
 
 The evidence gate validates the exact positive-assessment shape, reopens and hashes the persisted assessment and decision, preserves assessment and retrieval lineage in an approved snapshot, and rejects artifact drift or altered relevance routing. Candidate creation events are controller-attributed; evidence decisions remain human-attributed.
 
-The historical contract is `../02-Contracts/retrieved-source-reintake.md`. At the time, focused tests covered positive-only conversion, source and model artifact lineage, pending-only routing, path confinement, non-overwrite behavior, evidence-gate tampering, and assessment preservation through approval. On 2026-09-01, the live NV assessment was converted into candidate `nv-candidate-question-relevance-001` and subsequently approved by `FDIHR` as decision `nv-evidence-review-001`.
+The historical boundary is `../02-Contracts/retrieved-source-reintake.md`. Retained compatibility tests cover evidence-gate tampering and assessment preservation through approval. On 2026-09-01, the live NV assessment was converted into candidate `nv-candidate-question-relevance-001` and subsequently approved by `FDIHR` as decision `nv-evidence-review-001`.
 
 ## Implemented slice: Panel 2 Extract under a deterministic controller
 
@@ -317,7 +305,7 @@ Do not add:
 12. The earlier `intake-smoke-analysis-003` artifact is non-admissible because it predates mandatory research-question lineage.
 13. One approved four-query, sixteen-page Seerist discovery surfaced 50 unique source URLs across 22 clusters for the CIA Director Moscow question.
 14. Supported-API candidates provided close title-level counterparts for all eight human-supplied AskAnna citations, without depending on AskAnna's unsupported retrieval API.
-15. One-source retrieval preserves Firecrawl and publisher identity separately, records explicit redirect and target-status evidence, and cannot approve or intake its own output.
+15. Collection leads remain pending for the RSS-connected source list; no publisher-page retrieval or automatic retrieved-source candidate conversion runs.
 16. Retrieved-source candidate conversion accepts only a validated positive assessment and verifies complete retrieval, canonical-document, model-request, model-response, assessment, and decision lineage.
 17. AI remains responsible only for a typed, source-grounded relevance proposal; deterministic code creates the pending route and admits only under an approved controller policy, while existing policies retain the compatibility human path.
 18. Scalability must preserve the complete source and mandatory `Find -> Sweep -> Judge -> Write`; reuse, per-source isolation, checksum deduplication, and bounded scheduling provide throughput without lowering the final intelligence standard.

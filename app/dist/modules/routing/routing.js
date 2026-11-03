@@ -26,7 +26,7 @@ export const decideRoute = (item) => {
             destination: "pending_rss",
             approvalStatus: "not_applicable",
             ruleId: "RULE-LEAD-PENDING-RSS-001",
-            reason: "Lead material is retained pending the RSS-connected source list"
+            reason: "Lead material is retained pending the RSS-connected source list; publisher pages are not fetched"
         };
     }
     return {

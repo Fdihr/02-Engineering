@@ -512,8 +512,9 @@ def _source_rows(
     for retrieval_id, retrieval in retrievals.items():
         groups[retrieval["leadId"] or retrieval_id].append(retrieval_id)
     keys = list(groups)
-    keys += [lead_id for lead_id in leads if lead_id not in keys]
     keys += [lead_id for lead_id in intakes if lead_id not in groups]
+    orphan_lead_ids = {lead_of_candidate[candidate["candidateId"]] for candidate in orphan_candidates}
+    keys += [lead_id for lead_id in leads if lead_id not in keys and lead_id not in orphan_lead_ids]
     rows = []
     for key in keys:
         retrieval_ids = sorted(groups.get(key, []), key=rank, reverse=True)
@@ -557,13 +558,12 @@ def _row(
     if intake_rel:
         artifacts.append({"label": "Lead classification", "relPath": intake_rel})
 
-    pull = {"kind": "pull", "lead": lead} if lead else None
     if retrieval:
         artifacts.append({"label": "Retrieval result", "relPath": retrieval["relPath"]})
         if retrieval["outcome"] == "resolved":
             steps.append(_step("retrieve", "Retrieved", "done", retrieval["publisher"] or "Article retrieved"))
         else:
-            steps.append(_step("retrieve", "Retrieved", "failed", _humanise(retrieval["reason"] or retrieval["outcome"]) or "Not retrieved", pull))
+            steps.append(_step("retrieve", "Retrieved", "failed", _humanise(retrieval["reason"] or retrieval["outcome"]) or "Not retrieved"))
     elif candidate:
         steps.append(_step("retrieve", "Retrieved", "done", candidate["publisher"] or "Retrieved"))
     else:
@@ -644,6 +644,7 @@ def _row(
         "url": (retrieval or {}).get("url") or (candidate or {}).get("url") or (lead or {}).get("sourceUrl", ""),
         "lead": lead,
         "duplicates": duplicates,
+        "retrieved": bool(retrieval and retrieval["outcome"] == "resolved" or candidate),
         "candidate": candidate,
         "relevance": relevance,
         "review": review,
@@ -652,7 +653,6 @@ def _row(
         "claimCount": claims_per_note.get((note or {}).get("noteId", ""), 0),
         "steps": steps,
         "state": state,
-        "retrieved": bool(retrieval or candidate),
         "current": {k: current[k] for k in ("key", "label", "state", "detail")},
         "action": current["action"] if state in ("action", "failed", "ready", "provisional") else None,
         "artifacts": artifacts,

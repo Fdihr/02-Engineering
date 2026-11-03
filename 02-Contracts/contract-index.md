@@ -14,9 +14,12 @@ Use this file as the index of active contracts. Historical retrieval contracts a
 8. [Human surfaces, policy admission, exceptions, and calibration](human-surfaces-and-calibration.md)
 9. [Bounded key-judgement selection](key-judgement-selection.md)
 
-## Historical contracts
+## Retired acquisition contracts
 
-These contracts document the removed Firecrawl-based path and exist only to explain previously persisted artifacts:
+These describe historical artifacts only. Their retrieval and candidate
+conversion commands have been removed; collection leads wait for the planned
+RSS-connected source list. Question-relevance preparation and recording remain
+implemented for canonical sources.
 
 1. [Source content retrieval](source-content-retrieval.md)
 2. [Retrieved source relevance and re-intake](retrieved-source-reintake.md)
