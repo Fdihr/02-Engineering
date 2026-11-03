@@ -59,6 +59,14 @@ unchanged. This proves positive live admission and extraction, not completed
 source support review, synthesis or publication readiness. The current handoff
 is six observations awaiting the human support pass in the Evidence workspace.
 
+The support form now uses a versioned exception-focused contract: compare
+statements with quotes, explicitly confirm support, and explain only changed
+question links or flagged problems. The mandatory source questionnaire is
+replaced by an optional concern. A skipped source assessment remains
+`not-assessed` with a downstream caveat; rows-only confirmation is not an
+omission pass, credibility endorsement or publication approval. Historical
+reviews retain their original contract. The live review is still pending.
+
 The canonical target architecture in `memo-workflow.md` is not a fixed implementation contract. This completed slice remains the implementation baseline until a subsequent slice is accepted.
 
 Implementation structure follows `../01-Architecture/script-architecture.md`.

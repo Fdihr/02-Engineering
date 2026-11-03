@@ -150,6 +150,8 @@ export const recordReview = (
 
   const value = input.responseValue;
   const responseKeys = [
+    "reviewPolicyVersion",
+    "sourceConcern",
     "packageSha256",
     "reviewerId",
     "reviewedAt",
@@ -160,7 +162,9 @@ export const recordReview = (
     "irReview",
     "assessment"
   ];
-  const requiredResponseKeys = responseKeys.filter((key) => key !== "assessment");
+  const requiredResponseKeys = responseKeys.filter((key) =>
+    !["assessment", "sourceConcern", "reviewPolicyVersion"].includes(key)
+  );
   if (
     !isRecord(value) ||
     !hasAllowedKeys(value, responseKeys) ||
@@ -168,6 +172,16 @@ export const recordReview = (
     !Array.isArray(value.verdicts) ||
     !Array.isArray(value.humanObservations) ||
     !Array.isArray(value.irReview)
+  ) {
+    return err("INVALID_REVIEW_RESPONSE");
+  }
+  const simplified = value.reviewPolicyVersion === "support-review-v2";
+  const sourceConcern = value.sourceConcern === undefined
+    ? undefined
+    : boundedString(value.sourceConcern, 2_000);
+  if (
+    (value.reviewPolicyVersion !== undefined && !simplified) ||
+    (value.sourceConcern !== undefined && (!simplified || !sourceConcern))
   ) {
     return err("INVALID_REVIEW_RESPONSE");
   }
@@ -204,6 +218,7 @@ export const recordReview = (
       value.verdicts.length > 0 ||
       value.humanObservations.length > 0 ||
       value.irReview.length > 0 ||
+      sourceConcern !== undefined ||
       (value.assessment !== undefined &&
         (!isRecord(value.assessment) ||
           !hasOnlyKeys(value.assessment, ["status"]) ||
@@ -263,6 +278,13 @@ export const recordReview = (
 
     const note = entry.note === undefined ? undefined : boundedString(entry.note, 1_000);
     if (entry.note !== undefined && !note) {
+      return err("INVALID_REVIEW_RESPONSE");
+    }
+    if (
+      simplified &&
+      (verdict === "unsupported" || verdict === "chrome" || entry.correctedIrIds !== undefined) &&
+      !note
+    ) {
       return err("INVALID_REVIEW_RESPONSE");
     }
 
@@ -396,7 +418,13 @@ export const recordReview = (
     if (entry.note !== undefined && !note) {
       return err("INVALID_IR_REVIEW");
     }
-    if (disposition !== "covered" && !note) {
+    const proposed = input.reviewPackage.modelDispositions.find((item) => item.irId === irId);
+    if (
+      (simplified
+        ? disposition === "contradicted" || disposition !== proposed?.disposition
+        : disposition !== "covered") &&
+      !note
+    ) {
       return err("MISSING_IR_REVIEW_NOTE");
     }
     const reviewEntry: IRReviewEntry = { irId, disposition };
@@ -416,13 +444,17 @@ export const recordReview = (
 
   const assessment = provisional
     ? ({ status: "not-assessed" } as const)
-    : readAssessment(value.assessment);
+    : simplified
+      ? readReviewAssessment(value.assessment)
+      : readAssessment(value.assessment);
   if (!assessment) {
     return err("INVALID_ASSESSMENT");
   }
 
   return ok({
     schemaVersion: REVIEW_RECORD_SCHEMA_VERSION,
+    ...(simplified ? { reviewPolicyVersion: "support-review-v2" as const } : {}),
+    ...(sourceConcern ? { sourceConcern } : {}),
     id: `review-record-${sha256Text(
       `${input.reviewPackage.id}\u001f${responseArtifact.artifactSha256}`
     ).slice(0, 32)}`,
@@ -455,6 +487,8 @@ export const validateReviewRecord = (
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, [
+      ...("reviewPolicyVersion" in value ? ["reviewPolicyVersion"] : []),
+      ...("sourceConcern" in value ? ["sourceConcern"] : []),
       "schemaVersion",
       "id",
       "recordedAt",
@@ -477,6 +511,16 @@ export const validateReviewRecord = (
     !Array.isArray(value.verdicts) ||
     !Array.isArray(value.humanObservations) ||
     !Array.isArray(value.irReview)
+  ) {
+    return err("INVALID_REVIEW_RESPONSE");
+  }
+  const simplified = value.reviewPolicyVersion === "support-review-v2";
+  const sourceConcern = value.sourceConcern === undefined
+    ? undefined
+    : boundedString(value.sourceConcern, 2_000);
+  if (
+    (value.reviewPolicyVersion !== undefined && !simplified) ||
+    (value.sourceConcern !== undefined && (!simplified || !sourceConcern))
   ) {
     return err("INVALID_REVIEW_RESPONSE");
   }
@@ -529,6 +573,7 @@ export const validateReviewRecord = (
     provisional &&
     (omissionPass !== "not-performed" ||
       value.humanObservations.length > 0 ||
+      sourceConcern !== undefined ||
       value.irReview.length > 0 ||
       !isRecord(assessment) ||
       !("status" in assessment) ||
@@ -536,7 +581,7 @@ export const validateReviewRecord = (
   ) {
     return err("INVALID_SUPPORT_PASS");
   }
-  if (!provisional && "status" in assessment) {
+  if (!provisional && !simplified && "status" in assessment) {
     return err("INVALID_ASSESSMENT");
   }
 
@@ -574,6 +619,13 @@ export const validateReviewRecord = (
     };
     const note = entry.note === undefined ? undefined : boundedString(entry.note, 1_000);
     if (entry.note !== undefined && !note) {
+      return err("INVALID_REVIEW_RESPONSE");
+    }
+    if (
+      simplified &&
+      (verdict === "unsupported" || verdict === "chrome" || entry.correctedIrIds !== undefined) &&
+      !note
+    ) {
       return err("INVALID_REVIEW_RESPONSE");
     }
     if (note) {
@@ -629,7 +681,7 @@ export const validateReviewRecord = (
     if (entry.note !== undefined && !note) {
       return err("INVALID_IR_REVIEW");
     }
-    if (disposition !== "covered" && !note) {
+    if ((simplified ? disposition === "contradicted" : disposition !== "covered") && !note) {
       return err("MISSING_IR_REVIEW_NOTE");
     }
     const reviewEntry: IRReviewEntry = { irId, disposition };
@@ -641,6 +693,8 @@ export const validateReviewRecord = (
 
   return ok({
     schemaVersion: REVIEW_RECORD_SCHEMA_VERSION,
+    ...(simplified ? { reviewPolicyVersion: "support-review-v2" as const } : {}),
+    ...(sourceConcern ? { sourceConcern } : {}),
     id,
     recordedAt,
     runId,

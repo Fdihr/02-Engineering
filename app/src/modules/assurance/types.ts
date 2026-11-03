@@ -340,6 +340,8 @@ export type SupportPass = "performed" | "not-performed";
 export type IRReviewBasis = "not-performed" | "rows-only" | "full-source";
 
 export type ReviewResponse = {
+  reviewPolicyVersion?: "support-review-v2";
+  sourceConcern?: string;
   packageSha256: string;
   reviewerId: string;
   reviewedAt: string;
@@ -352,6 +354,8 @@ export type ReviewResponse = {
 };
 
 export type ReviewRecord = {
+  reviewPolicyVersion?: "support-review-v2";
+  sourceConcern?: string;
   schemaVersion: typeof REVIEW_RECORD_SCHEMA_VERSION;
   id: string;
   recordedAt: string;
@@ -404,6 +408,7 @@ export type NoteGap = {
 };
 
 export type SourceNote = {
+  reviewPolicyVersion?: "support-review-v2";
   schemaVersion: typeof SOURCE_NOTE_SCHEMA_VERSION;
   id: string;
   assembledAt: string;

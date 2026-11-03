@@ -29,14 +29,18 @@ for one v2 call and zero fetches, preserves all original history, and admits
 only exact `relevant`. It does not promote diagnostic calibrations or approve
 source support. See [the authorization contract](../../02-Contracts/local-article-retrieval.md#explicit-production-reassessment).
 
-Performed source support review requires explanations for access, track
-record, alignment with other reporting and reporting dependency, as well as
-the three assessment selections. Upstream sources are required unless the
-reporting is original; limitations are optional. The form names missing fields
-and focuses the first incomplete assessment field. The action endpoint also
-rejects an incomplete assessment before writing a response or running the
-recorder. Existing failed responses are preserved, not repaired or approved
-automatically.
+The source support form uses `reviewPolicyVersion: "support-review-v2"`:
+statements sit beside their quotes, every statement needs an explicit verdict,
+and question coverage starts from the model proposal. Explanations are required
+only for unsupported/page-chrome verdicts, changed links, or contradictions.
+A duplicate needs an earlier statement as its target. The optional source
+concern follows the note as a caveat. The mandatory reliability questionnaire
+is gone; skipped source assessment is explicitly `not-assessed`, not a positive
+credibility or independence judgment. Confirmation records rows-only coverage,
+not an omission pass or publication approval. The endpoint rejects missing
+verdicts and explanations before writing a response. Unversioned submissions
+retain the historical full-assessment rules. Existing failed responses are
+preserved, not repaired or approved automatically.
 
 **Evidence → Collect a bounded batch** selects one of the two observed feeds,
 records a real permission-review reference, and explicitly approves a one-shot

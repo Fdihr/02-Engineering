@@ -13,6 +13,13 @@ Human effort is per memo. The only human surfaces are:
 
 Per-source support review, omission review, source assessment, adjudication, command choreography, and manual model transport are interim stand-ins with named machine replacements in `../03-Workflow/memo-workflow.md`.
 
+The current dashboard support stand-in uses the
+[exception-focused v2 contract](synthesis-build.md#exception-focused-support-review):
+explicit quote-support confirmation, proposed question links with explained
+overrides, and optional source concerns. It no longer forces a reliability
+questionnaire for every source. Unassessed credibility remains explicitly
+unassessed; this simplification is not a new automatic evidence-approval path.
+
 ## Policy admission
 
 Profile policy includes a versioned admission policy. Absent admission data defaults to compatibility `human` mode so existing commands and artifacts remain valid. A new policy version may select `controller` mode.

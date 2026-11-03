@@ -574,6 +574,61 @@ C.panes.settings();
         (stage / "review" / "review-record-reviewed.json").write_text("{}", encoding="utf-8")
         self.assertEqual(_handle_analyst_action(runs_root, stage, base)[0], 409)
 
+    def test_support_review_v2_records_unassessed_context_without_boilerplate(self):
+        runs_root = self.run_dir / "runs-root"
+        stage = runs_root / "run-v2" / "assurance" / "snap-v2"
+        review_dir = stage / "review"
+        review_dir.mkdir(parents=True)
+        package = {
+            "observations": [{"observationId": "obs-1"}],
+            "requirements": [{"irId": "ir-1"}, {"irId": "ir-2"}],
+            "modelDispositions": [{"irId": "ir-1", "disposition": "partial"}, {"irId": "ir-2", "disposition": "silent"}],
+        }
+        (review_dir / "review-package.json").write_text(json.dumps(package), encoding="utf-8")
+        payload = {
+            "action": "record-assurance-review", "runId": "run-v2", "snapshotId": "snap-v2", "reviewerId": "TESTER",
+            "mode": "performed", "reviewPolicyVersion": "support-review-v2",
+            "verdicts": [{"observationId": "obs-1", "verdict": "supported"}],
+            "irReview": [{"irId": "ir-1", "disposition": "partial"}, {"irId": "ir-2", "disposition": "silent"}],
+        }
+        invalid = [
+            {**payload, "verdicts": []},
+            {**payload, "verdicts": [{"observationId": "obs-1", "verdict": "unsupported"}]},
+            {**payload, "verdicts": [{"observationId": "obs-1", "verdict": "duplicate", "duplicateOf": "obs-1"}]},
+            {**payload, "irReview": []},
+            {**payload, "irReview": [{"irId": "ir-1", "disposition": "covered"}, payload["irReview"][1]]},
+            {**payload, "reviewPolicyVersion": "support-review-v3"},
+            {**payload, "sourceConcern": ""},
+            {**payload, "mode": "provisional", "sourceConcern": "A human concern cannot be recorded by a skipped pass."},
+        ]
+        with patch("dashboard.server._run_npm_script") as runner:
+            for bad in invalid:
+                with self.subTest(payload=bad):
+                    status, result = _handle_analyst_action(runs_root, stage, bad)
+                    self.assertEqual(status, 400, result)
+                    runner.assert_not_called()
+                    self.assertEqual(list(review_dir.glob("review-response-*.json")), [])
+        output = {"ok": True, "stdout": "", "stderr": ""}
+        with patch("dashboard.server._run_npm_script", return_value=output):
+            status, result = _handle_analyst_action(runs_root, stage, payload)
+        self.assertEqual(status, 200, result)
+        response_file = next(review_dir.glob("review-response-*.json"))
+        response = json.loads(response_file.read_text(encoding="utf-8"))
+        self.assertEqual(response["reviewPolicyVersion"], "support-review-v2")
+        self.assertEqual(response["assessment"], {"status": "not-assessed"})
+        self.assertEqual(response["supportPass"], "performed")
+        self.assertEqual(response["omissionPass"], "not-performed")
+        self.assertNotIn("sourceConcern", response)
+        response_file.unlink()
+        with patch("dashboard.server._run_npm_script", return_value=output):
+            status, _ = _handle_analyst_action(runs_root, stage, {
+                **payload, "sourceConcern": "Uncorroborated allegation.",
+                "irReview": [{"irId": "ir-1", "disposition": "covered", "note": "The source directly answers this part."}, payload["irReview"][1]],
+            })
+        self.assertEqual(status, 200)
+        response = json.loads(next(review_dir.glob("review-response-*.json")).read_text(encoding="utf-8"))
+        self.assertEqual(response["sourceConcern"], "Uncorroborated allegation.")
+
     def test_adjudication_derives_claim_status_and_records_reviewer(self):
         runs_root = self.run_dir / "runs-root"
         run_id = "run-j"

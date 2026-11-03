@@ -75,6 +75,9 @@ export const validateSynthesisSourceNote = (
   }
 
   const reviewed = value.reviewStatus === "reviewed";
+  if (value.reviewPolicyVersion !== undefined && value.reviewPolicyVersion !== "support-review-v2") {
+    return err("INVALID_SOURCE_NOTE");
+  }
   const provisional = value.reviewStatus === "provisional";
   const synthetic = value.reviewStatus === "synthetic";
   const observations = [
@@ -128,7 +131,10 @@ export const validateSynthesisSourceNote = (
           )) ||
         value.supersedesNoteId !== undefined
       : !isRecord(value.assessment) ||
-        value.assessment.status === "not-assessed" ||
+        (value.assessment.status === "not-assessed" &&
+          (value.reviewPolicyVersion !== "support-review-v2" ||
+            Object.keys(value.assessment).length !== 1 ||
+            !value.caveats.includes("Source reliability and reporting dependency were not assessed; quote-support review does not establish source credibility or independent corroboration."))) ||
         (value.supersedesNoteId !== undefined &&
           !nonEmptyString(value.supersedesNoteId))
   ) {

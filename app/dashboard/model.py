@@ -257,7 +257,7 @@ def derive_source_waiting(stages: list[dict[str, Any]]) -> str | None:
     if latest_extract["status"] == "in-progress":
         return "model step: run the pending request and record the response"
     if review is None or review["status"] == "in-progress":
-        return "support pass: verdicts, dispositions, assessment"
+        return "support review: check quotes and confirm question links"
     if review["status"] == "provisional" and (note is None or note["status"] == "provisional"):
         if note is None:
             return "assemble (provisional)"

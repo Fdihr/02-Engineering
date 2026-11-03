@@ -330,6 +330,10 @@ def _review_response(payload: dict[str, Any], package_sha: str, reviewer_id: str
     }
     if payload.get("mode") == "provisional":
         return {**base, "supportPass": "not-performed", "verdicts": [], "irReview": [], "assessment": {"status": "not-assessed"}}
+    if "reviewPolicyVersion" in payload:
+        base["reviewPolicyVersion"] = payload["reviewPolicyVersion"]
+    if "sourceConcern" in payload:
+        base["sourceConcern"] = _clean_text(payload["sourceConcern"], 2000)
     verdicts = []
     for entry in payload.get("verdicts") or []:
         if not isinstance(entry, dict):
@@ -351,7 +355,7 @@ def _review_response(payload: dict[str, Any], package_sha: str, reviewer_id: str
     raw = payload.get("assessment") if isinstance(payload.get("assessment"), dict) else {}
     upstream = [_clean_text(s, 240) for s in str(raw.get("upstreamSources") or "").split(",") if _clean_text(s, 240)]
     limitations = [_clean_text(s, 2000) for s in str(raw.get("limitations") or "").splitlines() if _clean_text(s, 2000)]
-    assessment = {
+    assessment = {"status": "not-assessed"} if payload.get("reviewPolicyVersion") == "support-review-v2" and not raw else {
         "reliability": {
             "access": _clean_text(raw.get("access"), 20),
             "accessRationale": _clean_text(raw.get("accessRationale"), 1000),
@@ -387,7 +391,37 @@ def _handle_assurance_review(runs_root: Path, payload: dict[str, Any]) -> tuple[
     now = datetime.now(timezone.utc)
     reviewed_at = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
     response = _review_response(payload, package_sha, reviewer_id, reviewed_at)
-    if payload["mode"] == "performed":
+    if payload.get("reviewPolicyVersion") not in (None, "support-review-v2"):
+        return 400, {"ok": False, "error": "Unsupported support-review policy."}
+    if "sourceConcern" in payload and (
+        payload["mode"] == "provisional" or
+        payload.get("reviewPolicyVersion") != "support-review-v2" or
+        not isinstance(payload["sourceConcern"], str) or not payload["sourceConcern"].strip() or
+        len(payload["sourceConcern"]) > 2000
+    ):
+        return 400, {"ok": False, "error": "Describe the flagged source concern (1 to 2,000 characters), or remove the flag."}
+    if payload["mode"] == "performed" and payload.get("reviewPolicyVersion") == "support-review-v2":
+        package = json.loads(package_file.read_text(encoding="utf-8"))
+        observation_ids = [entry["observationId"] for entry in package["observations"]]
+        reviewed_ids = [entry["observationId"] for entry in response["verdicts"]]
+        requirement_ids = [entry["irId"] for entry in package["requirements"]]
+        ir_ids = [entry["irId"] for entry in response["irReview"]]
+        if sorted(observation_ids) != sorted(reviewed_ids) or sorted(requirement_ids) != sorted(ir_ids):
+            return 400, {"ok": False, "error": "Check every statement and confirm every question link before recording the review."}
+        proposed = {entry["irId"]: entry["disposition"] for entry in package["modelDispositions"]}
+        for entry in response["verdicts"]:
+            if entry["verdict"] not in ("supported", "unsupported", "duplicate", "chrome"):
+                return 400, {"ok": False, "error": "Choose a support verdict for every statement."}
+            if entry["verdict"] in ("unsupported", "chrome") and not entry.get("note"):
+                return 400, {"ok": False, "error": "Explain the flagged statement concern before recording the review."}
+            if entry["verdict"] == "duplicate" and entry.get("duplicateOf") not in observation_ids[:observation_ids.index(entry["observationId"])]:
+                return 400, {"ok": False, "error": "Choose an earlier statement as the duplicate target."}
+        for entry in response["irReview"]:
+            if entry["disposition"] not in ("covered", "partial", "silent", "contradicted"):
+                return 400, {"ok": False, "error": "Choose a valid contribution for each question link."}
+            if (entry["disposition"] != proposed.get(entry["irId"]) or entry["disposition"] == "contradicted") and not entry.get("note"):
+                return 400, {"ok": False, "error": "Explain the changed or contradicted question link before recording the review."}
+    if payload["mode"] == "performed" and response["assessment"].get("status") != "not-assessed":
         assessment = response["assessment"]
         reliability = assessment["reliability"]
         dependency = assessment["dependency"]

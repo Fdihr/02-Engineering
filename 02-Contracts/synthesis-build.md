@@ -22,7 +22,47 @@ Assembly emits `reviewStatus: "provisional"`, retains all committed observations
 
 > Observations not reviewed by a human; evidence in this note is provisional.
 
-A performed support pass emits `reviewStatus: "reviewed"` and preserves the existing review rules.
+A performed support pass emits `reviewStatus: "reviewed"`. Unversioned responses
+preserve the existing full-assessment rules; the versioned exception-focused
+review below separates quote support from source credibility.
+
+## Exception-focused support review
+
+New dashboard responses declare `reviewPolicyVersion: "support-review-v2"`.
+The marker is retained in the review record and assembled source note. Unknown
+versions are rejected. Historical responses, records and notes remain readable
+without changing their bytes or inferring new judgments.
+
+Every proposed observation still needs an explicit human verdict, and every
+approved requirement needs a confirmed disposition. Unchecked observations are
+never treated as supported. A bulk support action is an explicit human
+confirmation, not model approval. Quote matching proves location, not truth.
+
+Unchanged proposed coverage, including partial and silent, needs no prose
+justification. A changed disposition or any contradiction requires a note.
+Unsupported and page-chrome verdicts, and corrected observation tags, also
+require an explanation; duplicates require an earlier observation reference.
+Existing deterministic assembly checks still reject dispositions inconsistent
+with the accepted observations.
+
+A performed v2 review may supply exactly `assessment: { "status": "not-assessed" }`
+instead of the complete historical assessment. Omission of the assessment is
+not accepted as a positive judgment. An optional `sourceConcern` is a nonempty
+string of at most 2,000 characters, retained in the review record and emitted
+as a source-note caveat. Provisional submissions cannot contain this human
+judgment. The complete assessment shape remains supported for explicit
+assessments; it is no longer a prerequisite to quote-support confirmation.
+
+Reviewed v2 notes with unassessed credibility carry the explicit caveat:
+
+> Source reliability and reporting dependency were not assessed; quote-support review does not establish source credibility or independent corroboration.
+
+Synthesis accepts that state only with the version marker and caveat, treats
+reliability as limited/unknown, and retains the caveats. It must not infer
+established reliability or independence. The dashboard records
+`omissionPass: "not-performed"` and `irReviewBasis: "rows-only"`; omission and
+rows-only underclaims remain unmeasured. Support review does not approve
+synthesis claims or publication.
 
 The first live performed pass marked all 20 NV observations supported with no tag corrections. The reviewed note supersedes the provisional note. Support failure, chrome, tag precision, and disposition comparison are measured; omission and rows-only underclaims remain null.
 

@@ -120,7 +120,7 @@ class ModelTests(unittest.TestCase):
 
         self.assertEqual(derive_source_waiting([stage("extract", "failed")]), "bounded failure: authorise a re-run or accept as a gap")
         self.assertEqual(derive_source_waiting([stage("extract", "in-progress")]), "model step: run the pending request and record the response")
-        self.assertEqual(derive_source_waiting([stage("extract", "committed")]), "support pass: verdicts, dispositions, assessment")
+        self.assertEqual(derive_source_waiting([stage("extract", "committed")]), "support review: check quotes and confirm question links")
         self.assertEqual(derive_source_waiting([stage("extract", "committed"), stage("review", "reviewed")]), "assemble")
         self.assertIsNone(derive_source_waiting([stage("extract", "committed"), stage("review", "reviewed"), stage("source note", "reviewed"), stage("metrics", "committed")]))
 
