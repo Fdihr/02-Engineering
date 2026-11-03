@@ -238,13 +238,57 @@ aside.artifact-sheet { position:fixed; top:56px; right:0; bottom:0; z-index:40; 
 .viewer-title { margin-bottom:10px; color:var(--ink-2); font-size:var(--text-meta); overflow-wrap:anywhere; }
 pre { flex:1 1 auto; margin:0; padding:12px; color:var(--ink); background:var(--sunken); border:1px solid var(--rule); border-radius:var(--radius-surface); overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-family:var(--font-mono); font-size:var(--text-meta); line-height:1.5; }
 
-/* Brief */
-.lens-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:10px 16px; }
-.lens-item { display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-top:1px solid var(--rule); cursor:pointer; }
-.lens-item input { width:16px; height:16px; margin-top:3px; accent-color:var(--action); flex-shrink:0; }
-.lens-label { display:flex; flex-direction:column; gap:2px; }
-.lens-label strong { font-size:var(--text-ui); font-weight:500; }
-.lens-label span { color:var(--ink-2); font-size:var(--text-meta); font-weight:400; line-height:1.35; }
+/* Thesis-first planning */
+#brief-new { max-width:68rem; }
+.new-analysis-head { margin:4px 0 32px; }
+.new-analysis-head .section-head { align-items:center; flex-wrap:wrap; gap:12px 24px; margin:0 0 12px; }
+.new-analysis-head h1 { margin:0; color:var(--ink); font-size:var(--text-title); line-height:2.25rem; font-weight:300; }
+.new-analysis-head p { margin:0; max-width:75ch; color:var(--ink-2); font-size:var(--text-body); line-height:1.6; }
+.thesis-entry { margin-top:0; }
+.thesis-entry label { font-size:var(--text-ui); color:var(--ink); }
+.thesis-entry .thesis-box { min-height:144px; padding:16px; font-size:var(--text-heading); line-height:1.75rem; resize:vertical; }
+#plan-scope { margin:20px 0; }
+#plan-scope > summary { justify-content:flex-start; flex-wrap:wrap; gap:8px 20px; font-size:var(--text-ui); }
+#plan-scope > summary::after { margin-left:auto; }
+#plan-scope .scope-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:28px 24px; padding-top:20px; }
+#plan-scope .field { gap:8px; }
+#plan-scope .field > p { margin:0; }
+#plan-scope fieldset { margin:0; padding:0; border:0; }
+#plan-scope .field > label, #plan-scope legend { padding:0; color:var(--ink); font-size:var(--text-ui); font-weight:500; }
+#plan-scope legend { margin-bottom:8px; }
+#plan-scope .field input, #plan-scope .field select { height:40px; }
+#plan-scope .scope-window { grid-column:span 2; }
+#plan-scope .date-pair { display:grid; grid-template-columns:minmax(0, 1fr) auto minmax(0, 1fr); align-items:center; gap:12px; }
+#plan-scope .date-pair input { min-width:0; }
+#plan-scope .chip-row { margin-top:4px; }
+.plan-generate { margin-top:20px; }
+#draft-question-model { margin:12px 0 0; }
+#generated-plan { margin-top:44px; scroll-margin-top:80px; }
+#generated-plan .section-head { align-items:baseline; flex-wrap:wrap; gap:8px 24px; }
+#generated-plan .section-head h2 { font-size:var(--text-title); font-weight:300; }
+#generated-plan > .prose { max-width:none; }
+.plan-question-list { margin:24px 0 0; padding:0; list-style:none; }
+.plan-question { display:grid; grid-template-columns:minmax(0, 3fr) minmax(14rem, 2fr); gap:20px 40px; padding:24px 0; border-top:1px solid var(--rule); }
+.plan-question > .field { gap:12px; }
+.plan-question .field label { color:var(--ink-2); font-size:var(--text-meta); }
+.plan-question textarea { min-height:0; field-sizing:content; resize:vertical; padding:8px 10px; margin-left:-11px; width:calc(100% + 11px); border-color:transparent; font-size:var(--text-heading); line-height:1.5; }
+.plan-question textarea:hover { border-color:var(--control); }
+.plan-question textarea:focus { border-color:var(--action); }
+.plan-reason { font-size:var(--text-meta); }
+.plan-reason > summary { width:fit-content; color:var(--ink-2); cursor:pointer; padding:4px 0; }
+.plan-reason > summary:hover, .plan-reason[open] > summary { color:var(--ink); }
+.plan-connection { margin:8px 0 0; max-width:65ch; }
+.plan-question .plan-searches { gap:8px; align-self:start; }
+.plan-searches > .label { margin-bottom:8px; }
+.plan-searches input { background:var(--sunken); }
+#approval-review { margin-top:32px; padding-top:24px; border-top:1px solid var(--rule); scroll-margin-top:80px; }
+@media (max-width:700px) {
+  #plan-scope .scope-grid { grid-template-columns:minmax(0, 1fr); gap:24px; }
+  #plan-scope .scope-window { grid-column:auto; }
+  .plan-question { grid-template-columns:minmax(0, 1fr); gap:16px; }
+  #plan-scope > summary .meta { width:100%; order:1; }
+  .thesis-entry .thesis-box { font-size:var(--text-body); line-height:1.5rem; }
+}
 
 /* Shell: top navigation, run window header and activity strip */
 .topnav { display:flex; align-items:stretch; gap:4px; height:56px; margin-left:28px; }

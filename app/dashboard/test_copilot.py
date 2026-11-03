@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from dashboard.copilot import COPILOT_PROVIDER, STAGE_IDS, CopilotError, call_copilot, generate, load_settings, resolve_model, save_model
 from dashboard.server import COPILOT_LOCK, STAGE_RESPONSES, _handle_analyst_action
+from dashboard.scan import list_available_runs
 
 
 def invocation(content='{"statements": []}'):
@@ -25,6 +26,75 @@ class CopilotTests(unittest.TestCase):
 
     def tearDown(self):
         self.temporary.cleanup()
+
+    def test_plan_generation_creates_drafts_only_with_thesis_bound_questions_and_searches(self):
+        payload = {
+            "action": "generate-research-plan", "runId": "new-analysis",
+            "researchThesis": "Supplier disruption poses more risk than direct attacks.",
+            "audience": "Leadership", "geographies": "Europe", "from": "2026-09-01", "to": "2026-11-01",
+            "requestedOutput": "memo",
+        }
+        plan = {
+            "question": "Do supplier incidents cause more disruption than direct attacks?",
+            "rationale": "Compare evidence for and against the thesis.",
+            "questions": [
+                {"question": "Which supplier incidents disrupted production?", "rationale": "Tests suppliers.", "searches": ["supplier disruption"]},
+                {"question": "Which direct attacks disrupted production?", "rationale": "Tests direct attacks.", "searches": ["production cyberattack"]},
+                {"question": "Which evidence contradicts the thesis?", "rationale": "Tests alternatives.", "searches": ["production resilience"]},
+            ],
+            "rankingTerms": ["supplier", "production", "disruption"],
+        }
+        with patch("dashboard.server.resolve_model", return_value="test-model"), \
+                patch("dashboard.server.generate", return_value=invocation(json.dumps(plan))) as transport, \
+                patch("dashboard.server._run_npm_script") as commands:
+            status, result = _handle_analyst_action(self.root, self.root, payload)
+            self.assertEqual(status, 200, result)
+            self.assertEqual(result["draft"]["questions"], plan["questions"])
+            self.assertEqual(result["draft"]["researchThesis"], payload["researchThesis"])
+            self.assertEqual(result["draft"]["status"], "proposed")
+            self.assertEqual(transport.call_args.args[2], "research-question")
+            scope = json.loads(transport.call_args.args[1]["user"])["scope"]
+            self.assertEqual(scope["researchThesis"], payload["researchThesis"])
+            commands.assert_not_called()
+        self.assertFalse((self.root / payload["runId"]).exists())
+        draft_dir = self.root / ".research-plan-drafts" / result["draftId"]
+        self.assertTrue((draft_dir / "plan.json").is_file())
+        self.assertEqual(len(list(draft_dir.glob("copilot-invocation-*.json"))), 1)
+        self.assertEqual(list_available_runs(self.root), [])
+        self.assertFalse(list(self.root.rglob("approved-*.json")))
+
+    def test_plan_generation_rejects_bad_scope_before_model_call_and_preserves_invalid_output(self):
+        payload = {"action": "generate-research-plan", "runId": "draft", "researchThesis": "Thesis",
+                   "audience": "Leadership", "geographies": "Europe", "from": "2026-09-01", "to": "2026-11-01",
+                   "requestedOutput": "memo"}
+        with patch("dashboard.server.generate") as transport:
+            with self.assertRaises(CopilotError):
+                _handle_analyst_action(self.root, self.root, {**payload, "researchThesis": ""})
+            transport.assert_not_called()
+        with patch("dashboard.server.resolve_model", return_value="test-model"), \
+                patch("dashboard.server.generate", return_value=invocation('{"question":"Only one"}')), \
+                patch("dashboard.server._run_npm_script") as commands:
+            with self.assertRaises(CopilotError):
+                _handle_analyst_action(self.root, self.root, payload)
+            commands.assert_not_called()
+        self.assertEqual(len(list(self.root.rglob("copilot-invocation-*.json"))), 1)
+        self.assertFalse(list(self.root.rglob("plan.json")))
+        self.assertFalse(list(self.root.rglob("approved-*.json")))
+
+    def test_collection_plan_validation_precedes_human_approval_side_effects(self):
+        payload = {"action": "approve-intent", "runId": "draft", "reviewerId": "reviewer",
+                   "runDiscovery": True, "minimumScore": 4, "rankingTerms": "supplier, production, outage"}
+        invalid = [{"queries": "\n".join(f"search {i}" for i in range(11))},
+                   {"queries": ""}, {"queries": "a OR b"}, {"queries": "outage\nOutage"},
+                   {"queries": "outage", "rankingTerms": ""},
+                   {"queries": "outage", "minimumScore": "invalid"}]
+        with patch("dashboard.server._run_npm_script") as commands:
+            for fields in invalid:
+                status, result = _handle_analyst_action(self.root, self.root, {**payload, **fields})
+                self.assertEqual(status, 400, result)
+                self.assertFalse(result["ok"])
+                self.assertFalse((self.root / "draft").exists())
+            commands.assert_not_called()
 
     def test_settings_are_explicit_persistent_and_checked_against_catalog(self):
         self.assertEqual(load_settings(self.root), {"model": None, "stages": {}})

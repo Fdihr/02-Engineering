@@ -12,9 +12,8 @@ APP_DIR = Path(__file__).resolve().parent.parent
 SETTINGS_NAME = ".copilot-settings.json"
 COPILOT_PROVIDER = "github-copilot-sdk"
 WORKFLOW_STEPS = [
-    {"kind": "human", "label": "Approve scope", "description": "Set the thesis and boundaries before AI drafting."},
-    {"kind": "ai", "id": "research-question", "label": "Draft research question", "description": "Turn the approved scope into a question proposal."},
-    {"kind": "human", "label": "Approve question and requirements", "description": "Confirm the research intent before collection."},
+    {"kind": "ai", "id": "research-question", "label": "Draft research plan", "description": "Turn a thesis into proposed research questions and Seerist searches. No approval or collection."},
+    {"kind": "human", "label": "Approve scope, question and requirements", "description": "Review the proposed plan and approve the research intent before collection."},
     {"kind": "system", "label": "Collect and canonicalize", "description": "Bounded Seerist collection and captured-content preparation. Collection leads wait for RSS."},
     {"kind": "ai", "id": "relevance", "label": "Assess question relevance", "description": "Assess each canonical source against the approved question."},
     {"kind": "human", "label": "Admit evidence", "description": "Current compatibility review; an AI proposal cannot approve evidence."},

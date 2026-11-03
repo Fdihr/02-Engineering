@@ -460,7 +460,7 @@
   /* ---------- Navigation ---------- */
   var ROUTES = {
     'home': { pane: 'now' },
-    'new': { pane: 'brief', title: 'New analysis', sub: 'Nothing is collected until you approve the research plan.' },
+    'new': { pane: 'brief', title: 'New analysis', sub: 'From a thesis to a research plan. You decide when collection starts.' },
     'intent': { pane: 'brief', title: 'Intent review', run: true },
     'analysis/evidence': { pane: 'sources', title: 'Evidence', run: true },
     'analysis/findings': { pane: 'synthesis', title: 'Findings', run: true },
@@ -599,7 +599,7 @@
     var route = state.route || currentRoute();
     var def = ROUTES[route];
     var head = document.createDocumentFragment();
-    if (route === 'home') return replace(document.getElementById('run-head'), head);
+    if (route === 'home' || route === 'new') return replace(document.getElementById('run-head'), head);
     var crumb = el('a', 'parent-link', 'Home');
     crumb.href = '#/home';
     var title = el('div', 'page-head');
@@ -832,7 +832,7 @@
     var locked = state.modelSaving || state.modelLoading || state.busy || !state.settingsLoaded;
     document.querySelector('.model-settings').classList.toggle('has-model-changes', modelsChanged() || state.modelSaving);
     var questionModel = modelForStage('research-question');
-    document.getElementById('draft-question-model').textContent = questionModel ? 'Question drafting model: ' + modelName(questionModel) + (state.stageModels['research-question'] ? ' (stage override).' : ' (default).') : 'Choose and save a model in Settings before drafting with Copilot.';
+    document.getElementById('draft-question-model').textContent = questionModel ? 'Research planning model: ' + modelName(questionModel) + (state.stageModels['research-question'] ? ' (stage override).' : ' (default).') : 'Choose and save a model in Settings before generating a plan.';
     setBlocked(document.getElementById('btn-draft-question'), !questionModel);
     var valid = state.catalogLoaded && modelAvailable(state.draftModel) && Object.keys(state.draftStages).every(function (id) {
       return !state.draftStages[id] || modelAvailable(state.draftStages[id]);

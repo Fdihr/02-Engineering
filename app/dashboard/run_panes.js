@@ -48,48 +48,11 @@
 
   /* ================= Brief ================= */
   var SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
-  var LENS_CONFIG = {
-    ot: {
-      label: 'wind farm OT/SCADA and grid interconnections',
-      ir: 'Which state-linked or criminal actors conducted cyber intrusions, pre-positioning, or disruptive operations against energy, wind, grid, or OT/ICS infrastructure in the scoped geography?',
-      queries: ['power grid cyberattack', 'energy infrastructure cyberattack'],
-      terms: ['energy', 'power grid', 'electricity', 'wind', 'renewable', 'scada', 'operational technology', 'ics', 'substation', 'utility', 'state-sponsored']
-    },
-    mfg: {
-      label: 'manufacturing and turbine assembly operations',
-      ir: 'Which ransomware or extortion campaigns disrupted industrial manufacturing, engineering, or production operations in the scoped geography, and what changed in their targeting?',
-      queries: ['ransomware manufacturing', 'ransomware energy company'],
-      terms: ['ransomware', 'extortion', 'manufactur', 'industrial', 'production', 'factory', 'plant', 'disrupt', 'outage']
-    },
-    supply: {
-      label: 'tier-1 industrial, OT vendor, and software supply chain',
-      ir: 'Which software, firmware, or vendor supply-chain compromises affected industrial, energy, or enterprise environments relevant to Vestas suppliers and remote service access?',
-      queries: ['supply chain cyberattack', 'critical vulnerability industrial'],
-      terms: ['supply chain', 'vendor', 'firmware', 'remote access', 'backdoor', 'malicious package', 'vulnerability', 'exploit']
-    },
-    hybrid: {
-      label: 'hybrid sabotage, maritime, and logistics corridors',
-      ir: 'What geopolitical developments, hybrid sabotage incidents, or physical-cyber disruptions affected subsea infrastructure, ports, energy corridors, or logistics routes?',
-      queries: ['sabotage critical infrastructure', 'hybrid attack Europe'],
-      terms: ['sabotage', 'hybrid', 'subsea', 'cable', 'pipeline', 'port', 'maritime', 'rail', 'infrastructure', 'russian']
-    }
-  };
-  var PRESETS = {
-    europe: {
-      slug: 'europe-cyber-geopol', geo: 'Europe', lenses: ['ot', 'mfg', 'supply', 'hybrid'],
-      question: 'Assess European cyber and geopolitical activity over the last two months—specifically state-linked OT/energy targeting, industrial ransomware, and hybrid infrastructure sabotage—and determine what operational or supply-chain exposure this creates for Vestas.'
-    },
-    ransomware: {
-      slug: 'europe-mfg-ransomware', geo: 'Europe, Germany, Denmark, Poland', lenses: ['mfg', 'supply'],
-      question: 'Which ransomware and extortion groups disrupted European industrial manufacturing and OT vendor operations over the last two months, and what is the exposure to Vestas turbine production and Tier-1 suppliers?'
-    },
-    baltic: {
-      slug: 'nordic-baltic-hybrid', geo: 'Europe, Baltic, Nordic, Poland, Germany', lenses: ['ot', 'hybrid'],
-      question: 'Assess hybrid sabotage, state-linked cyber pre-positioning, and maritime/subsea infrastructure threats in the Nordic and Baltic region over the last two months and their impact on Vestas offshore and grid operations.'
-    }
-  };
   var GENERATED = ['in-irs', 'in-disc-queries', 'in-disc-terms', 'in-purpose', 'in-topic', 'in-rationale'];
   var scopedRunId = '';
+  var planQuestions = [];
+  var planSignature = '';
+  var planGenerating = false;
   function $(id) { return document.getElementById(id); }
   function isoDate(date) {
     var pad = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -124,47 +87,66 @@
     $('in-run-id').classList.toggle('invalid', Boolean(problem));
     return !problem;
   }
-  function checkedLenses() {
-    var list = [];
-    document.querySelectorAll('.vestas-lens:checked').forEach(function (cb) { if (LENS_CONFIG[cb.value]) list.push(LENS_CONFIG[cb.value]); });
-    return list;
-  }
   function syncDerivations() {
     var thesis = $('in-question').value.trim();
-    var geo = $('in-geo').value.trim() || 'Europe';
-    var lenses = checkedLenses();
-    var irs = lenses.map(function (l) { return l.ir; });
-    irs.push('What concrete operational, OT/SCADA, manufacturing, or supply-chain exposure pathways connect these findings to Vestas in ' + geo + '?');
-    var queries = [];
-    lenses.forEach(function (l) { l.queries.forEach(function (q) { queries.push(q); }); });
-    if (!queries.length) queries.push('cyberattack Europe');
-    var terms = ['cyberattack', 'cyber', 'vestas'];
-    geo.split(',').forEach(function (g) { var c = g.trim().toLowerCase(); if (c && terms.indexOf(c) < 0) terms.push(c); });
-    lenses.forEach(function (l) { l.terms.forEach(function (t) { if (terms.indexOf(t) < 0) terms.push(t); }); });
-    var labels = lenses.map(function (l) { return l.label; });
-    var values = {
-      'in-irs': irs.join('\n'),
-      'in-disc-queries': queries.join('\n'),
-      'in-disc-terms': terms.join(', '),
-      'in-purpose': thesis.slice(0, 220) || ('Assess cyber and geopolitical activity in ' + geo + ' and implications for Vestas.'),
-      'in-topic': 'Cyber and geopolitical activity in ' + geo + (labels.length ? ' affecting ' + labels.join(', ') : '') + '.',
-      'in-rationale': 'Grounded assessment of ' + geo + ' threat activity mapped against Vestas ' + (labels.join(', ') || 'operational footprint') + '.'
-    };
-    GENERATED.forEach(function (id) { if (!state.dirty[id]) $(id).value = values[id]; });
+    if (!scopedRunId) {
+      if (!state.dirty['in-purpose']) $('in-purpose').value = thesis;
+      if (!state.dirty['in-topic']) $('in-topic').value = thesis.slice(0, 400);
+    }
+    $('plan-scope-summary').textContent = [$('in-geo').value, $('in-from').value + ' to ' + $('in-to').value, $('in-output').selectedOptions[0].textContent].join(' · ');
   }
-  function applyPreset(name) {
-    var preset = PRESETS[name];
-    scopedRunId = '';
-    $('in-generated-question').value = '';
-    $('scope-confirm').checked = false;
-    $('draft-question-status').textContent = '';
-    $('in-question').value = preset.question;
-    $('in-geo').value = preset.geo;
-    document.querySelectorAll('.vestas-lens').forEach(function (cb) { cb.checked = preset.lenses.indexOf(cb.value) >= 0; });
-    state.dirty = {};
+  function scopeSignature() {
+    var p = intentPayload(false);
+    return JSON.stringify([p.researchThesis.trim(), p.audience, p.geographies, p.from, p.to, p.requestedOutput]);
+  }
+  function invalidateGeneratedPlan() {
     syncDerivations();
-    suggestRunId(preset.slug);
+    if (planSignature && scopeSignature() !== planSignature) {
+      $('generated-plan').hidden = true;
+      $('draft-question-status').textContent = 'Thesis or scope changed. Generate a new plan to match.';
+      $('btn-draft-question').textContent = 'Generate research plan';
+    } else if (planSignature) {
+      $('generated-plan').hidden = false;
+    }
     invalidateReview();
+  }
+  function syncPlanFields() {
+    $('in-irs').value = planQuestions.map(function (item) { return item.question; }).join('\n');
+    $('in-disc-queries').value = planQuestions.reduce(function (all, item) { return all.concat(item.searches); }, []).join('\n');
+    invalidateReview();
+  }
+  function renderPlanQuestions() {
+    var host = $('generated-plan-questions');
+    C.clear(host);
+    planQuestions.forEach(function (item, index) {
+      var row = el('li', 'plan-question');
+      var question = el('div', 'field');
+      var questionId = 'plan-question-' + index;
+      var label = el('label', null, 'Research question ' + (index + 1));
+      label.htmlFor = questionId;
+      var input = el('textarea');
+      input.id = questionId;
+      input.rows = 2;
+      input.maxLength = 400;
+      input.value = item.question;
+      input.addEventListener('input', function () { item.question = input.value; syncPlanFields(); });
+      var why = el('details', 'plan-reason');
+      add(why, el('summary', null, 'Connection to your thesis'), el('p', 'meta plan-connection', item.rationale));
+      add(question, label, input, why);
+      var searches = el('div', 'field plan-searches');
+      searches.appendChild(el('span', 'label', 'Proposed Seerist searches'));
+      item.searches.forEach(function (search, searchIndex) {
+        var searchInput = el('input');
+        searchInput.type = 'text';
+        searchInput.maxLength = 120;
+        searchInput.value = search;
+        searchInput.setAttribute('aria-label', 'Research question ' + (index + 1) + ', Seerist search ' + (searchIndex + 1));
+        searchInput.addEventListener('input', function () { item.searches[searchIndex] = searchInput.value; syncPlanFields(); });
+        searches.appendChild(searchInput);
+      });
+      add(row, question, searches);
+      host.appendChild(row);
+    });
   }
   function intentPayload(runDiscovery) {
     return {
@@ -196,7 +178,8 @@
     syncApproveButtons();
   }
   function syncApproveButtons() {
-    var enabled = $('approve-confirm').checked && !state.busy && Boolean(C.analyst());
+    var enabled = $('approve-confirm').checked && !state.busy && !planGenerating && Boolean(C.analyst()) &&
+      (!planSignature || scopeSignature() === planSignature) && !planEditProblems().length;
     $('btn-approve-collect').disabled = !enabled;
     $('btn-approve-only').disabled = !enabled;
   }
@@ -205,6 +188,8 @@
     var irs = lines(p.requirements);
     var problems = [];
     if (!C.analyst()) problems.push('Enter your analyst ID in the top bar.');
+    if (planSignature && scopeSignature() !== planSignature) problems.push('The thesis or scope changed. Generate a new research plan.');
+    problems = problems.concat(planEditProblems());
     if (!p.question.trim()) problems.push('Write the question.');
     if (!validateRunId()) problems.push('Fix the analysis ID.');
     if (!p.from || !p.to || p.from > p.to) problems.push('Set a valid time window.');
@@ -212,24 +197,24 @@
     if (!p.purpose.trim() || !p.threatTopic.trim() || !p.rationale.trim()) problems.push('Complete the purpose, threat topic and why it matters.');
     return problems;
   }
+  function planEditProblems() {
+    if (!planQuestions.length) return [];
+    var searches = planQuestions.reduce(function (all, item) { return all.concat(item.searches); }, []);
+    var invalid = planQuestions.some(function (item) { return !item.question.trim() || /[\r\n]/.test(item.question); }) ||
+      searches.some(function (search) { return !search.trim() || /[\r\n"“”|():=]|\b(?:AND|OR|NOT)\b/.test(search) || search.trim().split(/\s+/).length > 6; });
+    if (invalid) return ['Fill each question and search. Use short search terms without Boolean operators or filters.'];
+    if (searches.length > 10 || new Set(searches.map(function (search) { return search.trim().toLowerCase(); })).size !== searches.length) return ['Use at most 10 distinct Seerist searches.'];
+    return [];
+  }
   function irList() { var text = $('in-irs').value; return text ? text.split(/\r?\n/) : []; }
   function setIrs(list) { $('in-irs').value = list.join('\n'); state.dirty['in-irs'] = true; invalidateReview(); }
-
-  function propose() {
-    if (!$('in-question').value.trim()) return;
-    if (!$('in-from').value || !$('in-to').value) setWindow(60);
-    if (!$('in-run-id').value.trim()) suggestRunId('analysis');
-    syncDerivations();
-    draftEdit = { row: '', ir: -1, plan: false };
-    invalidateReview();
-    state.draft = true;
-    C.navigate('intent');
-  }
 
   function reviewIntent() {
     var p = intentPayload(true);
     var irs = lines(p.requirements);
     var problems = [];
+    problems = problems.concat(planEditProblems());
+    if (planSignature && scopeSignature() !== planSignature) problems.push('The thesis or scope changed. Generate a new research plan.');
     if (!C.analyst()) problems.push('Enter your analyst ID in the top bar.');
     if (!p.researchThesis.trim()) problems.push('Write the research thesis.');
     if (!p.question.trim()) problems.push('Write the question.');
@@ -259,6 +244,8 @@
     $('approval-review').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   function approve(runDiscovery) {
+    if (state.busy || planGenerating || intentProblems().length ||
+        !(state.route === 'new' ? $('approve-confirm').checked : state.drafts['intent:confirm'])) return;
     var payload = intentPayload(runDiscovery);
     C.postAction(payload, runDiscovery ? 'Approving and collecting leads' : 'Approving the analysis').then(function (data) {
       if (!data || !data.ok) return;
@@ -268,55 +255,77 @@
       $('in-question').value = '';
       $('in-generated-question').value = '';
       scopedRunId = '';
+      planSignature = '';
+      planQuestions = [];
+      $('generated-plan').hidden = true;
       C.switchRun(data.runId || payload.runId);
       C.go(runDiscovery ? { tab: 'sources', focus: 'leads' } : { tab: 'brief' });
     });
   }
   C.startNew = function () {
-    if (!$('in-question').value.trim()) applyPreset('europe');
     if (!$('in-to').value) setWindow(60);
     if (!$('in-run-id').value.trim()) suggestRunId('analysis');
     validateRunId();
+    syncDerivations();
     $('in-question').focus();
   };
   C.initBrief = function () {
     setWindow(60);
-    document.querySelectorAll('[data-preset]').forEach(function (b) { b.addEventListener('click', function () { applyPreset(b.getAttribute('data-preset')); }); });
-    document.querySelectorAll('[data-window-days]').forEach(function (b) { b.addEventListener('click', function () { setWindow(Number(b.getAttribute('data-window-days'))); invalidateReview(); }); });
+    document.querySelectorAll('[data-window-days]').forEach(function (b) { b.addEventListener('click', function () { setWindow(Number(b.getAttribute('data-window-days'))); invalidateGeneratedPlan(); }); });
     GENERATED.forEach(function (id) { $(id).addEventListener('input', function () { state.dirty[id] = true; }); });
-    $('in-question').addEventListener('input', syncDerivations);
-    $('in-geo').addEventListener('input', syncDerivations);
-    document.querySelectorAll('.vestas-lens').forEach(function (cb) { cb.addEventListener('change', syncDerivations); });
+    ['in-question', 'in-geo', 'in-audience', 'in-from', 'in-to', 'in-output'].forEach(function (id) {
+      $(id).addEventListener('input', invalidateGeneratedPlan);
+      $(id).addEventListener('change', invalidateGeneratedPlan);
+    });
     $('in-run-id').addEventListener('input', validateRunId);
     $('brief-new').addEventListener('input', function (e) { if (e.target.id !== 'approve-confirm') invalidateReview(); });
     $('brief-new').addEventListener('change', function (e) { if (e.target.id !== 'approve-confirm') invalidateReview(); });
     $('btn-review-intent').addEventListener('click', reviewIntent);
     $('btn-draft-question').classList.add('act');
-    $('btn-draft-question').setAttribute('data-needs-analyst', '1');
     $('btn-draft-question').addEventListener('click', function () {
+      if (planGenerating || state.busy) return;
+      syncDerivations();
       var payload = intentPayload(false);
       if (!validateRunId()) return;
-      if (!$('scope-confirm').checked) {
-        $('draft-question-status').textContent = 'Confirm the thesis and scope before drafting.';
-        $('scope-confirm').focus();
+      if (!payload.researchThesis.trim() || !payload.geographies.trim() || !payload.audience.trim() || !payload.from || !payload.to || payload.from > payload.to) {
+        $('draft-question-status').textContent = 'Enter a thesis and check the geography, audience and dates under Refine scope.';
+        $('in-question').focus();
         return;
       }
-      payload.action = 'draft-research-question';
-      payload.scopeConfirmed = true;
-      // Remember the in-progress run even if generation fails after scope approval.
-      scopedRunId = payload.runId;
-      $('draft-question-status').textContent = 'Approving scope, then drafting with local Copilot...';
-      C.postAction(payload, 'Drafting the research question').then(function (data) {
+      var signature = scopeSignature();
+      payload.action = 'generate-research-plan';
+      planGenerating = true;
+      invalidateReview();
+      $('generated-plan').setAttribute('aria-busy', 'true');
+      $('draft-question-status').textContent = 'Turning your thesis into research questions and searches...';
+      $('btn-draft-question').textContent = 'Generating plan...';
+      C.postAction(payload, 'Generating the research plan').then(function (data) {
         if (!data || !data.ok) {
-          $('draft-question-status').textContent = data && data.error || 'Drafting failed. Check Settings and retry.';
+          $('draft-question-status').textContent = data && data.error || 'Generation failed. Check Settings and retry. Nothing was approved or collected.';
+          return;
+        }
+        if (signature !== scopeSignature()) {
+          $('draft-question-status').textContent = 'Your thesis or scope changed during generation. Generate again for the current text.';
           return;
         }
         $('in-generated-question').value = data.draft.question;
         $('in-rationale').value = data.draft.rationale;
         state.dirty['in-rationale'] = true;
+        $('in-disc-terms').value = data.draft.rankingTerms.join(', ');
+        planQuestions = data.draft.questions;
+        planSignature = signature;
+        syncPlanFields();
+        renderPlanQuestions();
         invalidateReview();
-        $('draft-question-status').textContent = 'Drafted with ' + data.model + '. Review and edit the question before approval.';
-        $('in-generated-question').focus();
+        $('generated-plan-meta').textContent = planQuestions.length + ' questions · ' + lines($('in-disc-queries').value).length + ' searches · Drafted with ' + data.model;
+        $('generated-plan').hidden = false;
+        $('draft-question-status').textContent = 'Plan ready. Review the questions and searches below.';
+        $('generated-plan').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }).finally(function () {
+        planGenerating = false;
+        syncApproveButtons();
+        $('generated-plan').setAttribute('aria-busy', 'false');
+        $('btn-draft-question').textContent = 'Generate research plan';
       });
     });
     $('btn-edit-intent').addEventListener('click', function () { invalidateReview(); $('in-question').focus(); });
@@ -335,8 +344,8 @@
     { key: 'geo', label: 'Geography', ids: ['in-geo'], kind: 'text' },
     { key: 'window', label: 'Time window', ids: ['in-from', 'in-to'], kind: 'dates' },
     { key: 'output', label: 'Deliverable', ids: ['in-output'], kind: 'output' },
-    { key: 'topic', label: 'Threat topic', ids: ['in-topic'], kind: 'text', why: 'Drafted from your question, geography and exposure lenses.' },
-    { key: 'rationale', label: 'Why it matters to Vestas', ids: ['in-rationale'], kind: 'text', why: 'Drafted from your geography and exposure lenses.' }
+    { key: 'topic', label: 'Research topic', ids: ['in-topic'], kind: 'text', why: 'Derived from your thesis.' },
+    { key: 'rationale', label: 'Thesis connection', ids: ['in-rationale'], kind: 'text', why: 'Proposed by Copilot for your review.' }
   ];
   function isAssumed(row) { return Boolean(row.why) && !row.ids.some(function (id) { return state.dirty[id]; }); }
   function rowValue(row) {
@@ -612,11 +621,14 @@
         Object.keys(values).forEach(function (id) { $(id).value = values[id] || ''; });
         ['in-purpose', 'in-topic', 'in-rationale'].forEach(function (id) { state.dirty[id] = true; });
         syncDerivations();
-        $('scope-confirm').checked = false;
+        planSignature = '';
+        planQuestions = [];
+        $('generated-plan').hidden = true;
+        $('draft-question-status').textContent = 'Existing scope restored. Generate a plan to draft its questions and searches.';
         state.newMode = true;
         invalidateReview();
-        C.render(true);
-        $('in-generated-question').focus();
+        C.navigate('new');
+        $('in-question').focus();
       });
       add(q, resume);
     }

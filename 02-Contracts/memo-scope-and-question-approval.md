@@ -2,15 +2,19 @@
 
 Status: Active baseline
 Validated: 2026-09-01
-Implementation: `../app/src/modules/research/memo-scope.ts`, `../app/src/modules/research/research-question.ts`, `../app/src/modules/research/question-drafting.ts`, `../app/src/commands/approve-memo-scope.ts`, `../app/src/commands/prepare-research-question.ts`, `../app/src/commands/record-research-question-draft.ts`, `../app/src/commands/approve-research-question.ts`
+Implementation: `../app/src/modules/research/memo-scope.ts`, `../app/src/modules/research/research-question.ts`, `../app/src/modules/research/question-drafting.ts`, `../app/src/modules/research/research-plan.ts`, `../app/src/commands/research-plan.ts`, `../app/src/commands/approve-memo-scope.ts`, `../app/src/commands/prepare-research-question.ts`, `../app/src/commands/record-research-question-draft.ts`, `../app/src/commands/approve-research-question.ts`
 
 ## Controlling rule
 
 No new provider collection or discovery may run until a human has approved both the memo scope and the research question. Model output cannot create either approval.
 
-The mandatory order is:
+The mandatory approval order is:
 
 `proposed scope -> human scope approval -> proposed question -> human question approval -> provider operation`
+
+An unapproved planning preview may precede this order. The dashboard's **Generate research plan** action sends the proposed thesis and scope to the configured research-planning model and returns editable questions paired with proposed Seerist searches. It creates no analysis, scope approval, question approval, information requirement or provider operation. The human must still review and explicitly confirm the plan; the controller then executes the existing scope, question and requirement approval commands in order before optional collection.
+
+Planning previews use `research-plan-draft-request-v1` and `research-plan-draft-v1` artifacts under `<runs-root>/.research-plan-drafts/plan-<id>/`. The latter retains the proposed scope, central question/rationale, 3-6 questions each paired with 1-2 searches (at most 10 distinct searches total), ranking terms, and invocation ID. Pure TypeScript validation rejects malformed, extra, duplicate or unbounded output; it does not establish semantic alignment. These drafts are excluded from the analysis list and cannot be passed to provider commands as approvals. The UI invalidates a preview when its thesis or scope changes and ignores stale in-flight responses.
 
 ## Memo scope
 
@@ -26,7 +30,7 @@ Question drafting prepares a bounded AI request from the approved thesis and all
 
 Draft requests are stored under `runs/<runId>/research-question-drafts/<requestId>/`; captured responses produce a proposed JSON artifact under `runs/<runId>/research-question-drafts/<questionId>/`. Reviewers can edit that proposal before approval.
 
-The dashboard's **Approve scope and draft with Copilot** action persists explicit named-human scope approval before invoking the local SDK. Its shared Settings model applies to every automatic AI stage. A fresh, tool-disabled session returns the question and rationale; the existing recorder validates them into a proposal, never an approved question. The dashboard permits completion of a scope-approved run only when the submitted thesis and scope still match the approved artifact. Collection still requires separate question and information-requirement approval.
+The legacy **Approve scope and draft with Copilot** API persists explicit named-human scope approval before invoking the local SDK. The New page instead uses the draft-only preview above. Both resolve the research-planning stage override or shared Settings default. A fresh, tool-disabled session returns a proposal, never an approval. The dashboard permits completion of a scope-approved run only when the submitted thesis and scope still match the approved artifact. Collection still requires question and information-requirement approval.
 
 SDK drafts use `research-question-draft-copilot-sdk-response-v1` with an explicit `model` and `provider: "github-copilot-sdk"`. Legacy manual drafts retain `research-question-draft-copilot-response-v1` and unknown model identity. Relevance similarly uses `question-relevance-copilot-sdk-response-v1` to add explicit SDK provenance. Other AI-stage response envelopes already have provider/model fields; their validators accept either the exact legacy identity or an explicit SDK model ID. Existing prepared request metadata remains a legacy transport hint, not a claim about the response's execution. Recorded invocations take their identity from the validated response.
 
