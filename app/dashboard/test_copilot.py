@@ -293,6 +293,31 @@ class CopilotTests(unittest.TestCase):
         self.assertEqual(len(list(request.parent.glob("copilot-invocation-*.json"))), 1)
         self.assertFalse((request.parent / "copilot-recorded.json").exists())
 
+    def test_local_article_budget_is_shared_across_requests_and_consumed_on_invalid_output(self):
+        run = self.root / "article-budget"
+        capture_file = run / "article-captures" / "article-1" / "article-capture.json"
+        capture_file.parent.mkdir(parents=True)
+        capture_file.write_text(json.dumps({
+            "schemaVersion": "local-article-capture-v1", "id": "article-1",
+            "plan": {"maxModelCalls": 1},
+        }), encoding="utf-8")
+        with patch("dashboard.server.generate", return_value=invocation("not JSON")) as transport:
+            for index in range(2):
+                rel = f"sources/article-1/doc/question-relevance/request-{index}/question-relevance-request.json"
+                request = run / rel
+                request.parent.mkdir(parents=True)
+                request.write_text(json.dumps({
+                    "id": f"request-{index}", "sourceItemId": "article-1",
+                    "preparedAt": "2026-01-01T00:00:00.000Z",
+                    "sourceDocument": {"sourceKind": "retrieved-publisher", "sourceArtifactRef": str(capture_file)},
+                }), encoding="utf-8")
+                status, result = _handle_analyst_action(self.root, run, {
+                    "action": "run-ai-stage", "runId": run.name, "reviewerId": "analyst", "requestPath": rel,
+                })
+                self.assertEqual(status, 400 if index == 0 else 409, result)
+            self.assertEqual(transport.call_count, 1)
+            self.assertTrue((capture_file.parent / "relevance-attempt.json").is_file())
+
     def test_downstream_preparation_failure_does_not_repeat_a_recorded_generation(self):
         run = self.root / "chain-failed"
         rel = "synthesis/requests/b1/build-request.json"

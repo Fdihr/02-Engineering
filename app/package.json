@@ -2,6 +2,9 @@
   "name": "app",
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -36,11 +39,13 @@
     "run:next": "node --import tsx src/commands/run-next.ts",
     "review:evidence": "node --import tsx src/commands/review-evidence.ts",
     "start": "node dist/index.js",
-    "test": "node --import tsx --test src/commands/approve-memo-scope.test.ts src/commands/approve-research-question.test.ts src/commands/assurance-flow.test.ts src/commands/canonicalize-source.test.ts src/commands/collect-seerist.test.ts src/commands/discover-seerist.test.ts src/commands/exception-io.test.ts src/commands/intake-seerist.test.ts src/commands/key-judgement-flow.test.ts src/commands/local-copilot.test.ts src/commands/question-relevance-poc.test.ts src/commands/research-question-draft.test.ts src/commands/review-evidence.test.ts src/modules/assurance/assurance.test.ts src/modules/assurance/extract/checks.test.ts src/modules/assurance/locator.test.ts src/modules/assurance/pipeline.test.ts src/modules/collection/seerist-collection.test.ts src/modules/discovery/seerist-discovery.test.ts src/modules/discovery/source-tiers.test.ts src/modules/exceptions/exception-item.test.ts src/modules/memo/publication.test.ts src/modules/relevance/copilot-poc.test.ts src/modules/relevance/question-relevance.test.ts src/modules/reporting/evidence-decision-summary.test.ts src/modules/reporting/intake-summary.test.ts src/modules/reporting/source-retrieval-summary.test.ts src/modules/research/memo-scope.test.ts src/modules/research/question-drafting.test.ts src/modules/research/research-question.test.ts src/modules/routing/routing.test.ts src/modules/source/retrieved-source-adapter.test.ts src/modules/source/seerist-source-adapter.test.ts src/modules/source/source-document.test.ts src/modules/synthesis/build.test.ts src/modules/synthesis/key-judgement-stage.test.ts src/modules/synthesis/key-judgements.test.ts src/workflow/process-source.test.ts src/workflow/review-evidence.test.ts src/workflow/run-next.test.ts src/modules/collection/rss-capture.test.ts src/commands/rss.test.ts",
+    "test": "node --import tsx --test src/commands/approve-memo-scope.test.ts src/commands/approve-research-question.test.ts src/commands/assurance-flow.test.ts src/commands/canonicalize-source.test.ts src/commands/collect-seerist.test.ts src/commands/discover-seerist.test.ts src/commands/exception-io.test.ts src/commands/intake-seerist.test.ts src/commands/key-judgement-flow.test.ts src/commands/local-copilot.test.ts src/commands/question-relevance-poc.test.ts src/commands/research-question-draft.test.ts src/commands/review-evidence.test.ts src/modules/assurance/assurance.test.ts src/modules/assurance/extract/checks.test.ts src/modules/assurance/locator.test.ts src/modules/assurance/pipeline.test.ts src/modules/collection/seerist-collection.test.ts src/modules/discovery/seerist-discovery.test.ts src/modules/discovery/source-tiers.test.ts src/modules/exceptions/exception-item.test.ts src/modules/memo/publication.test.ts src/modules/relevance/copilot-poc.test.ts src/modules/relevance/question-relevance.test.ts src/modules/reporting/evidence-decision-summary.test.ts src/modules/reporting/intake-summary.test.ts src/modules/reporting/source-retrieval-summary.test.ts src/modules/research/memo-scope.test.ts src/modules/research/question-drafting.test.ts src/modules/research/research-question.test.ts src/modules/routing/routing.test.ts src/modules/source/retrieved-source-adapter.test.ts src/modules/source/seerist-source-adapter.test.ts src/modules/source/source-document.test.ts src/modules/synthesis/build.test.ts src/modules/synthesis/key-judgement-stage.test.ts src/modules/synthesis/key-judgements.test.ts src/workflow/process-source.test.ts src/workflow/review-evidence.test.ts src/workflow/run-next.test.ts src/modules/collection/rss-capture.test.ts src/commands/rss.test.ts src/commands/article.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "collect:rss": "node --import tsx src/commands/collect-rss.ts",
     "match:rss": "node --import tsx src/commands/match-rss.ts",
-    "rss:batch": "node --import tsx src/commands/rss-batch.ts"
+    "rss:batch": "node --import tsx src/commands/rss-batch.ts",
+    "collect:article": "node --import tsx src/commands/collect-article.ts",
+    "article:admit": "node --import tsx src/commands/admit-article.ts"
   },
   "keywords": [],
   "author": "",
@@ -48,10 +53,13 @@
   "description": "",
   "dependencies": {
     "@github/copilot-sdk": "1.0.28",
+    "@mozilla/readability": "0.6.0",
     "fast-xml-parser": "5.11.2",
-    "htmlparser2": "12.0.0"
+    "htmlparser2": "12.0.0",
+    "jsdom": "30.1.3"
   },
   "devDependencies": {
+    "@types/jsdom": "30.0.0",
     "@types/node": "^26.4.0",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"

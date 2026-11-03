@@ -14,12 +14,13 @@ Use this file as the index of active contracts. Historical retrieval contracts a
 8. [Human surfaces, policy admission, exceptions, and calibration](human-surfaces-and-calibration.md)
 9. [Bounded key-judgement selection](key-judgement-selection.md)
 10. [Bounded RSS capture and opt-in batch policy admission](rss-capture.md)
+11. [Local exact-URL article retrieval and one-source policy](local-article-retrieval.md)
 
 ## Retired acquisition contracts
 
 These describe historical artifacts only. Their retrieval and candidate
-conversion commands have been removed; collection leads wait for the planned
-RSS-connected source list. Question-relevance preparation and recording remain
+conversion commands have been removed; they are not the new local exact-URL
+adapter. Question-relevance preparation and recording remain
 implemented for canonical sources.
 
 1. [Source content retrieval](source-content-retrieval.md)

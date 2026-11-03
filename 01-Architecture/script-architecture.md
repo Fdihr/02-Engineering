@@ -110,7 +110,16 @@ Provider credentials and HTTP remain inaccessible until the research-intent gate
 
 Bounded discovery is sequential, capped by explicit query, page, call, and result limits, and preserves each raw page. It is not a general batch runner and does not automatically advance any candidate into intake.
 
-Publisher pages are not fetched. The first RSS adapter captures one explicitly
+Publisher pages are fetched only by the separately approved one-URL local
+adapter in `../02-Contracts/local-article-retrieval.md`. It reuses bounded public
+HTTPS transport and extracts with Readability plus a non-executing jsdom
+document. No scraping service, MCP, crawler or browser automation is involved.
+Its `local_article` identity, raw HTML and extraction checksums remain distinct
+from historical Firecrawl and RSS artifacts. It uses the same canonical source,
+relevance and source-assurance contracts. One exact-relevant-only policy binds
+each capture; source text cannot grant authority.
+
+The first RSS adapter captures one explicitly
 selected observed feed into immutable artifacts, preserves exact-URL lead-match
 receipts, and permits eligible feed-provided content to enter canonicalization
 and relevance proposals. It has no database or automatic polling. Collection

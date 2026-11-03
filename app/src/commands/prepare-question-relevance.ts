@@ -8,6 +8,8 @@ import { adaptRetrievedSourceContent } from "../modules/source/retrieved-source-
 import { adaptSeeristSourceContent } from "../modules/source/seerist-source-adapter.js";
 import { adaptRssSourceContent } from "../modules/source/rss-source-adapter.js";
 import { loadRssCapture } from "./rss-io.js";
+import { loadArticleCapture } from "./article-io.js";
+import { adaptArticleContent } from "../modules/collection/article-capture.js";
 import {
   createSourceDocument,
   validateSourceDocument
@@ -96,7 +98,11 @@ const main = async (): Promise<void> => {
     const nativeSource = nativeItem?.provider === "seerist";
     const rssSource = sourceDocument.value.sourceKind === "rss-feed"
       ? await loadRssCapture(runRoot, sourceArtifactPath) : null;
-    const captured = rssSource
+    const articleSource = isRecord(sourceArtifact) && sourceArtifact.schemaVersion === "local-article-capture-v1"
+      ? await loadArticleCapture(runRoot, sourceArtifactPath) : null;
+    const captured = articleSource
+      ? adaptArticleContent(articleSource.capture, articleSource.artifact.binding)
+      : rssSource
       ? adaptRssSourceContent(rssSource.capture, sourceItemId, rssSource.artifact.binding)
       : nativeSource
       ? await (async () => {
@@ -132,7 +138,9 @@ const main = async (): Promise<void> => {
     if (!reconstructed.ok || reconstructed.value.id !== sourceDocument.value.id) {
       throw new Error("Source document does not match its captured source artifact.");
     }
-    const sourceResearchQuestion = rssSource
+    const sourceResearchQuestion = articleSource
+      ? articleSource.capture.researchQuestion
+      : rssSource
       ? rssSource.capture.researchQuestion
       : nativeSource
       ? nativeItem.researchQuestion

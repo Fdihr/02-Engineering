@@ -180,7 +180,7 @@ const articleUrl = (value: unknown): string | null => {
     return null;
   }
 };
-const publicationDate = (raw: string | null): string | null => {
+export const publicationDate = (raw: string | null): string | null => {
   if (!raw) return null;
   const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/);
   const rfc = raw.match(/^(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), )?(\d{1,2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{2}|\d{4}) (\d{2}):(\d{2})(?::(\d{2}))? (?:GMT|UTC|[+-]\d{4})$/);

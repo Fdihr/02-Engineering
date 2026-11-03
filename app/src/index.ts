@@ -7,6 +7,8 @@ console.log(
     "npm run intake:seerist -- <raw-response.json> <item-id> <retrieved-at-ISO-8601> <approved-research-question.json> [run-id]",
     "npm run collect:rss -- <rss-plan.json> <rss-feed-catalogue.json> <approved-research-question.json>",
     "npm run match:rss -- <rss-capture.json> <seerist-intake-result.json>",
+    "npm run collect:article -- <approved-article-plan.json> <approved-question.json>",
+    "npm run article:admit -- <article-capture.json> <recorded-assessment.json>",
     "npm run canonicalize:source -- <source-artifact.json> [rss-item-id]",
     "npm run prepare:question-relevance -- <source-document.json>",
     "npm run record:question-relevance -- <question-relevance-request.json> <copilot-response.json>",

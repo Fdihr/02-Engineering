@@ -1,6 +1,19 @@
 # Implemented Workflow Baseline
 
-Status: Publisher-page retrieval and retrieved-source candidate conversion are retired. A bounded RSS capture adapter now reaches canonicalization and relevance proposals; existing collection leads remain pending until RSS candidate conversion is implemented. Panel 2 exercised provisional review and then completed a human rows-only support pass. Panel 3 now has a bounded key-judgement selection contract and writer v2 path; the reviewed Build request still needs a fresh response, Challenge, and performed adjudication before selection can run.
+Status: Historical Firecrawl retrieval is retired. Bounded RSS batches and a
+separate local exact-URL article adapter now reach canonicalization, relevance
+and explicitly governed relevant-only admission. Historical leads remain
+pending; neither adapter automatically resolves them. Panel 2 exercised
+provisional review and then completed a human rows-only support pass. Panel 3
+has a bounded key-judgement selection contract and writer v2 path; the reviewed
+Build request still needs a fresh response, Challenge, and performed adjudication.
+
+The local adapter uses Node HTTPS, Readability and a non-executing jsdom
+document. It needs no scraping service, MCP or key. Its one-source approval,
+network limits, immutable artifacts, trust boundary and separate source
+identity are defined in [the active contract](../02-Contracts/local-article-retrieval.md).
+Admission does not claim completed source assurance. RSS remains the first
+live-validated acquisition path; see persisted run receipts for actual outcomes.
 
 Human references below are either one of the four target surfaces (intent, publication, pushed exceptions, governance), compatibility history, or an interim stand-in named in `memo-workflow.md`. Per-source review and manual model transport are not additional permanent human surfaces.
 
@@ -8,13 +21,32 @@ Human references below are either one of the four target surfaces (intent, publi
 
 **Current implementation update (2026-11-02):** Firecrawl source retrieval and its Settings key
 management have been removed. Seerist collection leads now remain pending for the planned RSS-connected
-source list; no publisher page is fetched. Existing run artifacts and historical retrieval records are
+source list. A subsequent narrow local article adapter now permits explicitly
+approved exact-URL publisher fetches without restoring Firecrawl. Existing run artifacts and historical retrieval records are
 preserved. The sections below that describe Firecrawl retrieval or retrieved-source re-intake document
 the superseded implementation, not the current executable path.
 
 This implementation is the first narrow slice of a general Seerist-plus-OSINT memo tool. Cyber threat intelligence and the CIA Director test question validate the workflow; they do not constrain future memo subjects. The target includes every Seerist endpoint approved for organizational use plus bounded OSINT search, discovery, and retrieval.
 
-The current baseline does not claim that breadth yet. It implements bounded `/v1/wod` collection and discovery, one-shot capture of two observed RSS feeds, and canonicalization of captured provider or eligible feed content. Leads still route to `pending_rss`; RSS and native-content candidate conversion remain incremental work. New endpoints and search mechanisms must be added from observed responses through explicit role mapping, provenance-preserving adapters, and focused tests. The downstream question, evidence, source-assurance, synthesis, and memo contracts remain domain-neutral unless a selected memo profile adds stricter requirements.
+The current baseline does not claim that breadth yet. It implements bounded
+`/v1/wod` collection and discovery, one-shot capture of two observed RSS feeds,
+local exact-URL HTML retrieval, and canonicalization of captured content.
+Explicitly approved RSS batches and one-source article plans can admit exact
+`relevant` content after deterministic reconstruction. Native Seerist candidate
+conversion remains incremental work; historical leads still route to
+`pending_rss`. New endpoints and search mechanisms must be added from observed
+responses through explicit role mapping, provenance-preserving adapters, and
+focused tests. Downstream contracts remain domain-neutral unless a selected
+memo profile adds stricter requirements.
+
+The first live local article test captured the selected Kyiv Post page in one
+retrieval operation. Its naive HTML date was retained as unknown, then resolved
+from an explicit-zone JSON-LD publication date in a separate extraction receipt
+without refetching. One Copilot relevance call produced three validated quote
+anchors and `partially-relevant`, so the relevant-only policy produced an
+exception, not an admitted snapshot or completed assurance. This proves live
+retrieval/relevance and the negative gate; live positive admission remains
+unproven. Synthetic tests cover positive admission and source-assurance loading.
 
 The canonical target architecture in `memo-workflow.md` is not a fixed implementation contract. This completed slice remains the implementation baseline until a subsequent slice is accepted.
 

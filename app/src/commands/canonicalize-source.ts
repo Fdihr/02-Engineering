@@ -6,6 +6,8 @@ import { adaptSeeristSourceContent } from "../modules/source/seerist-source-adap
 import { createSourceDocument } from "../modules/source/source-document.js";
 import { adaptRssSourceContent } from "../modules/source/rss-source-adapter.js";
 import { loadRssCapture } from "./rss-io.js";
+import { loadArticleCapture } from "./article-io.js";
+import { adaptArticleContent } from "../modules/collection/article-capture.js";
 
 const usage =
   "Usage: npm run canonicalize:source -- <source-artifact.json> [rss-item-id]";
@@ -65,6 +67,11 @@ const main = async (): Promise<void> => {
           (await loadRssCapture(runRoot, sourceArtifactPath)).capture,
           rssItemId, { artifactRef: sourceArtifactRef, artifactSha256: sourceArtifactSha256 }
         )
+      : isRecord(sourceArtifact) && sourceArtifact.schemaVersion === "local-article-capture-v1"
+      ? await (async () => {
+          const verified = await loadArticleCapture(runRoot, sourceArtifactPath);
+          return adaptArticleContent(verified.capture, verified.artifact.binding);
+        })()
       : nativeItem?.provider === "seerist"
       ? await (async () => {
           const rawArtifactRef = nonEmptyString(nativeItem.rawArtifactRef);

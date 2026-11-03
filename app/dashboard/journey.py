@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from typing import Any
+from urllib.parse import urlsplit
 
 from .evidence_workspace import build_evidence_workspace
 PHASES = (
@@ -471,6 +472,24 @@ def _source_rows(
             "at": _txt(value.get("attemptedAt")),
         }
     relevance_by_retrieval: dict[str, dict[str, Any]] = {}
+    for rel, value in full.items():
+        if _rec(value).get("schemaVersion") != "local-article-capture-v1":
+            continue
+        response = _rec(value.get("response"))
+        article_id = _txt(value.get("id"))
+        version = _txt(value.get("extractionVersion"))
+        if article_id in retrievals and retrievals[article_id].get("extractionVersion", "") > version:
+            continue
+        url = _txt(response.get("finalUrl"))
+        retrievals[article_id] = {
+            "id": article_id, "relPath": rel, "leadId": "",
+            "outcome": "resolved" if value.get("timeStatus") == "in-window" else "unresolved",
+            "reason": "" if value.get("timeStatus") == "in-window" else "publication_date_unknown_or_outside_window",
+            "title": _txt(value.get("title")), "url": url,
+            "publisher": urlsplit(url).hostname or "", "at": _txt(response.get("receivedAt")),
+            "extractionVersion": version,
+            "admissionOutcome": _rec(full.get(f"article-admissions/{article_id}/article-admission-result.json")).get("outcome"),
+        }
     for item in relevance_queue:
         previous = relevance_by_retrieval.get(item["sourceItemId"])
         if previous is None or (item["status"] == "assessed" and previous["status"] != "assessed"):
@@ -480,7 +499,8 @@ def _source_rows(
     lead_of_candidate: dict[str, str] = {}
     for candidate in evidence_review:
         lineage = _rec(_rec(_rec(full.get(candidate["relPath"])).get("item")).get("retrievalLineage"))
-        retrieval_id = _txt(lineage.get("retrievalId"))
+        item = _rec(_rec(full.get(candidate["relPath"])).get("item"))
+        retrieval_id = _txt(item.get("providerItemId")) if item.get("provider") == "local_article" else _txt(lineage.get("retrievalId"))
         lead_of_candidate[candidate["candidateId"]] = _txt(lineage.get("sourceLeadProviderItemId"))
         if retrieval_id and retrieval_id in retrievals:
             candidate_by_retrieval[retrieval_id] = candidate
@@ -623,6 +643,9 @@ def _row(
             snapshot_id = snapshot_by_candidate.get(candidate["candidateId"], "") or decision.get("snapshotId", "")
         else:
             steps.append(_step("admit", "Admitted", "closed", f"{_humanise(decision['outcome']).capitalize()} by {decision['reviewerId'] or 'analyst'}"))
+    elif retrieval and retrieval.get("admissionOutcome") in ("exception", "not-relevant"):
+        detail = "Not admitted; relevance exception requires a decision" if retrieval["admissionOutcome"] == "exception" else "Excluded by relevance policy"
+        steps.append(_step("admit", "Admitted", "closed", detail))
     elif relevance and relevance["status"] == "assessed" and relevance["verdict"] in ("relevant", "partially-relevant"):
         steps.append(_step("admit", "Admitted", "failed", "Evidence candidate was not created"))
     else:

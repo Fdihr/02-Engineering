@@ -15,6 +15,42 @@ def file_entry(rel_path, size=100):
 
 
 class ModelTests(unittest.TestCase):
+    def test_local_article_capture_projects_once_and_does_not_invent_admission(self):
+        from dashboard.journey import _source_rows
+        path = "article-captures/article-1/article-capture.json"
+        capture = {
+            "schemaVersion": "local-article-capture-v1", "id": "article-1",
+            "title": "Polish factory source", "timeStatus": "in-window",
+            "response": {"finalUrl": "https://publisher.org/article", "receivedAt": "2026-11-03T10:00:00Z"},
+        }
+        relevance = {"sourceItemId": "article-1", "status": "assessed", "verdict": "relevant", "assessmentPath": "assessment.json"}
+        rows = _source_rows({path: capture}, {}, [], [relevance], [], [], {}, None)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["title"], "Polish factory source")
+        self.assertTrue(rows[0]["retrieved"])
+        self.assertFalse(rows[0]["snapshotId"])
+        self.assertNotEqual(next(step for step in rows[0]["steps"] if step["key"] == "admit")["state"], "done")
+        previous = {**capture, "timeStatus": "unknown", "extractionVersion": "readability-0.6.0-jsdom-30.1.3-v1"}
+        revised = {**capture, "extractionVersion": "readability-0.6.0-jsdom-30.1.3-v2"}
+        full = {
+            "article-captures/article-1/article-capture-v2.json": revised, path: previous,
+            "article-admissions/article-1/article-admission-result.json": {"outcome": "exception"},
+        }
+        rows = _source_rows(full, {}, [], [{**relevance, "verdict": "partially-relevant"}], [], [], {}, None)
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["retrieved"])
+        self.assertEqual(next(step for step in rows[0]["steps"] if step["key"] == "admit")["state"], "closed")
+        intake = "source-reintakes/article-1/intake-result.json"
+        candidate = {
+            "candidateId": "article-1", "relPath": intake, "title": capture["title"], "publisher": "publisher.org",
+            "url": "https://publisher.org/article", "verdict": "relevant",
+            "decision": {"outcome": "approved", "reviewerId": "controller:local-article-plan-v1:article-1", "snapshotId": "snapshot-article-1"},
+        }
+        full = {path: capture, intake: {"item": {"provider": "local_article", "providerItemId": "article-1"}}}
+        rows = _source_rows(full, {}, [candidate], [relevance], [], [], {}, None)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["snapshotId"], "snapshot-article-1")
+
     def test_empty_run_shows_pending_stages_without_publication_claim(self):
         view = build_run_view("empty", [], [], [], "2026-10-26T00:00:00Z")
         self.assertEqual(len(view["panel1"]["stages"]), 6)
