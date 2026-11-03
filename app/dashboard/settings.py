@@ -182,7 +182,7 @@ def check_connection(name: str, env: Mapping[str, str], *, opener: Callable[...,
 def runs_folder_info(runs_root: Path) -> dict[str, Any]:
     root = Path(runs_root)
     try:
-        analyses = sum(1 for child in root.iterdir() if child.is_dir())
+        analyses = sum(1 for child in root.iterdir() if not child.name.startswith(".") and child.is_dir())
     except OSError:
         analyses = 0
     return {"path": str(root.resolve()), "analyses": analyses, "writable": os.access(root, os.W_OK)}

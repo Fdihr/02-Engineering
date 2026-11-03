@@ -8,6 +8,7 @@ import re
 from collections import defaultdict
 from typing import Any
 
+from .evidence_workspace import build_evidence_workspace
 PHASES = (
     ("frame", "Frame"),
     ("collect", "Collect"),
@@ -322,7 +323,7 @@ def _rounds(run_id: str, full: dict[str, Any], adjudications: list[dict[str, Any
             "reviewStatus": _txt(record.get("reviewStatus")),
             "limitedEvidence": record.get("limitedEvidence") is True,
             "noteIds": [str(n) for n in _arr(synthesis.get("sourceNoteIds"))],
-            "coverage": [{"irId": _txt(_rec(c).get("irId")), "disposition": _txt(_rec(c).get("disposition"))} for c in _arr(synthesis.get("questionCoverage"))],
+            "coverage": [_coverage_entry(c) for c in _arr(synthesis.get("questionCoverage"))],
             "gaps": [str(g) for g in _arr(synthesis.get("intelligenceGaps"))],
             "claims": claims,
             "challengeRecordPath": challenge_rel,
@@ -577,7 +578,8 @@ def _row(
     elif relevance:
         steps.append(_step("relevance", "Relevance", "ai", "Waiting for the AI relevance check", {"kind": "relevance", "item": relevance}))
     elif candidate:
-        steps.append(_step("relevance", "Relevance", "done", _humanise(candidate["verdict"]).capitalize()))
+        candidate_positive = candidate["verdict"] in ("relevant", "partially-relevant")
+        steps.append(_step("relevance", "Relevance", "done" if candidate_positive else "closed", _humanise(candidate["verdict"]).capitalize()))
     else:
         steps.append(_step("relevance", "Relevance", "failed", "Relevance check was not prepared"))
 
@@ -657,6 +659,25 @@ def _row(
         "action": current["action"] if state in ("action", "failed", "ready", "provisional") else None,
         "artifacts": artifacts,
     }
+
+
+def _coverage_entry(raw: Any) -> dict[str, Any]:
+    entry = _rec(raw)
+    return {
+        "irId": _txt(entry.get("irId")),
+        "disposition": _txt(entry.get("disposition")),
+        "sourceNoteIds": [str(n) for n in _arr(entry.get("sourceNoteIds"))] if "sourceNoteIds" in entry else None,
+        "observationIds": [str(o) for o in _arr(entry.get("observationIds"))] if "observationIds" in entry else None,
+    }
+
+
+def _requirement_coverage(coverage: list[dict[str, Any]], irid: str) -> dict[str, Any]:
+    """Typed coverage disposition for one requirement, with persisted note/observation links only."""
+    entry = next((c for c in coverage if c.get("irId") == irid), None)
+    if entry is None:
+        return {"coverage": "", "sourceNoteIds": None, "observationIds": None}
+    return {"coverage": entry.get("disposition", ""), "sourceNoteIds": entry.get("sourceNoteIds"),
+            "observationIds": entry.get("observationIds")}
 
 
 def _queue_item(phase: str, actor: str, title: str, detail: str, target: dict[str, Any], weight: int = 0) -> dict[str, Any]:
@@ -808,7 +829,7 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> d
             summary = (f"Draft from round {memo['roundIndex']} · " + ("blocked from publication" if memo["blockers"] else "publishable")) if memo else ""
         phases.append({"key": key, "label": label, "state": state, "summary": summary, "waiting": counts})
 
-    return {
+    result = {
         "phases": phases,
         "queue": queue,
         "suggestions": suggestions,
@@ -818,7 +839,7 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> d
             "question": approved_question,
             "draftQuestion": next((q for q in reversed(panel1.get("questions", [])) if q.get("status") == "proposed"), None),
             "requirements": [
-                {"irId": irid, "text": text, "coverage": next((c["disposition"] for c in (current_round or {}).get("coverage", []) if c["irId"] == irid), "")}
+                {"irId": irid, "text": text, **_requirement_coverage((current_round or {}).get("coverage", []), irid)}
                 for irid, text in requirement_text.items()
             ],
             "discoveries": discoveries,
@@ -833,3 +854,5 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> d
         "memo": memo,
         "notes": {k: {f: n[f] for f in ("title", "publisher", "url", "reviewStatus", "snapshotId")} for k, n in notes.items()},
     }
+    result["evidenceWorkspace"] = build_evidence_workspace(result, parts)
+    return result

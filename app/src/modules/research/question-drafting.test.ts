@@ -6,6 +6,7 @@ import {
   recordResearchQuestionDraft,
   RESEARCH_QUESTION_DRAFT_RESPONSE_SCHEMA_VERSION
 } from "./question-drafting.js";
+import { researchPlanPrompt, validateResearchPlan } from "./research-plan.js";
 
 const scope: ApprovedMemoScope = {
   id: "scope-1",
@@ -144,4 +145,67 @@ test("SDK question drafting retains model identity and cannot approve its own pr
     assert.equal(recorded.value.proposal.status, "proposed");
     assert.equal(recorded.value.proposal.researchThesis, scope.researchThesis?.value);
   }
+});
+
+const planScope = {
+  researchThesis: "Supplier disruption poses more risk than direct attacks.",
+  audience: "Leadership", geographies: ["Europe"],
+  from: "2026-09-01", to: "2026-11-01", requestedOutput: "memo"
+};
+const researchPlan = {
+  question: "Do supplier incidents disrupt production more than direct attacks?",
+  rationale: "Compare evidence for and against the thesis.",
+  questions: [
+    { question: "Which supplier incidents disrupted production?", rationale: "Tests supplier disruption.", searches: ["supplier disruption"] },
+    { question: "Which direct attacks disrupted production?", rationale: "Tests the competing pathway.", searches: ["manufacturing cyberattack"] },
+    { question: "Which evidence contradicts greater supplier risk?", rationale: "Looks for disconfirming evidence.", searches: ["production resilience"] }
+  ],
+  rankingTerms: ["supplier", "production", "disruption"]
+};
+
+test("draft plan prompt uses the exact thesis and scope without assuming approval or evidence", () => {
+  const prompt = researchPlanPrompt(planScope);
+  assert.equal(prompt.ok, true);
+  if (!prompt.ok) return;
+  assert.deepEqual(JSON.parse(prompt.value.user).scope, planScope);
+  assert.match(prompt.value.system, /Every research question must directly test part of this thesis/);
+  assert.match(prompt.value.system, /supporting AND contradictory evidence/);
+  assert.match(prompt.value.system, /never approval or collection/);
+  assert.match(prompt.value.system, /Do not add company, cyber, or Vestas assumptions/);
+  assert.equal(researchPlanPrompt({ ...planScope, researchThesis: "First line\nSecond line" }).ok, true);
+  for (const invalid of [{ ...planScope, researchThesis: "" }, { ...planScope, geographies: [] },
+    { ...planScope, from: "invalid" }, { ...planScope, from: "2027-01-01" },
+    { ...planScope, audience: "" }, { ...planScope, requestedOutput: "unknown" }]) {
+    assert.deepEqual(researchPlanPrompt(invalid), { ok: false, error: "INVALID_RESEARCH_PLAN_SCOPE" });
+  }
+});
+
+test("research plan preserves every question-to-search connection without granting authority", () => {
+  assert.deepEqual(validateResearchPlan(researchPlan), { ok: true, value: researchPlan });
+  const result = validateResearchPlan({ ...researchPlan, approved: true });
+  assert.deepEqual(result, { ok: false, error: "INVALID_RESEARCH_PLAN" });
+});
+
+test("research plan rejects malformed, duplicated or unbounded model output", () => {
+  const withFirst = (first: unknown) => ({ ...researchPlan, questions: [first, ...researchPlan.questions.slice(1)] });
+  for (const invalid of [null, {}, { ...researchPlan, questions: [] },
+    { ...researchPlan, questions: [...researchPlan.questions, ...researchPlan.questions] },
+    withFirst({ ...researchPlan.questions[0], question: "x".repeat(401) }),
+    withFirst({ ...researchPlan.questions[0], question: "first\nsecond" }),
+    withFirst({ ...researchPlan.questions[0], rationale: "" }),
+    withFirst({ ...researchPlan.questions[0], searches: [] }),
+    withFirst({ ...researchPlan.questions[0], searches: ["foo AND bar"] }),
+    withFirst({ ...researchPlan.questions[0], searches: ["sources:news"] }),
+    withFirst({ ...researchPlan.questions[0], searches: ["one two three four five six seven"] }),
+    withFirst({ ...researchPlan.questions[0], searches: ["manufacturing cyberattack"] }),
+    { ...researchPlan, rankingTerms: ["supplier", "supplier", "production"] },
+    { ...researchPlan, rankingTerms: ["supplier"] },
+    { ...researchPlan, rankingTerms: ["a", "b", "c".repeat(81)] }
+  ]) {
+    assert.deepEqual(validateResearchPlan(invalid), { ok: false, error: "INVALID_RESEARCH_PLAN" });
+  }
+  const many = Array.from({ length: 6 }, (_, index) => ({
+    question: "Question " + index, rationale: "Thesis link", searches: ["first " + index, "second " + index]
+  }));
+  assert.equal(validateResearchPlan({ ...researchPlan, questions: many }).ok, false);
 });

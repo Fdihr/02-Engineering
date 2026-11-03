@@ -48,48 +48,11 @@
 
   /* ================= Brief ================= */
   var SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
-  var LENS_CONFIG = {
-    ot: {
-      label: 'wind farm OT/SCADA and grid interconnections',
-      ir: 'Which state-linked or criminal actors conducted cyber intrusions, pre-positioning, or disruptive operations against energy, wind, grid, or OT/ICS infrastructure in the scoped geography?',
-      queries: ['power grid cyberattack', 'energy infrastructure cyberattack'],
-      terms: ['energy', 'power grid', 'electricity', 'wind', 'renewable', 'scada', 'operational technology', 'ics', 'substation', 'utility', 'state-sponsored']
-    },
-    mfg: {
-      label: 'manufacturing and turbine assembly operations',
-      ir: 'Which ransomware or extortion campaigns disrupted industrial manufacturing, engineering, or production operations in the scoped geography, and what changed in their targeting?',
-      queries: ['ransomware manufacturing', 'ransomware energy company'],
-      terms: ['ransomware', 'extortion', 'manufactur', 'industrial', 'production', 'factory', 'plant', 'disrupt', 'outage']
-    },
-    supply: {
-      label: 'tier-1 industrial, OT vendor, and software supply chain',
-      ir: 'Which software, firmware, or vendor supply-chain compromises affected industrial, energy, or enterprise environments relevant to Vestas suppliers and remote service access?',
-      queries: ['supply chain cyberattack', 'critical vulnerability industrial'],
-      terms: ['supply chain', 'vendor', 'firmware', 'remote access', 'backdoor', 'malicious package', 'vulnerability', 'exploit']
-    },
-    hybrid: {
-      label: 'hybrid sabotage, maritime, and logistics corridors',
-      ir: 'What geopolitical developments, hybrid sabotage incidents, or physical-cyber disruptions affected subsea infrastructure, ports, energy corridors, or logistics routes?',
-      queries: ['sabotage critical infrastructure', 'hybrid attack Europe'],
-      terms: ['sabotage', 'hybrid', 'subsea', 'cable', 'pipeline', 'port', 'maritime', 'rail', 'infrastructure', 'russian']
-    }
-  };
-  var PRESETS = {
-    europe: {
-      slug: 'europe-cyber-geopol', geo: 'Europe', lenses: ['ot', 'mfg', 'supply', 'hybrid'],
-      question: 'Assess European cyber and geopolitical activity over the last two months—specifically state-linked OT/energy targeting, industrial ransomware, and hybrid infrastructure sabotage—and determine what operational or supply-chain exposure this creates for Vestas.'
-    },
-    ransomware: {
-      slug: 'europe-mfg-ransomware', geo: 'Europe, Germany, Denmark, Poland', lenses: ['mfg', 'supply'],
-      question: 'Which ransomware and extortion groups disrupted European industrial manufacturing and OT vendor operations over the last two months, and what is the exposure to Vestas turbine production and Tier-1 suppliers?'
-    },
-    baltic: {
-      slug: 'nordic-baltic-hybrid', geo: 'Europe, Baltic, Nordic, Poland, Germany', lenses: ['ot', 'hybrid'],
-      question: 'Assess hybrid sabotage, state-linked cyber pre-positioning, and maritime/subsea infrastructure threats in the Nordic and Baltic region over the last two months and their impact on Vestas offshore and grid operations.'
-    }
-  };
   var GENERATED = ['in-irs', 'in-disc-queries', 'in-disc-terms', 'in-purpose', 'in-topic', 'in-rationale'];
   var scopedRunId = '';
+  var planQuestions = [];
+  var planSignature = '';
+  var planGenerating = false;
   function $(id) { return document.getElementById(id); }
   function isoDate(date) {
     var pad = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -124,47 +87,66 @@
     $('in-run-id').classList.toggle('invalid', Boolean(problem));
     return !problem;
   }
-  function checkedLenses() {
-    var list = [];
-    document.querySelectorAll('.vestas-lens:checked').forEach(function (cb) { if (LENS_CONFIG[cb.value]) list.push(LENS_CONFIG[cb.value]); });
-    return list;
-  }
   function syncDerivations() {
     var thesis = $('in-question').value.trim();
-    var geo = $('in-geo').value.trim() || 'Europe';
-    var lenses = checkedLenses();
-    var irs = lenses.map(function (l) { return l.ir; });
-    irs.push('What concrete operational, OT/SCADA, manufacturing, or supply-chain exposure pathways connect these findings to Vestas in ' + geo + '?');
-    var queries = [];
-    lenses.forEach(function (l) { l.queries.forEach(function (q) { queries.push(q); }); });
-    if (!queries.length) queries.push('cyberattack Europe');
-    var terms = ['cyberattack', 'cyber', 'vestas'];
-    geo.split(',').forEach(function (g) { var c = g.trim().toLowerCase(); if (c && terms.indexOf(c) < 0) terms.push(c); });
-    lenses.forEach(function (l) { l.terms.forEach(function (t) { if (terms.indexOf(t) < 0) terms.push(t); }); });
-    var labels = lenses.map(function (l) { return l.label; });
-    var values = {
-      'in-irs': irs.join('\n'),
-      'in-disc-queries': queries.join('\n'),
-      'in-disc-terms': terms.join(', '),
-      'in-purpose': thesis.slice(0, 220) || ('Assess cyber and geopolitical activity in ' + geo + ' and implications for Vestas.'),
-      'in-topic': 'Cyber and geopolitical activity in ' + geo + (labels.length ? ' affecting ' + labels.join(', ') : '') + '.',
-      'in-rationale': 'Grounded assessment of ' + geo + ' threat activity mapped against Vestas ' + (labels.join(', ') || 'operational footprint') + '.'
-    };
-    GENERATED.forEach(function (id) { if (!state.dirty[id]) $(id).value = values[id]; });
+    if (!scopedRunId) {
+      if (!state.dirty['in-purpose']) $('in-purpose').value = thesis;
+      if (!state.dirty['in-topic']) $('in-topic').value = thesis.slice(0, 400);
+    }
+    $('plan-scope-summary').textContent = [$('in-geo').value, $('in-from').value + ' to ' + $('in-to').value, $('in-output').selectedOptions[0].textContent].join(' · ');
   }
-  function applyPreset(name) {
-    var preset = PRESETS[name];
-    scopedRunId = '';
-    $('in-generated-question').value = '';
-    $('scope-confirm').checked = false;
-    $('draft-question-status').textContent = '';
-    $('in-question').value = preset.question;
-    $('in-geo').value = preset.geo;
-    document.querySelectorAll('.vestas-lens').forEach(function (cb) { cb.checked = preset.lenses.indexOf(cb.value) >= 0; });
-    state.dirty = {};
+  function scopeSignature() {
+    var p = intentPayload(false);
+    return JSON.stringify([p.researchThesis.trim(), p.audience, p.geographies, p.from, p.to, p.requestedOutput]);
+  }
+  function invalidateGeneratedPlan() {
     syncDerivations();
-    suggestRunId(preset.slug);
+    if (planSignature && scopeSignature() !== planSignature) {
+      $('generated-plan').hidden = true;
+      $('draft-question-status').textContent = 'Thesis or scope changed. Generate a new plan to match.';
+      $('btn-draft-question').textContent = 'Generate research plan';
+    } else if (planSignature) {
+      $('generated-plan').hidden = false;
+    }
     invalidateReview();
+  }
+  function syncPlanFields() {
+    $('in-irs').value = planQuestions.map(function (item) { return item.question; }).join('\n');
+    $('in-disc-queries').value = planQuestions.reduce(function (all, item) { return all.concat(item.searches); }, []).join('\n');
+    invalidateReview();
+  }
+  function renderPlanQuestions() {
+    var host = $('generated-plan-questions');
+    C.clear(host);
+    planQuestions.forEach(function (item, index) {
+      var row = el('li', 'plan-question');
+      var question = el('div', 'field');
+      var questionId = 'plan-question-' + index;
+      var label = el('label', null, 'Research question ' + (index + 1));
+      label.htmlFor = questionId;
+      var input = el('textarea');
+      input.id = questionId;
+      input.rows = 2;
+      input.maxLength = 400;
+      input.value = item.question;
+      input.addEventListener('input', function () { item.question = input.value; syncPlanFields(); });
+      var why = el('details', 'plan-reason');
+      add(why, el('summary', null, 'Connection to your thesis'), el('p', 'meta plan-connection', item.rationale));
+      add(question, label, input, why);
+      var searches = el('div', 'field plan-searches');
+      searches.appendChild(el('span', 'label', 'Proposed Seerist searches'));
+      item.searches.forEach(function (search, searchIndex) {
+        var searchInput = el('input');
+        searchInput.type = 'text';
+        searchInput.maxLength = 120;
+        searchInput.value = search;
+        searchInput.setAttribute('aria-label', 'Research question ' + (index + 1) + ', Seerist search ' + (searchIndex + 1));
+        searchInput.addEventListener('input', function () { item.searches[searchIndex] = searchInput.value; syncPlanFields(); });
+        searches.appendChild(searchInput);
+      });
+      add(row, question, searches);
+      host.appendChild(row);
+    });
   }
   function intentPayload(runDiscovery) {
     return {
@@ -196,7 +178,8 @@
     syncApproveButtons();
   }
   function syncApproveButtons() {
-    var enabled = $('approve-confirm').checked && !state.busy && Boolean(C.analyst());
+    var enabled = $('approve-confirm').checked && !state.busy && !planGenerating && Boolean(C.analyst()) &&
+      (!planSignature || scopeSignature() === planSignature) && !planEditProblems().length;
     $('btn-approve-collect').disabled = !enabled;
     $('btn-approve-only').disabled = !enabled;
   }
@@ -205,6 +188,8 @@
     var irs = lines(p.requirements);
     var problems = [];
     if (!C.analyst()) problems.push('Enter your analyst ID in the top bar.');
+    if (planSignature && scopeSignature() !== planSignature) problems.push('The thesis or scope changed. Generate a new research plan.');
+    problems = problems.concat(planEditProblems());
     if (!p.question.trim()) problems.push('Write the question.');
     if (!validateRunId()) problems.push('Fix the analysis ID.');
     if (!p.from || !p.to || p.from > p.to) problems.push('Set a valid time window.');
@@ -212,24 +197,24 @@
     if (!p.purpose.trim() || !p.threatTopic.trim() || !p.rationale.trim()) problems.push('Complete the purpose, threat topic and why it matters.');
     return problems;
   }
+  function planEditProblems() {
+    if (!planQuestions.length) return [];
+    var searches = planQuestions.reduce(function (all, item) { return all.concat(item.searches); }, []);
+    var invalid = planQuestions.some(function (item) { return !item.question.trim() || /[\r\n]/.test(item.question); }) ||
+      searches.some(function (search) { return !search.trim() || /[\r\n"“”|():=]|\b(?:AND|OR|NOT)\b/.test(search) || search.trim().split(/\s+/).length > 6; });
+    if (invalid) return ['Fill each question and search. Use short search terms without Boolean operators or filters.'];
+    if (searches.length > 10 || new Set(searches.map(function (search) { return search.trim().toLowerCase(); })).size !== searches.length) return ['Use at most 10 distinct Seerist searches.'];
+    return [];
+  }
   function irList() { var text = $('in-irs').value; return text ? text.split(/\r?\n/) : []; }
   function setIrs(list) { $('in-irs').value = list.join('\n'); state.dirty['in-irs'] = true; invalidateReview(); }
-
-  function propose() {
-    if (!$('in-question').value.trim()) return;
-    if (!$('in-from').value || !$('in-to').value) setWindow(60);
-    if (!$('in-run-id').value.trim()) suggestRunId('analysis');
-    syncDerivations();
-    draftEdit = { row: '', ir: -1, plan: false };
-    invalidateReview();
-    state.draft = true;
-    C.navigate('intent');
-  }
 
   function reviewIntent() {
     var p = intentPayload(true);
     var irs = lines(p.requirements);
     var problems = [];
+    problems = problems.concat(planEditProblems());
+    if (planSignature && scopeSignature() !== planSignature) problems.push('The thesis or scope changed. Generate a new research plan.');
     if (!C.analyst()) problems.push('Enter your analyst ID in the top bar.');
     if (!p.researchThesis.trim()) problems.push('Write the research thesis.');
     if (!p.question.trim()) problems.push('Write the question.');
@@ -259,6 +244,8 @@
     $('approval-review').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   function approve(runDiscovery) {
+    if (state.busy || planGenerating || intentProblems().length ||
+        !(state.route === 'new' ? $('approve-confirm').checked : state.drafts['intent:confirm'])) return;
     var payload = intentPayload(runDiscovery);
     C.postAction(payload, runDiscovery ? 'Approving and collecting leads' : 'Approving the analysis').then(function (data) {
       if (!data || !data.ok) return;
@@ -268,55 +255,77 @@
       $('in-question').value = '';
       $('in-generated-question').value = '';
       scopedRunId = '';
+      planSignature = '';
+      planQuestions = [];
+      $('generated-plan').hidden = true;
       C.switchRun(data.runId || payload.runId);
       C.go(runDiscovery ? { tab: 'sources', focus: 'leads' } : { tab: 'brief' });
     });
   }
   C.startNew = function () {
-    if (!$('in-question').value.trim()) applyPreset('europe');
     if (!$('in-to').value) setWindow(60);
     if (!$('in-run-id').value.trim()) suggestRunId('analysis');
     validateRunId();
+    syncDerivations();
     $('in-question').focus();
   };
   C.initBrief = function () {
     setWindow(60);
-    document.querySelectorAll('[data-preset]').forEach(function (b) { b.addEventListener('click', function () { applyPreset(b.getAttribute('data-preset')); }); });
-    document.querySelectorAll('[data-window-days]').forEach(function (b) { b.addEventListener('click', function () { setWindow(Number(b.getAttribute('data-window-days'))); invalidateReview(); }); });
+    document.querySelectorAll('[data-window-days]').forEach(function (b) { b.addEventListener('click', function () { setWindow(Number(b.getAttribute('data-window-days'))); invalidateGeneratedPlan(); }); });
     GENERATED.forEach(function (id) { $(id).addEventListener('input', function () { state.dirty[id] = true; }); });
-    $('in-question').addEventListener('input', syncDerivations);
-    $('in-geo').addEventListener('input', syncDerivations);
-    document.querySelectorAll('.vestas-lens').forEach(function (cb) { cb.addEventListener('change', syncDerivations); });
+    ['in-question', 'in-geo', 'in-audience', 'in-from', 'in-to', 'in-output'].forEach(function (id) {
+      $(id).addEventListener('input', invalidateGeneratedPlan);
+      $(id).addEventListener('change', invalidateGeneratedPlan);
+    });
     $('in-run-id').addEventListener('input', validateRunId);
     $('brief-new').addEventListener('input', function (e) { if (e.target.id !== 'approve-confirm') invalidateReview(); });
     $('brief-new').addEventListener('change', function (e) { if (e.target.id !== 'approve-confirm') invalidateReview(); });
     $('btn-review-intent').addEventListener('click', reviewIntent);
     $('btn-draft-question').classList.add('act');
-    $('btn-draft-question').setAttribute('data-needs-analyst', '1');
     $('btn-draft-question').addEventListener('click', function () {
+      if (planGenerating || state.busy) return;
+      syncDerivations();
       var payload = intentPayload(false);
       if (!validateRunId()) return;
-      if (!$('scope-confirm').checked) {
-        $('draft-question-status').textContent = 'Confirm the thesis and scope before drafting.';
-        $('scope-confirm').focus();
+      if (!payload.researchThesis.trim() || !payload.geographies.trim() || !payload.audience.trim() || !payload.from || !payload.to || payload.from > payload.to) {
+        $('draft-question-status').textContent = 'Enter a thesis and check the geography, audience and dates under Refine scope.';
+        $('in-question').focus();
         return;
       }
-      payload.action = 'draft-research-question';
-      payload.scopeConfirmed = true;
-      // Remember the in-progress run even if generation fails after scope approval.
-      scopedRunId = payload.runId;
-      $('draft-question-status').textContent = 'Approving scope, then drafting with local Copilot...';
-      C.postAction(payload, 'Drafting the research question').then(function (data) {
+      var signature = scopeSignature();
+      payload.action = 'generate-research-plan';
+      planGenerating = true;
+      invalidateReview();
+      $('generated-plan').setAttribute('aria-busy', 'true');
+      $('draft-question-status').textContent = 'Turning your thesis into research questions and searches...';
+      $('btn-draft-question').textContent = 'Generating plan...';
+      C.postAction(payload, 'Generating the research plan').then(function (data) {
         if (!data || !data.ok) {
-          $('draft-question-status').textContent = data && data.error || 'Drafting failed. Check Settings and retry.';
+          $('draft-question-status').textContent = data && data.error || 'Generation failed. Check Settings and retry. Nothing was approved or collected.';
+          return;
+        }
+        if (signature !== scopeSignature()) {
+          $('draft-question-status').textContent = 'Your thesis or scope changed during generation. Generate again for the current text.';
           return;
         }
         $('in-generated-question').value = data.draft.question;
         $('in-rationale').value = data.draft.rationale;
         state.dirty['in-rationale'] = true;
+        $('in-disc-terms').value = data.draft.rankingTerms.join(', ');
+        planQuestions = data.draft.questions;
+        planSignature = signature;
+        syncPlanFields();
+        renderPlanQuestions();
         invalidateReview();
-        $('draft-question-status').textContent = 'Drafted with ' + data.model + '. Review and edit the question before approval.';
-        $('in-generated-question').focus();
+        $('generated-plan-meta').textContent = planQuestions.length + ' questions · ' + lines($('in-disc-queries').value).length + ' searches · Drafted with ' + data.model;
+        $('generated-plan').hidden = false;
+        $('draft-question-status').textContent = 'Plan ready. Review the questions and searches below.';
+        $('generated-plan').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }).finally(function () {
+        planGenerating = false;
+        syncApproveButtons();
+        $('generated-plan').setAttribute('aria-busy', 'false');
+        $('btn-draft-question').textContent = 'Generate research plan';
       });
     });
     $('btn-edit-intent').addEventListener('click', function () { invalidateReview(); $('in-question').focus(); });
@@ -335,8 +344,8 @@
     { key: 'geo', label: 'Geography', ids: ['in-geo'], kind: 'text' },
     { key: 'window', label: 'Time window', ids: ['in-from', 'in-to'], kind: 'dates' },
     { key: 'output', label: 'Deliverable', ids: ['in-output'], kind: 'output' },
-    { key: 'topic', label: 'Threat topic', ids: ['in-topic'], kind: 'text', why: 'Drafted from your question, geography and exposure lenses.' },
-    { key: 'rationale', label: 'Why it matters to Vestas', ids: ['in-rationale'], kind: 'text', why: 'Drafted from your geography and exposure lenses.' }
+    { key: 'topic', label: 'Research topic', ids: ['in-topic'], kind: 'text', why: 'Derived from your thesis.' },
+    { key: 'rationale', label: 'Thesis connection', ids: ['in-rationale'], kind: 'text', why: 'Proposed by Copilot for your review.' }
   ];
   function isAssumed(row) { return Boolean(row.why) && !row.ids.some(function (id) { return state.dirty[id]; }); }
   function rowValue(row) {
@@ -612,11 +621,14 @@
         Object.keys(values).forEach(function (id) { $(id).value = values[id] || ''; });
         ['in-purpose', 'in-topic', 'in-rationale'].forEach(function (id) { state.dirty[id] = true; });
         syncDerivations();
-        $('scope-confirm').checked = false;
+        planSignature = '';
+        planQuestions = [];
+        $('generated-plan').hidden = true;
+        $('draft-question-status').textContent = 'Existing scope restored. Generate a plan to draft its questions and searches.';
         state.newMode = true;
         invalidateReview();
-        C.render(true);
-        $('in-generated-question').focus();
+        C.navigate('new');
+        $('in-question').focus();
       });
       add(q, resume);
     }
@@ -1029,20 +1041,267 @@
     if (!leads.length) add(sec, el('p', 'meta', 'No leads are waiting for the RSS source list.'));
     return sec;
   }
+  /* Evidence workspace view model. Uses j.evidenceWorkspace (schemaVersion 1) when present; otherwise derives only what existing journey fields state. */
+  var EXPLORER_LABEL = { admitted: 'Admitted', 'metadata-only': 'Metadata only', 'pending-admission': 'Pending admission', closed: 'Closed', 'in-progress': 'In progress' };
+  var BLOCKER_TEXT = 'Seerist leads wait for the RSS-connected source list before their publisher pages are fetched.';
+  function isProjected(ew) {
+    return Boolean(ew && ew.schemaVersion === 1 && ew.pipeline && Array.isArray(ew.questions) && ew.exceptions && Array.isArray(ew.exceptions.items) && Array.isArray(ew.sourceExplorer));
+  }
+  function rowMapOf(j) {
+    var map = {};
+    j.sources.forEach(function (r) { map[r.id] = r; });
+    return map;
+  }
+  function fallbackDisposition(row) {
+    if (row.candidate && row.candidate.decision && row.candidate.decision.outcome === 'approved') return 'admitted';
+    if (row.state === 'closed') return 'closed';
+    if (row.state === 'pending') return 'metadata-only';
+    if (row.action && row.action.kind === 'admit') return 'pending-admission';
+    return 'in-progress';
+  }
+  function fallbackModel(j) {
+    var pending = j.leads.filter(function (l) { return l.pendingRss; }).length;
+    var explorer = j.sources.map(function (row) {
+      var disposition = fallbackDisposition(row);
+      return { entry: { rowId: row.id, title: row.title, disposition: disposition, snapshotId: null, countsAsEvidence: disposition === 'admitted' }, row: row };
+    });
+    var questions = j.brief.requirements.map(function (req) {
+      var observationIds = [];
+      var sourceNoteIds = [];
+      j.sources.forEach(function (row) {
+        if (!row.review || !row.review.observations) return;
+        row.review.observations.forEach(function (o) {
+          if (!o.irIds || o.irIds.indexOf(req.irId) < 0) return;
+          observationIds.push(o.observationId);
+          if (sourceNoteIds.indexOf(row.id) < 0) sourceNoteIds.push(row.id);
+        });
+      });
+      return { id: req.irId, text: req.text, coverage: 'unassessed', sourceNoteIds: sourceNoteIds, observationIds: observationIds };
+    });
+    var items = [];
+    j.sources.forEach(function (row) {
+      var kind = category(row) === 'action' ? 'needs_you' : row.state === 'failed' ? 'failed' : row.review && row.review.status === 'provisional' ? 'provisional_review' : '';
+      if (!kind) return;
+      items.push({ id: row.id, kind: kind, status: row.current ? row.current.label : row.state, relPath: row.artifacts && row.artifacts[0] ? row.artifacts[0].relPath : null });
+    });
+    return {
+      pipeline: {
+        leads: { count: j.leads.length, basis: 'Seerist leads listed for this run' },
+        captured: null,
+        blocker: pending ? { kind: 'pending_rss', leadCount: pending, explanation: BLOCKER_TEXT } : null,
+        stages: [
+          { key: 'admitted', label: 'Admitted as evidence', count: explorer.filter(function (e) { return e.entry.countsAsEvidence; }).length, basis: 'Source rows whose admission decision is approved' },
+          { key: 'reviewed', label: 'Source reviews recorded', count: j.sources.filter(function (r) { return r.review && r.review.status === 'recorded'; }).length, basis: 'Source rows with a recorded source review' }
+        ]
+      },
+      questions: questions,
+      exceptions: { open: items.length, items: items },
+      explorer: explorer,
+      projected: false
+    };
+  }
+  function projectedModel(j, ew) {
+    var rows = rowMapOf(j);
+    var explorer = [];
+    ew.sourceExplorer.forEach(function (e) { if (rows[e.rowId]) explorer.push({ entry: e, row: rows[e.rowId] }); });
+    return {
+      pipeline: {
+        leads: ew.pipeline.leads || null,
+        captured: ew.pipeline.capturedSources || null,
+        blocker: ew.pipeline.acquisitionBlocker || null,
+        stages: Array.isArray(ew.pipeline.stages) ? ew.pipeline.stages : []
+      },
+      questions: ew.questions.map(function (q) {
+        return { id: q.id, text: q.text, coverage: q.coverage || 'unassessed', sourceNoteIds: Array.isArray(q.sourceNoteIds) ? q.sourceNoteIds : null, observationIds: Array.isArray(q.observationIds) ? q.observationIds : null };
+      }),
+      exceptions: { open: ew.exceptions.open, items: ew.exceptions.items },
+      explorer: explorer,
+      projected: true
+    };
+  }
+  function evidenceModel(j) {
+    return isProjected(j.evidenceWorkspace) ? projectedModel(j, j.evidenceWorkspace) : fallbackModel(j);
+  }
+  function coverageLabel(coverage) {
+    return coverage === 'unassessed' || !coverage ? 'Unassessed' : capital(humanise(coverage));
+  }
+  function filterExplorer(entries, filter, query) {
+    var q = (query || '').trim().toLowerCase();
+    return entries.filter(function (e) {
+      if (filter !== 'all' && category(e.row) !== filter) return false;
+      if (!q) return true;
+      var hay = [e.entry.title, e.row.publisher, EXPLORER_LABEL[e.entry.disposition] || e.entry.disposition].join(' ').toLowerCase();
+      return hay.indexOf(q) >= 0;
+    });
+  }
+
+  function evidenceStrip(model) {
+    var strip = el('section', 'ev-strip');
+    strip.setAttribute('aria-label', 'Evidence pipeline');
+    function stat(count, label, basis) {
+      var s = el('div', 'ev-stat');
+      s.setAttribute('title', basis || '');
+      add(s, el('strong', null, String(count)), el('span', 'meta', label));
+      return s;
+    }
+    var p = model.pipeline;
+    if (!model.projected) add(strip, el('p', 'meta', 'Workspace coverage is not projected for this run. Compatibility source records are shown below.'));
+    if (p.leads) add(strip, stat(p.leads.count, 'Seerist leads', p.leads.basis));
+    if (p.captured) add(strip, stat(p.captured.count, 'Captured sources', p.captured.basis));
+    p.stages.forEach(function (s) { add(strip, stat(s.count, s.label, s.basis)); });
+    if (p.stages.length) add(strip, el('span', 'meta', 'Stages overlap; counts are not a funnel.'));
+    if (p.blocker) add(strip, el('p', 'ev-blocker', 'Acquisition blocked: ' + plural(p.blocker.leadCount, 'lead') + ' pending RSS. ' + (p.blocker.explanation || '')));
+    return strip;
+  }
+  function questionNav(model, selectedId) {
+    var nav = el('aside', 'ev-nav');
+    nav.setAttribute('aria-label', 'Approved research questions');
+    add(nav, el('h3', 'ev-col-head', 'Approved questions'));
+    if (!model.questions.length) {
+      add(nav, el('p', 'meta', 'No approved information requirements yet.'), C.linkButton('Open the brief', function () { C.go({ tab: 'brief' }); }));
+      return nav;
+    }
+    var picker = el('select', 'ev-question-picker');
+    picker.setAttribute('aria-label', 'Approved research question');
+    model.questions.forEach(function (q) {
+      var option = el('option', null, q.id + ' ' + q.text);
+      option.value = q.id;
+      picker.appendChild(option);
+    });
+    picker.value = selectedId;
+    picker.addEventListener('change', function () { state.evidenceQuestion = picker.value; C.render(true); });
+    add(nav, picker);
+    var list = el('ul', 'queue ev-question-list');
+    model.questions.forEach(function (q) {
+      var b = el('button', 'queue-item');
+      b.type = 'button';
+      b.setAttribute('aria-current', q.id === selectedId ? 'true' : 'false');
+      add(b, el('span', 'q-title', q.id + ' ' + q.text), el('span', 'q-meta', coverageLabel(q.coverage)));
+      b.addEventListener('click', function () { state.evidenceQuestion = q.id; C.render(true); });
+      list.appendChild(add(el('li'), b));
+    });
+    add(nav, list);
+    return nav;
+  }
+  function questionPanel(q, model) {
+    var sec = el('section', 'ev-question');
+    if (!q) {
+      add(sec, el('p', 'meta', 'Select an approved question to see its observations and gaps.'));
+      return sec;
+    }
+    add(sec, el('h3', null, q.id + ' ' + q.text));
+    add(sec, el('p', 'meta', 'Coverage: ' + coverageLabel(q.coverage) + (q.coverage === 'unassessed' ? '. No assessment is recorded for this question.' : '.')));
+    add(sec, C.kv([
+      ['Observations', q.observationIds === null ? 'Not recorded for this run' : plural(q.observationIds.length, 'observation')],
+      ['Sources', q.sourceNoteIds === null ? 'Not recorded for this run' : plural(q.sourceNoteIds.length, 'source')]
+    ]));
+    if (q.observationIds === null || q.sourceNoteIds === null) {
+      add(sec, el('p', 'ev-gap', 'Question-level evidence links are not projected for this run. Coverage and counterevidence cannot be inferred from source titles or lead counts.'));
+    } else if (!q.observationIds.length && !q.sourceNoteIds.length) {
+      add(sec, el('p', 'ev-gap', 'No observation or source link is recorded for this question. This is not a judgement about whether evidence exists.'));
+    } else {
+      var records = el('div', 'ev-linked-records');
+      add(records, el('h4', null, 'Recorded evidence links'));
+      q.observationIds.forEach(function (id) {
+        var source = model.explorer.find(function (e) {
+          return e.row.review && e.row.review.observations.some(function (o) { return o.observationId === id; });
+        });
+        var observation = source && source.row.review.observations.find(function (o) { return o.observationId === id; });
+        if (!observation) {
+          add(records, el('p', 'meta', id + ': observation content is not projected.'));
+          return;
+        }
+        add(records, el('p', null, observation.text));
+        if (observation.quote) add(records, el('blockquote', 'quote', observation.quote));
+        add(records, C.linkButton('Inspect source: ' + source.entry.title, function () {
+          state.evidenceView = 'explorer'; state.sourceFilter = 'all'; state.sourceQuery = ''; state.selectedSource = source.entry.rowId; C.render(true);
+        }));
+      });
+      q.sourceNoteIds.forEach(function (id) { add(records, el('p', 'meta', 'Source note: ' + id)); });
+      add(sec, records, C.linkButton('Inspect evidence records', function () { state.evidenceView = 'explorer'; C.render(true); }));
+    }
+    return sec;
+  }
+  function exceptionLabel(kind) {
+    return capital(String(kind || '').replace(/[-_]/g, ' '));
+  }
+  function exceptionsPanel(model) {
+    var sec = el('aside', 'ev-exceptions');
+    sec.setAttribute('aria-label', 'Exceptions');
+    add(sec, el('h3', 'ev-col-head', 'Exceptions'), el('p', 'meta', plural(model.exceptions.open, 'open exception')));
+    if (!model.exceptions.items.length) {
+      add(sec, el('p', 'ev-empty', model.pipeline.blocker ? 'No human decision is requested. Source acquisition remains blocked.' : 'No exceptions are recorded.'));
+      return sec;
+    }
+    var list = el('ul', 'queue');
+    model.exceptions.items.forEach(function (item) {
+      var li = el('li', 'ev-exception');
+      add(li, el('span', 'q-title', exceptionLabel(item.kind)), el('span', 'q-meta', item.status || ''));
+      if (item.relPath) add(li, C.artifactLink(item.relPath, 'Open record'));
+      var hit = model.explorer.filter(function (e) { return e.entry.rowId === item.id; })[0];
+      if (hit) add(li, C.linkButton('Open source', function () { state.evidenceView = 'explorer'; state.sourceFilter = 'all'; state.sourceQuery = ''; state.selectedSource = item.id; C.render(true); }));
+      list.appendChild(li);
+    });
+    add(sec, list);
+    return sec;
+  }
+
+  C.evidence = { model: evidenceModel, filterExplorer: filterExplorer, coverageLabel: coverageLabel };
+
   C.panes.sources = function () {
     var j = C.journey();
     var host = $('pane-sources');
     var frag = document.createDocumentFragment();
     if (!j) return;
+    var model = evidenceModel(j);
+    if (!state.sourceFilter) state.sourceFilter = 'all';
     var counts = {};
-    j.sources.forEach(function (r) { var c = category(r); counts[c] = (counts[c] || 0) + 1; });
-    if (!state.sourceFilter || (state.sourceFilter === 'action' && !counts.action)) state.sourceFilter = counts.action ? 'action' : 'all';
-    var tabs = analysisTabs('sources', j);
+    model.explorer.forEach(function (e) { var c = category(e.row); counts[c] = (counts[c] || 0) + 1; });
+    var question = model.questions.filter(function (q) { return q.id === state.evidenceQuestion; })[0] || model.questions[0] || null;
+    state.evidenceQuestion = question ? question.id : '';
+
+    add(frag, analysisTabs('sources', j), evidenceStrip(model));
+
+    var views = el('div', 'filters ev-views');
+    views.setAttribute('role', 'group');
+    views.setAttribute('aria-label', 'Evidence view');
+    [['coverage', 'Question coverage'], ['explorer', 'Source explorer']].forEach(function (view) {
+      var button = el('button', 'chip-btn', view[1]);
+      button.type = 'button';
+      button.setAttribute('aria-pressed', (state.evidenceView || 'coverage') === view[0] ? 'true' : 'false');
+      button.addEventListener('click', function () { state.evidenceView = view[0]; C.render(true); });
+      views.appendChild(button);
+    });
+    add(frag, views);
+    if (state.evidenceView !== 'explorer') {
+      var grid = el('div', 'ev-workspace');
+      add(grid, questionNav(model, state.evidenceQuestion), add(el('section', 'ev-main'), questionPanel(question, model)), exceptionsPanel(model));
+      frag.appendChild(grid);
+      C.replace(host, frag);
+      return;
+    }
+
+    var sec = el('section', 'ev-explorer');
+    sec.id = 'focus-sources';
+    add(sec, C.sectionHead('Source explorer', 'h2'));
+    var search = el('input', 'search-input');
+    search.id = 'source-search';
+    search.type = 'search';
+    search.placeholder = 'Search title, publisher or status';
+    search.setAttribute('aria-label', 'Search sources');
+    search.value = state.sourceQuery;
+    search.addEventListener('input', function () {
+      state.sourceQuery = search.value;
+      C.render(true);
+      var again = $('source-search');
+      if (again) again.focus();
+    });
+    add(sec, search);
     var seg = el('div', 'filters');
     seg.setAttribute('role', 'group');
     seg.setAttribute('aria-label', 'Source filter');
     SOURCE_FILTERS.forEach(function (def) {
-      var n = def[0] === 'all' ? j.sources.length : (counts[def[0]] || 0);
+      var n = def[0] === 'all' ? model.explorer.length : (counts[def[0]] || 0);
       var b = el('button', 'chip-btn', def[1]);
       b.type = 'button';
       b.setAttribute('aria-pressed', state.sourceFilter === def[0] ? 'true' : 'false');
@@ -1050,22 +1309,22 @@
       b.addEventListener('click', function () { state.sourceFilter = def[0]; C.render(true); });
       seg.appendChild(b);
     });
-    var rows = j.sources.filter(function (r) { return state.sourceFilter === 'all' || category(r) === state.sourceFilter; });
-    var selected = j.sources.filter(function (r) { return r.id === state.selectedSource; })[0];
-    if (!selected || (rows.length && rows.indexOf(selected) < 0)) selected = rows[0] || null;
-    state.selectedSource = selected ? selected.id : '';
+    add(sec, seg);
+    var entries = filterExplorer(model.explorer, state.sourceFilter, state.sourceQuery);
+    var selectedEntry = model.explorer.filter(function (e) { return e.row.id === state.selectedSource; })[0];
+    if (!selectedEntry || entries.indexOf(selectedEntry) < 0) selectedEntry = entries[0] || null;
+    state.selectedSource = selectedEntry ? selectedEntry.row.id : '';
     var inbox = el('div', 'inbox');
     var listCol = el('div');
-    add(listCol, seg);
-    if (!j.sources.length) add(listCol, el('p', 'meta', 'No evidence sources are ready yet. Seerist leads remain pending until the RSS-connected source list is available.'));
-    else if (!rows.length) add(listCol, el('p', 'meta', 'No sources in this view.'));
+    if (!model.explorer.length) add(listCol, el('p', 'meta', model.pipeline.blocker ? 'No source records are available. Acquisition is blocked.' : 'No source records are available for this run.'));
+    else if (!entries.length) add(listCol, el('p', 'meta', 'No sources match this search and filter.'));
     var list = el('ul', 'queue');
-    rows.forEach(function (row) { list.appendChild(sourceRow(row)); });
-    if (rows.length) listCol.appendChild(list);
-    if (j.sources.length) add(listCol, el('p', 'meta list-note', 'Showing ' + rows.length + ' of ' + j.sources.length + ' sources.'));
-    add(inbox, listCol, selected ? sourceDetail(selected) : el('div'));
-    add(frag, tabs, inbox);
-    frag.appendChild(leadsSection(j));
+    entries.forEach(function (e) { list.appendChild(sourceRow(e.row)); });
+    if (entries.length) listCol.appendChild(list);
+    if (model.explorer.length) add(listCol, el('p', 'meta list-note', 'Showing ' + entries.length + ' of ' + model.explorer.length + ' sources.'));
+    add(inbox, listCol, selectedEntry ? sourceDetail(selectedEntry.row) : el('div'));
+    add(sec, inbox);
+    frag.appendChild(sec);
     C.replace(host, frag);
   };
 

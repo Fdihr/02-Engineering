@@ -43,7 +43,7 @@ def list_available_runs(runs_root: str | Path) -> list[dict[str, Any]]:
         return items
     for entry in entries:
         try:
-            if entry.is_symlink() or not entry.is_dir(follow_symlinks=False):
+            if entry.name.startswith(".") or entry.is_symlink() or not entry.is_dir(follow_symlinks=False):
                 continue
             # Evidence admission writes snapshot folders beside analyses; they are not runs.
             if os.path.isfile(os.path.join(entry.path, "approved-evidence-snapshot.json")):

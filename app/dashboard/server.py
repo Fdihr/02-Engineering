@@ -611,6 +611,58 @@ def _command_output_in_run(run_dir: Path, step: dict[str, Any]) -> Path | None:
         return None
 
 
+def _research_plan_operation(action: str, value: Any) -> Any:
+    try:
+        completed = subprocess.run(
+            ["node", "--import", "tsx", "src/commands/research-plan.ts"], cwd=str(APP_DIR),
+            input=json.dumps({"action": action, "value": value}), capture_output=True,
+            text=True, encoding="utf-8", timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise CopilotError("Could not run research-plan validation. Check Node.js and app dependencies.") from exc
+    if completed.returncode != 0:
+        raise CopilotError("Research-plan validation failed. Check the app dependencies before retrying.")
+    try:
+        result = json.loads(completed.stdout)
+    except ValueError as exc:
+        raise CopilotError("Research-plan validation returned an invalid response.") from exc
+    if not isinstance(result, dict) or result.get("ok") is not True:
+        raise CopilotError("The research plan is invalid. Use a valid thesis and scope, or retry generation. No plan was approved or collected.")
+    return result["value"]
+
+
+def _handle_generate_plan(runs_root: Path, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    run_id = _valid_id(payload.get("runId"))
+    if not run_id:
+        return 400, {"ok": False, "error": "A valid analysis ID is required."}
+    # This path deliberately creates no run, approval, requirement or collection artifact.
+    scope = {
+        "researchThesis": str(payload.get("researchThesis") or "").strip(),
+        "audience": str(payload.get("audience") or "").strip(),
+        "geographies": [g.strip() for g in str(payload.get("geographies") or "").split(",") if g.strip()],
+        "from": str(payload.get("from") or ""), "to": str(payload.get("to") or ""),
+        "requestedOutput": payload.get("requestedOutput"),
+    }
+    prompt = _research_plan_operation("prepare", scope)
+    resolve_model(runs_root, "research-question")
+    draft_id = "plan-" + uuid.uuid4().hex
+    request_file = runs_root / ".research-plan-drafts" / draft_id / "request.json"
+    request = {"schemaVersion": "research-plan-draft-request-v1", "id": draft_id,
+               "preparedAt": datetime.now(timezone.utc).isoformat(), "scope": scope, "prompt": prompt}
+    _write_json(request_file, request)
+    invocation = _generate_and_preserve(runs_root, request_file, request, prompt, "research-question")
+    proposal, problem = parse_stage_answer(invocation["content"])
+    if problem:
+        return 400, {"ok": False, "error": problem + " No plan was approved or collected."}
+    plan = _research_plan_operation("validate", proposal)
+    draft = {**plan, "status": "proposed", "researchThesis": scope["researchThesis"]}
+    _write_json(request_file.parent / "plan.json", {
+        "schemaVersion": "research-plan-draft-v1", "id": draft_id, "scope": scope,
+        "draft": draft, "invocationId": invocation["invocationId"],
+    })
+    return 200, {"ok": True, "draft": draft, "draftId": draft_id, "model": invocation["model"]}
+
+
 def _handle_draft_question(runs_root: Path, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     run_id = _valid_id(payload.get("runId"))
     reviewer_id = _valid_id(payload.get("reviewerId"))
@@ -857,10 +909,12 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
             return 400, {"ok": False, "error": "Stage overrides must be an object. Refresh Settings and retry."}
         return 200, {"ok": True, "settings": save_model(runs_root, payload.get("model"), payload["stages"])
                     if "stages" in payload else save_model(runs_root, payload.get("model"))}
-    if action in ("run-ai-stage", "draft-research-question"):
+    if action in ("run-ai-stage", "draft-research-question", "generate-research-plan"):
         if not COPILOT_LOCK.acquire(blocking=False):
             return 409, {"ok": False, "error": "Copilot is already running a stage. Wait for it to finish."}
         try:
+            if action == "generate-research-plan":
+                return _handle_generate_plan(runs_root, payload)
             return (_handle_run_ai(runs_root, payload) if action == "run-ai-stage"
                     else _handle_draft_question(runs_root, payload))
         finally:
@@ -928,6 +982,21 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
         research_thesis = str(payload.get("researchThesis") or "").strip()
         rationale = str(payload.get("rationale") or "").strip()
         ir_lines = [line.strip() for line in str(payload.get("requirements") or "").splitlines() if line.strip()]
+        queries_raw = [line.strip() for line in str(payload.get("queries") or "").splitlines() if line.strip()]
+        ranking_raw = list(dict.fromkeys(term.strip().lower() for term in str(payload.get("rankingTerms") or "").split(",") if term.strip()))
+        if payload.get("runDiscovery") is True:
+            if not 1 <= len(queries_raw) <= 10 or any(len(query) > 120 or len(query.split()) > 6 for query in queries_raw):
+                return 400, {"ok": False, "error": "Provide 1 to 10 Seerist searches of at most 120 characters and 6 words."}
+            if len({query.lower() for query in queries_raw}) != len(queries_raw) or any(re.search(r'["“”|():=]|\b(?:AND|OR|NOT)\b', query) for query in queries_raw):
+                return 400, {"ok": False, "error": "Use distinct short search terms without Boolean operators, quotes or API filters."}
+            if not 3 <= len(ranking_raw) <= 20 or any(len(term) > 80 for term in ranking_raw):
+                return 400, {"ok": False, "error": "Provide 3 to 20 ranking terms of at most 80 characters."}
+            try:
+                min_score = int(payload.get("minimumScore", 4))
+            except (ValueError, TypeError):
+                return 400, {"ok": False, "error": "Minimum lead score must be an integer from 1 to 20."}
+            if not 1 <= min_score <= 20:
+                return 400, {"ok": False, "error": "Minimum lead score must be an integer from 1 to 20."}
 
         target_run_dir = (runs_root / run_id).resolve()
         proposals_dir = target_run_dir / "proposals"
@@ -1002,17 +1071,11 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
                     return 400, {"ok": False, "runId": run_id, "steps": steps, "error": step3["stderr"] or step3["stdout"]}
 
         if payload.get("runDiscovery") is True:
-            queries_raw = [line.strip() for line in str(payload.get("queries") or "").splitlines() if line.strip()]
-            ranking_raw = list(dict.fromkeys(term.strip().lower() for term in str(payload.get("rankingTerms") or "").split(",") if term.strip()))
-            try:
-                min_score = int(payload.get("minimumScore") or 4)
-            except (ValueError, TypeError):
-                min_score = 4
             if queries_raw and ranking_raw:
                 plan_id = f"{run_id}-dp-{int(time.time())}"
                 queries = [
                     {"id": f"q-{idx:02d}", "search": q_text, "sources": "news,analysis"}
-                    for idx, q_text in enumerate(queries_raw[:10], start=1)
+                    for idx, q_text in enumerate(queries_raw, start=1)
                 ]
                 plan_path = proposals_dir / f"{plan_id}.json"
                 _write_json(plan_path, {

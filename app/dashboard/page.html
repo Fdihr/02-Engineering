@@ -54,47 +54,45 @@
       <div id="brief-run"></div>
 
       <div id="brief-new" hidden>
-        <div class="section-head"><h2>New analysis</h2><button class="btn-link" id="btn-cancel-new" type="button">Back to the current analysis</button></div>
-        <p class="meta prose">Approve the thesis and scope to draft a question with local Copilot. Review the question and requirements separately before collection.</p>
-
-        <div class="brief-step">
-          <div class="brief-step-title">1. Working thesis or intelligence question</div>
-          <p class="meta">State the hypothesis to test, or the question to answer.</p>
-          <textarea class="thesis-box" id="in-question" aria-label="Working thesis or intelligence question"></textarea>
-          <div class="chip-row">
-            <span class="meta">Start from:</span>
-            <button class="chip-btn" type="button" data-preset="europe">Europe cyber and geopolitical</button>
-            <button class="chip-btn" type="button" data-preset="ransomware">Industrial ransomware</button>
-            <button class="chip-btn" type="button" data-preset="baltic">Nordic and Baltic sabotage</button>
-          </div>
+        <!-- Thesis -> paired questions/searches -> human approval. Preserve the incumbent Vestas controls and rules-based layout. Draft generation never approves or collects. -->
+        <header class="new-analysis-head">
+          <div class="section-head"><h1>New analysis</h1><button class="btn-link" id="btn-cancel-new" type="button">Back to the current analysis</button></div>
+          <p>Write a thesis or intelligence question. Copilot turns it into focused research questions and Seerist searches.</p>
+        </header>
+        <div class="field thesis-entry">
+          <label for="in-question">Your thesis or question</label>
+          <textarea class="thesis-box" id="in-question" rows="4" maxlength="4000" placeholder="For example: Disruption at European suppliers poses a greater risk to production than direct cyberattacks." aria-describedby="thesis-hint"></textarea>
+          <span class="hint" id="thesis-hint">State what you want to test, not what the answer should be.</span>
         </div>
-
+        <details class="drawer" id="plan-scope">
+          <summary>Refine scope <span class="meta" id="plan-scope-summary">Europe · Last 60 days · Intelligence memo</span></summary>
+          <div class="drawer-body scope-grid">
         <div class="field">
           <label for="in-output">What you need back</label>
-          <p class="meta">Pick the form that fits how it will be used.</p>
           <select id="in-output"><option value="memo" selected>Intelligence memo</option><option value="brief">Executive brief</option><option value="assessment">Strategic assessment</option></select>
+          <p class="meta">Pick the form that fits how it will be used.</p>
         </div>
 
         <div class="field">
           <label for="in-audience">Audience</label>
+          <input id="in-audience" type="text" autocomplete="off" value="Leadership" maxlength="400">
           <p class="meta">Who will read the result.</p>
-          <input id="in-audience" type="text" autocomplete="off" value="Vestas leadership">
         </div>
 
         <div class="field">
           <label for="in-geo">Geography</label>
-          <p class="meta">Countries or regions in scope, separated by commas.</p>
           <input id="in-geo" type="text" autocomplete="off" value="Europe">
+          <p class="meta">Countries or regions in scope, separated by commas.</p>
         </div>
 
-        <fieldset class="field">
+        <fieldset class="field scope-window">
           <legend>Time window</legend>
-          <p class="meta">The period the evidence should cover.</p>
           <div class="date-pair">
             <input id="in-from" type="date" aria-label="From">
             <span class="meta">to</span>
             <input id="in-to" type="date" aria-label="To">
           </div>
+          <p class="meta">The period the evidence should cover.</p>
           <div class="chip-row">
             <button class="chip-btn" type="button" data-window-days="30">Last 30 days</button>
             <button class="chip-btn" type="button" data-window-days="60" aria-pressed="true">Last 2 months</button>
@@ -102,59 +100,52 @@
           </div>
         </fieldset>
 
-        <fieldset class="field">
-          <legend>Vestas exposure lenses</legend>
-          <p class="meta">Each lens adds a research question and Seerist searches to the plan.</p>
-          <div class="lens-grid">
-            <label class="lens-item"><input type="checkbox" class="vestas-lens" value="ot" checked><span class="lens-label"><strong>Wind farm OT, SCADA and grid</strong><span>State-linked pre-positioning, utility OT intrusion, substation telemetry</span></span></label>
-            <label class="lens-item"><input type="checkbox" class="vestas-lens" value="mfg" checked><span class="lens-label"><strong>Manufacturing and turbine assembly</strong><span>Ransomware or extortion disrupting industrial production</span></span></label>
-            <label class="lens-item"><input type="checkbox" class="vestas-lens" value="supply" checked><span class="lens-label"><strong>OT vendor and software supply chain</strong><span>Compromised remote access, firmware, components or software</span></span></label>
-            <label class="lens-item"><input type="checkbox" class="vestas-lens" value="hybrid" checked><span class="lens-label"><strong>Hybrid sabotage and logistics corridors</strong><span>Subsea cables, ports, rail and wind transport routes</span></span></label>
-          </div>
-        </fieldset>
-
         <div class="field">
           <label for="in-run-id">Analysis ID</label>
-          <p class="meta">Letters, digits, dots and dashes. Must be new.</p>
           <input id="in-run-id" type="text" spellcheck="false" autocomplete="off">
+          <p class="meta">Letters, digits, dots and dashes. Must be new.</p>
           <span class="hint" id="run-id-hint"></span>
         </div>
-
-        <div class="brief-step">
-          <div class="brief-step-title">4. Draft and review the research question</div>
-          <p class="meta">Copilot tests the approved thesis against the scope; it must not assume the thesis is true. The saved research-question override or default model in Settings is used.</p>
-          <p class="meta" id="draft-question-model">Loading the saved model assignment...</p>
-          <label class="check"><input type="checkbox" id="scope-confirm">I approve the thesis and scope above, including the purpose and topic below, for question drafting.</label>
-          <div class="btn-row">
-            <button class="btn-primary" id="btn-draft-question" type="button">Approve scope and draft with Copilot</button>
+          </div>
+        </details>
+          <div class="btn-row plan-generate">
+            <button class="btn-primary" id="btn-draft-question" type="button">Generate research plan</button>
             <span class="meta" id="draft-question-status" role="status"></span>
           </div>
+          <p class="meta" id="draft-question-model">Loading the saved model assignment...</p>
+          <p class="meta">Draft only. No scope approval, searches or collection until you review the plan.</p>
+
+        <section id="generated-plan" aria-labelledby="generated-plan-title" hidden>
+          <div class="section-head"><h2 id="generated-plan-title">Your research plan</h2><span class="meta" id="generated-plan-meta"></span></div>
+          <p class="meta prose">Edit the questions and their paired searches before approval. Expand a thesis connection to review the reasoning. No searches have run.</p>
+          <ol id="generated-plan-questions" class="plan-question-list"></ol>
+          <details class="drawer" id="plan-details">
+            <summary>Plan details</summary>
+            <div class="drawer-body">
           <div class="form-grid">
-            <div class="field field-wide"><label for="in-generated-question">Research question (review and edit)</label><textarea id="in-generated-question" rows="4" placeholder="Draft with Copilot, or write your own question."></textarea></div>
-            <div class="field field-wide"><label for="in-rationale">Question rationale (review and edit)</label><textarea id="in-rationale" rows="3"></textarea></div>
+            <div class="field field-wide"><label for="in-generated-question">Central research question</label><textarea id="in-generated-question" rows="3" maxlength="400"></textarea></div>
+            <div class="field field-wide"><label for="in-rationale">Connection to your thesis</label><textarea id="in-rationale" rows="3" maxlength="1000"></textarea></div>
           </div>
-          <p class="meta">The requirements and search suggestions below are lens-based templates, not Copilot output. Edit them to match the question.</p>
+          <div hidden>
+            <textarea id="in-irs" aria-label="Information requirements"></textarea>
+            <textarea id="in-disc-queries" aria-label="Seerist searches"></textarea>
+          </div>
           <div class="form-grid">
-            <div class="field field-wide"><label for="in-irs">Information requirements (one per line)</label><textarea id="in-irs" rows="6"></textarea></div>
-            <div class="field field-wide"><label for="in-disc-queries">Seerist searches (one per line, 2–3 words work best)</label><textarea id="in-disc-queries" rows="4"></textarea></div>
             <div class="field field-wide"><label for="in-disc-terms">Ranking terms (comma-separated)</label><input id="in-disc-terms" type="text"></div>
             <div class="field"><label for="in-disc-score">Minimum lead score</label><input id="in-disc-score" type="number" min="1" max="20" value="4"></div>
-          </div>
-          <details class="drawer">
-            <summary>Scope wording</summary>
-            <div class="drawer-body form-grid">
               <div class="field field-wide"><label for="in-purpose">Purpose</label><input id="in-purpose" type="text"></div>
-              <div class="field field-wide"><label for="in-topic">Threat topic</label><input id="in-topic" type="text"></div>
+              <div class="field field-wide"><label for="in-topic">Research topic</label><input id="in-topic" type="text"></div>
+          </div>
             </div>
           </details>
           <div class="btn-row">
-            <button class="btn-primary" id="btn-review-intent" type="button">Review before approval</button>
-            <span class="meta fail" id="intent-problem"></span>
+            <button class="btn-primary" id="btn-review-intent" type="button">Review and approve plan</button>
+            <span class="meta fail" id="intent-problem" role="status"></span>
           </div>
-        </div>
+        </section>
 
         <section id="approval-review" hidden aria-labelledby="approval-title">
-          <div class="section-head"><h2 id="approval-title">5. You are approving</h2><button class="btn-link" id="btn-edit-intent" type="button">Edit</button></div>
+          <div class="section-head"><h2 id="approval-title">Approve the research plan</h2><button class="btn-link" id="btn-edit-intent" type="button">Edit</button></div>
           <div id="approval-summary"></div>
           <label class="check"><input type="checkbox" id="approve-confirm"> <span id="approve-confirm-text">I approve this scope, question and these requirements.</span></label>
           <div class="btn-row">
