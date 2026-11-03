@@ -89,6 +89,11 @@ is admitted. Partial/uncertain relevance creates an exception; `not-relevant`
 is retained as an exclusion. Failed validation never produces an approved
 snapshot.
 
+New requests use [question-relevance prompt v2](question-relevance-policy.md),
+which separates direct narrow contribution from indirect context and overall
+memo coverage. This does not broaden the exact-relevant-only admission rule
+or reclassify prior assessments.
+
 RSS candidates use provider `rss`, source type `captured_feed_item`, and
 checksum-bound `rssLineage` for the capture, policy, selection and item. They
 are never represented as Firecrawl retrievals. The source identity is the actual

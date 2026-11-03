@@ -117,6 +117,89 @@ test("prepares one fixed-policy request from the complete source", () => {
   }
 });
 
+test("v2 separates direct narrow contribution from indirect context without changing verdict routing", () => {
+  const cases = [
+    { name: "direct narrow evidence", text: "On 2 November 2026 Polish police reported an alleged arson plot targeting a drone factory in Poland.",
+      verdict: "relevant", destination: "evidence_candidate_proposal" },
+    { name: "indirect regional context", text: "In October 2026 attackers disrupted supermarket refrigeration elsewhere in Europe; no Polish manufacturing connection is reported.",
+      verdict: "partially-relevant", destination: "evidence_candidate_proposal" },
+    { name: "generic vendor news", text: "A vendor launched a global OT asset visibility product for manufacturers.",
+      verdict: "not-relevant", destination: "audited_exclusion" },
+    { name: "missing material relationship", text: "Authorities confirmed an incident. The affected facility, country and incident date are not available.",
+      verdict: "uncertain", destination: "human_exception_triage" }
+  ];
+  for (const fixture of cases) {
+    const document = createSourceDocument({
+      runId: "run-1", sourceItemId: "source-1", sourceKind: "retrieved-publisher",
+      contentFormat: "plain-text", body: fixture.text, sourceArtifactRef: "runs/run-1/capture.json",
+      sourceArtifactSha256: "a".repeat(64), lineageArtifactRefs: []
+    });
+    assert.ok(document.ok);
+    const researchQuestion = {
+      ...baseInput.researchQuestion,
+      question: "What security, hybrid, supply-chain and operational threats affect manufacturing in Poland, and how severe and likely are they?",
+      geographies: ["Poland"]
+    };
+    const request = createQuestionRelevanceRequest({
+      preparedAt: "2026-11-03T09:30:00Z", researchQuestion, sourceDocument: document.value,
+      sourceDocumentArtifactRef: documentArtifactRef, sourceDocumentArtifactSha256: documentArtifactSha256,
+      sourceLimitations: ["Synthetic calibration fixture; not a model-quality evaluation."]
+    });
+    assert.ok(request.ok);
+    assert.equal(request.value.promptPolicyVersion, "question-relevance-prompt-v2");
+    assert.match(request.value.policy.verdictDefinitions.relevant, /at least one part/);
+    assert.match(request.value.policy.verdictDefinitions["partially-relevant"], /Narrow coverage alone does not qualify/);
+    assert.ok(request.value.policy.constraints.some(rule => rule.includes("alleged arson plot")));
+    assert.ok(request.value.policy.constraints.some(rule => rule.includes("supermarkets elsewhere")));
+    const first = document.value.segments[0]!;
+    // Fixture proposals test deterministic acceptance/routing, not inferred semantic correctness.
+    const assessment = validateQuestionRelevanceAssessment({
+      ...baseInput, assessedAt: "2026-11-03T10:02:00Z",
+      researchQuestion, sourceDocument: document.value,
+      modelInvocation: {
+        ...baseInput.modelInvocation, promptPolicyVersion: request.value.promptPolicyVersion,
+        startedAt: "2026-11-03T10:00:00Z", completedAt: "2026-11-03T10:01:00Z"
+      },
+      proposal: {
+        verdict: fixture.verdict, rationale: fixture.name,
+        support: [{
+          anchor: { ...anchor, sourceDocumentId: document.value.id, segmentId: first.id,
+            segmentSha256: first.textSha256, quote: first.text,
+            quoteStartUtf8Byte: 0, quoteEndUtf8Byte: Buffer.byteLength(first.text) },
+          relationToQuestion: fixture.name
+        }], limitations: ["Synthetic proposal; no assertion of truth or independent corroboration."]
+      }
+    });
+    assert.ok(assessment.ok, JSON.stringify(assessment));
+    assert.equal(assessment.value.decision.destination, fixture.destination);
+    assert.notEqual(assessment.value.decision.approvalStatus, "approved");
+  }
+});
+
+test("legacy v1 requests reconstruct unchanged and cannot be relabelled as v2", () => {
+  const input = {
+    preparedAt: "2026-08-31T09:30:00Z", researchQuestion: baseInput.researchQuestion,
+    sourceDocument: source.value, sourceDocumentArtifactRef: documentArtifactRef,
+    sourceDocumentArtifactSha256: documentArtifactSha256, sourceLimitations: ["Legacy fixture."]
+  };
+  const legacy = createQuestionRelevanceRequest(input, "question-relevance-prompt-v1");
+  const current = createQuestionRelevanceRequest(input);
+  assert.ok(legacy.ok && current.ok);
+  assert.match(legacy.value.policy.verdictDefinitions["partially-relevant"], /bounded part/);
+  assert.ok(validateQuestionRelevanceRequest(legacy.value).ok);
+  assert.ok(validateQuestionRelevanceRequest(current.value).ok);
+  assert.notEqual(legacy.value.id, current.value.id);
+  assert.equal(validateQuestionRelevanceRequest({
+    ...legacy.value, promptPolicyVersion: "question-relevance-prompt-v2"
+  }).ok, false);
+  assert.equal(validateQuestionRelevanceRequest({
+    ...current.value, policy: legacy.value.policy
+  }).ok, false);
+  assert.equal(validateQuestionRelevanceRequest({
+    ...current.value, promptPolicyVersion: "question-relevance-prompt-v99"
+  }).ok, false);
+});
+
 test("validates grounded positive relevance and derives pending review", () => {
   const result = validateQuestionRelevanceAssessment(baseInput);
 

@@ -22,7 +22,7 @@ export const QUESTION_RELEVANCE_SCHEMA_VERSION =
 export const QUESTION_RELEVANCE_REQUEST_SCHEMA_VERSION =
   "question-relevance-request-v1" as const;
 export const QUESTION_RELEVANCE_PROMPT_POLICY_VERSION =
-  "question-relevance-prompt-v1" as const;
+  "question-relevance-prompt-v2" as const;
 
 export type QuestionRelevanceError =
   | "INVALID_ASSESSMENT_INPUT"
@@ -91,7 +91,7 @@ const validTime = (value: unknown): string | undefined => {
 const sha256 = (value: string): string =>
   createHash("sha256").update(value, "utf8").digest("hex");
 
-const QUESTION_RELEVANCE_POLICY: QuestionRelevanceRequest["policy"] = {
+const LEGACY_QUESTION_RELEVANCE_POLICY: QuestionRelevanceRequest["policy"] = {
   objective:
     "Assess only whether and how the complete source addresses the exact approved research question.",
   sourceContentTrust: "untrusted",
@@ -122,6 +122,27 @@ const QUESTION_RELEVANCE_POLICY: QuestionRelevanceRequest["policy"] = {
   ]
 };
 
+const QUESTION_RELEVANCE_POLICY: QuestionRelevanceRequest["policy"] = {
+  ...LEGACY_QUESTION_RELEVANCE_POLICY,
+  objective: "Assess whether the source directly contributes material information to at least one part of the exact approved research question, not whether one source completes the whole memo.",
+  constraints: [
+    ...LEGACY_QUESTION_RELEVANCE_POLICY.constraints,
+    "Judge direct contribution separately from overall question coverage. Missing other threat categories, severity estimates or mitigation evidence is a coverage limitation, not by itself partial relevance.",
+    "A direct contribution must explicitly connect the approved subject, geography and time scope; do not infer a local manufacturing impact from generic regional or sector-wide reporting.",
+    "Use partially-relevant for indirect read-across or a missing material subject/geography/time connection, not simply for a narrow source.",
+    "Record unanswered parts and attribution or corroboration caveats as limitations. Relevance does not establish truth or completed source assurance.",
+    "Example: a dated report explicitly describing an alleged arson plot against a Polish factory directly contributes to a broad Polish manufacturing threat question, even without supply-chain or severity analysis.",
+    "Example: attacks on supermarkets elsewhere in Europe with no explicit Polish manufacturing connection are indirect context, not direct evidence of threats to Polish manufacturers.",
+    "Example: general OT vendor announcements without an explicit connection to the approved question are not relevant merely because they mention manufacturing."
+  ],
+  verdictDefinitions: {
+    relevant: "The source directly provides material information answering at least one part of the approved question, with an explicit subject, geography and time connection. It need not answer every part.",
+    "partially-relevant": "The source has an identifiable but indirect or incomplete connection to the approved subject, geography or time scope; applying it to the question requires a material inference. Narrow coverage alone does not qualify.",
+    "not-relevant": "The source provides no material answer or identifiable contextual contribution to the approved question; topic keywords alone are insufficient.",
+    uncertain: "Available content does not allow the source-question relationship to be determined reliably. Do not invent missing connections."
+  }
+};
+
 const readLimitations = (value: unknown): string[] | undefined => {
   if (!Array.isArray(value) || value.length > 24) {
     return undefined;
@@ -133,9 +154,12 @@ const readLimitations = (value: unknown): string[] | undefined => {
 };
 
 export const createQuestionRelevanceRequest = (
-  input: unknown
+  input: unknown,
+  promptPolicyVersion: QuestionRelevanceRequest["promptPolicyVersion"] = QUESTION_RELEVANCE_PROMPT_POLICY_VERSION
 ): Result<QuestionRelevanceRequest, QuestionRelevanceRequestError> => {
-  if (!isRecord(input)) {
+  if (!isRecord(input) ||
+      (promptPolicyVersion !== "question-relevance-prompt-v1" &&
+        promptPolicyVersion !== QUESTION_RELEVANCE_PROMPT_POLICY_VERSION)) {
     return err("INVALID_REQUEST_INPUT");
   }
   const preparedAt = validTime(input.preparedAt);
@@ -171,7 +195,7 @@ export const createQuestionRelevanceRequest = (
 
   const identity = JSON.stringify({
     schemaVersion: QUESTION_RELEVANCE_REQUEST_SCHEMA_VERSION,
-    promptPolicyVersion: QUESTION_RELEVANCE_PROMPT_POLICY_VERSION,
+    promptPolicyVersion,
     preparedAt,
     researchQuestionId: researchQuestion.value.id,
     researchQuestionArtifactSha256: researchQuestion.value.artifactSha256,
@@ -184,7 +208,7 @@ export const createQuestionRelevanceRequest = (
     schemaVersion: QUESTION_RELEVANCE_REQUEST_SCHEMA_VERSION,
     id: `question-relevance-request-${sha256(identity)}`,
     status: "prepared",
-    promptPolicyVersion: QUESTION_RELEVANCE_PROMPT_POLICY_VERSION,
+    promptPolicyVersion,
     preparedAt,
     runId: sourceDocument.value.runId,
     sourceItemId: sourceDocument.value.sourceItemId,
@@ -193,7 +217,8 @@ export const createQuestionRelevanceRequest = (
     sourceDocumentArtifactRef,
     sourceDocumentArtifactSha256,
     sourceLimitations,
-    policy: QUESTION_RELEVANCE_POLICY
+    policy: promptPolicyVersion === "question-relevance-prompt-v1"
+      ? LEGACY_QUESTION_RELEVANCE_POLICY : QUESTION_RELEVANCE_POLICY
   });
 };
 
@@ -220,6 +245,10 @@ export const validateQuestionRelevanceRequest = (
   ) {
     return err("INVALID_REQUEST_INPUT");
   }
+  if (value.promptPolicyVersion !== "question-relevance-prompt-v1" &&
+      value.promptPolicyVersion !== QUESTION_RELEVANCE_PROMPT_POLICY_VERSION) {
+    return err("REQUEST_MISMATCH");
+  }
   const expected = createQuestionRelevanceRequest({
     preparedAt: value.preparedAt,
     researchQuestion: value.researchQuestion,
@@ -227,7 +256,7 @@ export const validateQuestionRelevanceRequest = (
     sourceDocumentArtifactRef: value.sourceDocumentArtifactRef,
     sourceDocumentArtifactSha256: value.sourceDocumentArtifactSha256,
     sourceLimitations: value.sourceLimitations
-  });
+  }, value.promptPolicyVersion);
   if (!expected.ok) {
     return expected;
   }
@@ -266,7 +295,8 @@ const readModelInvocation = (
   const responseArtifactSha256 = validSha256(value.responseArtifactSha256);
   const startedAt = validTime(value.startedAt);
   const completedAt = validTime(value.completedAt);
-  if (value.promptPolicyVersion !== QUESTION_RELEVANCE_PROMPT_POLICY_VERSION) {
+  if (value.promptPolicyVersion !== "question-relevance-prompt-v1" &&
+      value.promptPolicyVersion !== QUESTION_RELEVANCE_PROMPT_POLICY_VERSION) {
     return err("INVALID_PROMPT_POLICY");
   }
   if (
@@ -288,7 +318,7 @@ const readModelInvocation = (
     id,
     provider,
     model,
-    promptPolicyVersion: QUESTION_RELEVANCE_PROMPT_POLICY_VERSION,
+    promptPolicyVersion: value.promptPolicyVersion,
     promptArtifactRef,
     promptArtifactSha256,
     responseArtifactRef,

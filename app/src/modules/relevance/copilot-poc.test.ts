@@ -132,6 +132,30 @@ test("SDK relevance records the explicit model and still requires human admissio
   if (result.ok) {
     assert.equal(result.value.assessment.modelInvocation.model, "test-model-1");
     assert.equal(result.value.assessment.modelInvocation.provider, "github-copilot-sdk");
+    assert.equal(result.value.assessment.modelInvocation.promptPolicyVersion, "question-relevance-prompt-v2");
     assert.equal(result.value.decision.approvalStatus, "pending_human_review");
   }
+});
+
+test("legacy responses retain v1 provenance and cannot satisfy a new v2 request", () => {
+  const legacy = createQuestionRelevanceRequest({
+    preparedAt: request.value.preparedAt,
+    researchQuestion: request.value.researchQuestion,
+    sourceDocument: request.value.sourceDocument,
+    sourceDocumentArtifactRef: request.value.sourceDocumentArtifactRef,
+    sourceDocumentArtifactSha256: request.value.sourceDocumentArtifactSha256,
+    sourceLimitations: request.value.sourceLimitations
+  }, "question-relevance-prompt-v1");
+  assert.ok(legacy.ok);
+  const legacyResponse = { ...response, requestId: legacy.value.id };
+  const assessment = assessCopilotPocResponse(
+    legacy.value, "runs/run-1/legacy-request.json", "d".repeat(64),
+    legacyResponse, "runs/run-1/legacy-response.json", "e".repeat(64)
+  );
+  assert.ok(assessment.ok);
+  assert.equal(assessment.value.assessment.modelInvocation.promptPolicyVersion, "question-relevance-prompt-v1");
+  assert.deepEqual(assessCopilotPocResponse(
+    request.value, "runs/run-1/request.json", "d".repeat(64),
+    legacyResponse, "runs/run-1/legacy-response.json", "e".repeat(64)
+  ), { ok: false, error: "RELEVANCE_REQUEST_MISMATCH" });
 });

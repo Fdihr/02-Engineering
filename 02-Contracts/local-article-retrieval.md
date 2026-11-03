@@ -68,6 +68,10 @@ as an exclusion. Run/plan admission is write-once, including nonpositive
 outcomes. Snapshots enter the existing source-assurance loader; admission is
 not a completed support review or publication approval.
 
+New relevance requests use [prompt policy v2](question-relevance-policy.md):
+direct contribution to one material part can be relevant without answering
+the whole memo. Historical verdicts and consumed call budgets are unchanged.
+
 The CLI stops between stages; it does not automatically invoke models. The
 dashboard model transport reserves a write-once relevance-attempt marker at
 the capture level before generation, including failed attempts. It rejects
