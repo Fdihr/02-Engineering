@@ -97,7 +97,8 @@ const readCapturedSource = (
     !runId ||
     !sourceItemId ||
     (value.sourceKind !== "provider-captured" &&
-      value.sourceKind !== "retrieved-publisher") ||
+      value.sourceKind !== "retrieved-publisher" &&
+      value.sourceKind !== "rss-feed") ||
     (value.contentFormat !== "markdown" && value.contentFormat !== "plain-text") ||
     !sourceArtifactRef ||
     !lineageArtifactRefs

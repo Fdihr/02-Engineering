@@ -344,7 +344,7 @@ export type SourceRetrievalResult = {
   limitations: string[];
 };
 
-export type SourceKind = "provider-captured" | "retrieved-publisher";
+export type SourceKind = "provider-captured" | "retrieved-publisher" | "rss-feed";
 
 export type SourceContentFormat = "markdown" | "plain-text";
 

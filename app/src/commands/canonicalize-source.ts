@@ -4,9 +4,11 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { adaptRetrievedSourceContent } from "../modules/source/retrieved-source-adapter.js";
 import { adaptSeeristSourceContent } from "../modules/source/seerist-source-adapter.js";
 import { createSourceDocument } from "../modules/source/source-document.js";
+import { adaptRssSourceContent } from "../modules/source/rss-source-adapter.js";
+import { loadRssCapture } from "./rss-io.js";
 
 const usage =
-  "Usage: npm run canonicalize:source -- <source-retrieval-result.json|seerist-intake-result.json>";
+  "Usage: npm run canonicalize:source -- <source-artifact.json> [rss-item-id]";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -42,7 +44,7 @@ const main = async (): Promise<void> => {
   let outputArtifactRef: string | undefined;
 
   try {
-    const [sourceArtifactPathValue, ...extra] = process.argv.slice(2);
+    const [sourceArtifactPathValue, rssItemId, ...extra] = process.argv.slice(2);
     if (!sourceArtifactPathValue || extra.length > 0) {
       throw new Error(usage);
     }
@@ -52,11 +54,18 @@ const main = async (): Promise<void> => {
     const sourceArtifact: unknown = JSON.parse(sourceArtifactBytes.toString("utf8"));
     const sourceArtifactRef = artifactRef(sourceArtifactPath);
     const sourceArtifactSha256 = sha256(sourceArtifactBytes);
+    const rssSource = isRecord(sourceArtifact) && sourceArtifact.schemaVersion === "rss-capture-v1";
+    if ((rssSource && !rssItemId) || (!rssSource && rssItemId)) throw new Error(usage);
     const nativeItem =
       isRecord(sourceArtifact) && isRecord(sourceArtifact.item)
         ? sourceArtifact.item
         : undefined;
-    const captured = nativeItem?.provider === "seerist"
+    const captured = rssSource && rssItemId
+      ? adaptRssSourceContent(
+          (await loadRssCapture(runRoot, sourceArtifactPath)).capture,
+          rssItemId, { artifactRef: sourceArtifactRef, artifactSha256: sourceArtifactSha256 }
+        )
+      : nativeItem?.provider === "seerist"
       ? await (async () => {
           const rawArtifactRef = nonEmptyString(nativeItem.rawArtifactRef);
           if (!rawArtifactRef) {

@@ -34,8 +34,10 @@ what challenges the emerging answer, and what remains missing?
 
 - Discovery retains every deduplicated provider item. Scores and source tiers
   prioritise leads; neither proves relevance, independence or reliability.
-- Collection leads currently wait for an unimplemented RSS-connected source
-  list. They are not admitted evidence. Removed publisher-retrieval commands
+- Collection leads still wait for RSS candidate conversion/admission. A separate
+  bounded command-only RSS capture adapter now reaches canonicalization and
+  relevance proposals, but does not advance those leads. They are not admitted
+  evidence. Removed publisher-retrieval commands
   must not be restored implicitly or replaced with an unapproved provider.
 - Captured native Seerist content has a canonical-source adapter. Relevance and
   assurance mechanisms exist, but the complete automated path is not wired.

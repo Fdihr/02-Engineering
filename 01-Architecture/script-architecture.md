@@ -110,7 +110,12 @@ Provider credentials and HTTP remain inaccessible until the research-intent gate
 
 Bounded discovery is sequential, capped by explicit query, page, call, and result limits, and preserves each raw page. It is not a general batch runner and does not automatically advance any candidate into intake.
 
-Publisher pages are not fetched. Collection leads remain pending until the planned RSS-connected source list is implemented. No retrieval credential or executable retrieval/re-intake command is configured.
+Publisher pages are not fetched. The first RSS adapter captures one explicitly
+selected observed feed into immutable artifacts, preserves exact-URL lead-match
+receipts, and permits eligible feed-provided content to enter canonicalization
+and relevance proposals. It has no database or automatic polling. Collection
+leads remain pending because RSS candidate conversion/admission is not wired.
+No historical retrieval/re-intake command or retrieval credential is restored.
 
 The implemented connection creates the provider-neutral source document defined in `../02-Contracts/source-document-and-anchors.md`, then runs a bounded AI assessment against the exact approved research question. Deterministic code validates the typed assessment, exact anchors, model provenance, and artifact lineage. An assessment alone cannot create a new candidate or approve evidence. Existing candidates retain the compatibility evidence gate.
 
