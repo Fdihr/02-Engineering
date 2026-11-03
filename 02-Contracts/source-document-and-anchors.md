@@ -141,6 +141,8 @@ Deterministic code owns extraction from canonical artifacts, normalization, segm
 
 Downstream modules depend only on `SourceDocument`, `SourceAnchor`, approved-question lineage, and their own typed input. They must not import retrieval-provider response types, Seerist payload shapes, or source-specific parsers.
 
+New publisher-source collection requires an approved adapter; collection leads currently remain pending for RSS.
+
 A new source mechanism requires only:
 
 1. A narrow adapter into `CapturedSourceContent`.

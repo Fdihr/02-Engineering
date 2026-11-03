@@ -3,7 +3,7 @@
 ## Current acquisition boundary
 
 Publisher-page retrieval and automatic retrieved-source candidate conversion
-have been retired. Collection leads now route to `pending_rss_source` and wait
+have been retired. Collection leads now route to `pending_rss` and wait
 for the planned RSS-connected source list; RSS acquisition is not implemented.
 The old retrieval and re-intake npm commands and credential configuration have
 been removed. Native captured Seerist content can still be canonicalized and
@@ -14,7 +14,7 @@ The dated retrieval milestones below are historical records, not launch or
 implementation instructions. See `03-Workflow/first-slice.md` for current scope.
 
 Date: 2026-09-03
-Status: Bounded key-judgement selection and writer v2 implemented; reviewed NV Build awaits a fresh response, Challenge, and performed adjudication
+Status: Historical handoff. For current executable behavior, see `03-Workflow/first-slice.md`; Firecrawl retrieval described below has been removed and collection leads now wait for the planned RSS-connected source list.
 Workspace root: `CTI/`
 Source domain: Agentic App Engineering
 Authority class: Current implementation direction and next-action handoff
@@ -46,7 +46,7 @@ Read `02-Engineering/03-Workflow/memo-workflow.md` and the canonical SVG only as
 
 Build a modular TypeScript application that turns material from the approved Seerist API surface and OSINT search, discovery, and retrieval into trustworthy evidence-grounded memos. Cyber threat intelligence is the first validated profile, not the product boundary. The domain-neutral workflow must also support geopolitical, country-risk, physical-security, supply-chain, operational-risk, and similar research questions.
 
-The long-term target includes every Seerist endpoint the organization is permitted to use. The executable baseline covers only endpoints and OSINT mechanisms whose live behavior has been observed and mapped into explicit evidence-candidate, collection-lead, or context roles. Current proof covers bounded `/v1/wod` collection and discovery plus exact-URL OSINT retrieval; endpoint breadth must grow through narrow tested adapters rather than unverified generic handling.
+The long-term target includes every Seerist endpoint the organization is permitted to use. The executable baseline covers only endpoints and OSINT mechanisms whose live behavior has been observed and mapped into explicit evidence-candidate, collection-lead, or context roles. The current proof covers bounded `/v1/wod` collection and discovery; collection leads remain pending for the planned RSS-connected list. Exact-URL OSINT retrieval was removed; endpoint breadth must grow through narrow tested adapters rather than unverified generic handling.
 
 Cyber terminology, CTI-specific quality policy, Vestas context, and organizational relevance are selectable memo-profile concerns. They must not become prerequisites for unrelated memo types. When organizational relevance is requested, it remains downstream of supported external claims and requires governed context lineage.
 
@@ -202,7 +202,7 @@ npm run retrieve:source -- <intake-result.json> <exact-source-url>
 
 The raw provider envelope, canonical result, checksums, read-only receipt, and events remain under ignored `app/runs/`. The result distinguishes Firecrawl as access provider from the original publisher, treats fetched text as untrusted, rejects cross-origin redirects, and always records `approvalStatus: "not_requested"`.
 
-The active boundary is `02-Engineering/02-Contracts/source-content-retrieval.md`. Automated tests and strict TypeScript pass. On 2026-08-31, the selected NV source completed one bounded live retrieval: Firecrawl returned HTTP 200, the final URL matched the requested publisher URL, and the canonical result recorded `resolved` / `content_retrieved` with `approvalStatus: "not_requested"`.
+The historical contract is `02-Engineering/02-Contracts/source-content-retrieval.md`. At the time, automated tests and strict TypeScript passed. On 2026-08-31, the selected NV source completed one bounded live retrieval: Firecrawl returned HTTP 200, the final URL matched the requested publisher URL, and the canonical result recorded `resolved` / `content_retrieved` with `approvalStatus: "not_requested"`.
 
 ## Implemented slice: canonical source and Copilot relevance PoC
 
@@ -342,7 +342,7 @@ At this handoff:
 - Intake, reporting, approval workflow, and isolated command tests pass.
 - The earlier saved analyst-report item is retained only as non-admissible historical output because it has no approved pre-collection question lineage.
 - Explicit approval, rejection, and revision-request decisions are implemented; the real NV candidate was approved by `FDIHR`.
-- One-source Firecrawl retrieval is implemented with fixed-origin, exact-URL, no-cache-storage, TLS, timeout, size, redirect, checksum, and untrusted-content controls; the live NV check completed successfully on 2026-08-31 without requesting evidence approval.
+- Historical: one-source Firecrawl retrieval used fixed-origin, exact-URL, no-cache-storage, TLS, timeout, size, redirect, checksum, and untrusted-content controls; it has since been removed without deleting prior run artifacts.
 - Provider-neutral canonicalization is implemented for retrieved and native Seerist content with deterministic IDs, exact UTF-8 anchors, path confinement, non-overwrite behavior, and lossless complete-source retention; the NV retrieval produced a validated 76-segment document.
 - Bounded relevance request and response validation is implemented with fixed untrusted-source policy, exact question and source lineage, all four verdict routes, model-authority rejection, and content-safe events. The real NV proposal validated as `partially-relevant` with three exact anchors.
 - Retrieved-source re-intake accepts only a validated positive assessment, verifies retrieval, canonical-document, model-request, model-response, assessment, and decision checksums, creates only a pending candidate, and preserves assessment and retrieval lineage through the evidence gate.

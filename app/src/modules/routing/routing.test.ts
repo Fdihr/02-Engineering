@@ -64,8 +64,8 @@ test("keeps collection leads pending the RSS source list without retrieval", () 
   };
   const decision = decideRoute(lead);
 
-  assert.equal(decision.destination, "pending_rss_source");
-  assert.equal(decision.ruleId, "RULE-LEAD-PENDING-RSS-002");
+  assert.equal(decision.destination, "pending_rss");
+  assert.equal(decision.ruleId, "RULE-LEAD-PENDING-RSS-001");
   assert.match(decision.reason, /publisher pages are not fetched/);
   assert.equal(decision.approvalStatus, "not_applicable");
 });

@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Memo review · CTI workbench (concept 2)</title>
+  <!--
+    THESIS: Approve claims, not files. Every sentence that makes a claim opens its own evidence trail; publication is approved against named blockers. Refuses the memo-as-document-plus-separate-audit-tab arrangement.
+    OWN-WORLD: ECS "weather window". Night Sky bar, white canvas, ruled rows, one plate for the publication decision, assessment marks (Covered disc, Partial half, Gap yellow centre, Unclear dashed) plus words, Blue Sky Band for the selected claim.
+    STORY: The reviewer reads the memo as the reader will, sees how well each claim is supported, opens any claim to see quotes, sources, tiers, assurance and challenge, resolves blockers in place, then approves.
+    FIRST VIEWPORT: Title; plate with the publication decision and its blockers; coverage bar; memo on the left (68ch), trace pane on the right (sticky).
+    FORM: User-pinned concept 2 (claim-trace memo reviewer). Reader plus margin staging. No seed.
+  -->
+  <script src="/concepts/concepts.js"></script>
+  <link rel="stylesheet" href="/design_system.css">
+  <link rel="stylesheet" href="legacy-run_view.css">
+  <link rel="stylesheet" href="/concepts/concepts.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-left">
+        <div class="brand">
+          <img src="/assets/vestas/Vestas_White.svg" alt="Vestas">
+          <h1>CTI workbench</h1>
+        </div>
+        <nav class="topnav" aria-label="Main">
+          <a href="/concepts/decision-inbox.html">Home <span class="n">6</span></a>
+          <a href="/concepts/governance.html">Governance</a>
+          <a href="/concepts/process-map.html">Process map</a>
+        </nav>
+      </div>
+      <div class="topbar-actions">
+        <span class="signed">Signed in as <strong>FDIHR</strong></span>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Dark theme</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <div>
+        <a class="parent-link" href="/concepts/decision-inbox.html">Home</a>
+        <h2>Publication review</h2>
+        <p class="meta">Europe cyber and geopolitical outlook, Q4 2026 · memo v3 for Vestas leadership · written yesterday at 16:20 · memo standard v1 · analysis qti-2026-q3. Concept with illustrative data.</p>
+      </div>
+      <div class="keys" aria-label="Keyboard shortcuts">
+        <span><kbd>J</kbd><kbd>K</kbd> next, previous claim</span>
+      </div>
+    </div>
+
+    <p class="question-line">Which cyber and geopolitical threats will most affect Vestas operations in Europe in Q4 2026?</p>
+    <div class="activity-strip" role="status">
+      <span class="now"><span class="mark done">Finished</span><span>Verification passed with <span class="figures">2</span> blockers. Memo v3 is ready for your review.</span></span>
+      <ol class="stages" aria-label="Stages">
+        <li><span class="mark done">Intent</span></li>
+        <li><span class="mark done">Evidence</span></li>
+        <li><span class="mark done">Findings</span></li>
+        <li><span class="mark done">Writing</span></li>
+        <li aria-current="step"><span class="mark attention">Publication</span></li>
+      </ol>
+      <a class="yours" href="/concepts/analysis.html">Open the analysis</a>
+    </div>
+
+    <div id="decision"></div>
+
+    <nav class="view-tabs" role="tablist" aria-label="Memo review">
+      <button class="view-tab" type="button" role="tab" id="tab-memo" aria-controls="pane-memo" aria-selected="true" data-tab="memo">Memo <span class="tab-count">9 claims</span></button>
+      <button class="view-tab" type="button" role="tab" id="tab-sources" aria-controls="pane-sources" aria-selected="false" tabindex="-1" data-tab="sources">Sources <span class="tab-count">9</span></button>
+      <button class="view-tab" type="button" role="tab" id="tab-changes" aria-controls="pane-changes" aria-selected="false" tabindex="-1" data-tab="changes">Changes since v2 <span class="tab-count">3</span></button>
+    </nav>
+
+    <div class="tab-pane" id="pane-memo" role="tabpanel" aria-labelledby="tab-memo">
+      <div class="review">
+        <article class="memo" id="memo" aria-label="Memo text"></article>
+        <aside class="trace-pane" aria-label="Claim trace" aria-live="polite">
+          <div class="trace-body" id="trace"></div>
+        </aside>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="pane-sources" role="tabpanel" aria-labelledby="tab-sources" hidden>
+      <div class="table-wrap">
+        <table class="src-table">
+          <thead><tr><th>Source</th><th>Tier</th><th>Assurance</th><th class="num">Claims</th><th>Retrieved</th></tr></thead>
+          <tbody id="sources"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="pane-changes" role="tabpanel" aria-labelledby="tab-changes" hidden>
+      <ul class="rows">
+        <li><strong class="ev-source">Key judgement 2 strengthened</strong><div class="meta">Second independent source admitted (EU agency threat landscape). Partial became covered.</div></li>
+        <li><strong class="ev-source">Implication on transport routes added</strong><div class="meta">Follows the Ministry statement on subsea cable damage, admitted on 30 Oct.</div></li>
+        <li><strong class="ev-source">Bottom line reworded</strong><div class="meta">“Will continue” became “is likely to continue”, matching the support calibration policy.</div></li>
+      </ul>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+  (function () {
+    var esc = window.escapeHtml;
+    var $ = function (id) { return document.getElementById(id); };
+
+    var sources = {
+      S1: { name: 'National CERT bulletin', tier: 'Tier 2, official', assurance: ['covered', 'Reviewed'], retrieved: '28 Oct 2026' },
+      S2: { name: 'Utility OT advisory, national CERT', tier: 'Tier 2, official', assurance: ['covered', 'Reviewed'], retrieved: '31 Oct 2026' },
+      S3: { name: 'Control Risks analyst report', tier: 'Tier 1, analyst report', assurance: ['covered', 'Reviewed'], retrieved: '27 Oct 2026' },
+      S4: { name: 'Specialist security media', tier: 'Tier 3, specialist media', assurance: ['covered', 'Reviewed'], retrieved: '29 Oct 2026' },
+      S5: { name: 'Ministry statement on subsea cable damage', tier: 'Tier 2, official', assurance: ['covered', 'Reviewed'], retrieved: '30 Oct 2026' },
+      S6: { name: 'Industry ISAC weekly summary', tier: 'Tier 3, specialist media', assurance: ['covered', 'Reviewed'], retrieved: '30 Oct 2026' },
+      S7: { name: 'Regional news report on port security', tier: 'Tier 3, established media', assurance: ['attention', 'Provisional'], retrieved: '31 Oct 2026' },
+      S8: { name: 'Researcher social post', tier: 'Tier 5, social', assurance: ['closed', 'Context only'], retrieved: '29 Oct 2026' },
+      S9: { name: 'EU agency threat landscape', tier: 'Tier 2, official', assurance: ['covered', 'Reviewed'], retrieved: '26 Oct 2026' }
+    };
+
+    var ASSESS = { covered: 'Covered', partial: 'Partial', gap: 'Gap', unclear: 'Unclear' };
+
+    var claims = [
+      { id: 'c1', where: 'Bottom line', text: 'State-linked pre-positioning in European utility OT networks is likely to continue through Q1 2027', assess: 'covered', calib: 'Likely',
+        ev: [['S9', 'Pre-positioning activity against energy-sector operational networks persisted throughout the reporting period.', 'seg-022 · 4110–4262'],
+             ['S3', 'We expect state-aligned access operations against European utilities to continue at the current tempo into early 2027.', 'seg-006 · 980–1114']],
+        challenge: 'Challenge asked whether “continue” assumes a stable tempo. Adjudication kept it: both sources describe sustained activity, not a single campaign.' },
+      { id: 'c2', where: 'Bottom line', text: 'disruptive action against wind assets remains unlikely without a wider escalation', assess: 'partial', calib: 'Unlikely',
+        ev: [['S3', 'Disruptive operations against generation assets have not been observed outside periods of acute crisis.', 'seg-009 · 1502–1630']],
+        challenge: 'One analyst source; consistent with the absence of reported incidents. Kept as partial.' },
+      { id: 'c3', where: 'Key judgement 1', kj: 1, text: 'Remote-access gateways serving generation sites are the most frequently probed entry point', assess: 'covered', calib: 'Likely',
+        ev: [['S2', 'Operators observed repeated authentication attempts against remote-access gateways serving wind generation sites.', 'seg-014 · 2210–2388'],
+             ['S1', 'Most reported intrusion attempts targeted VPN and remote-maintenance interfaces.', 'seg-003 · 412–520'],
+             ['S6', 'Members again reported credential spraying against remote-access portals.', 'seg-002 · 188–266']],
+        challenge: 'No challenge raised.' },
+      { id: 'c4', where: 'Key judgement 2', kj: 2, text: 'Ransomware remains the main cause of production disruption at European industrial manufacturers', assess: 'covered', calib: 'Almost certain',
+        ev: [['S9', 'Ransomware accounted for the majority of disruptive incidents in manufacturing.', 'seg-031 · 6020–6118'],
+             ['S6', 'Two members reported production stoppages after ransomware incidents this quarter.', 'seg-005 · 702–790']],
+        challenge: 'Strengthened in v3 by the EU agency source.' },
+      { id: 'c5', where: 'Key judgement 3', kj: 3, text: 'A state-linked group was behind the October intrusion at a Nordic grid operator', assess: 'gap', calib: 'Likely', blocker: 'b1',
+        ev: [['S4', 'Investigators linked the activity to a state-aligned cluster known for targeting European utilities.', 'seg-011 · 1840–1952']],
+        contra: ['S1', 'Attribution at this stage would be premature; no shared infrastructure has been identified.', 'seg-007 · 860–958'],
+        challenge: 'Single source, contradicted by a tier 2 official bulletin. The memo standard requires two independent sources for a key judgement rated likely.' },
+      { id: 'c6', where: 'Key judgement 4', kj: 4, text: 'Hybrid sabotage against Baltic subsea cables and ports will remain a recurring risk to logistics', assess: 'covered', calib: 'Likely',
+        ev: [['S5', 'The damage is consistent with a dragged anchor; the investigation into intent continues.', 'seg-004 · 530–640'],
+             ['S3', 'Incidents affecting Baltic subsea infrastructure have recurred at a rate of several per year since 2023.', 'seg-012 · 2001–2140']],
+        challenge: 'Challenge noted intent is unproven in the latest case. Wording speaks of risk, not attribution; kept.' },
+      { id: 'c7', where: 'Implications for Vestas', text: 'Port security disruption could delay component shipments through Baltic hubs', assess: 'partial', calib: 'Possible', blocker: 'b2',
+        ev: [['S7', 'Security checks at the port added up to two days to some cargo handling last week.', 'seg-003 · 300–402']],
+        challenge: 'Rests on a source whose assurance is still provisional.' },
+      { id: 'c8', where: 'Implications for Vestas', text: 'Service technicians\u2019 remote-maintenance accounts are an attractive target', assess: 'covered', calib: 'Likely',
+        ev: [['S2', 'Compromised maintenance credentials were the initial access vector in two of the cases reviewed.', 'seg-019 · 3340–3460'],
+             ['S1', 'Third-party maintenance accounts remain a common route into OT environments.', 'seg-005 · 630–712']],
+        challenge: 'No challenge raised.' },
+      { id: 'c9', where: 'Indicators to watch', text: 'a public claim of responsibility by a hacktivist group would signal intent to escalate', assess: 'unclear', calib: 'Not rated',
+        ev: [['S8', 'Channel posts suggest the group is preparing a campaign against energy firms.', 'post · 2026-10-29']],
+        challenge: 'Indicator, not a judgement. Social source used for context only.' }
+    ];
+
+    var blockers = [
+      { id: 'b1', claim: 'c5', text: 'Key judgement 3 rests on one source and is contradicted', resolved: false,
+        fixes: [['downgrade', 'Downgrade to \u201cpossible\u201d and state the disagreement', 'Confirming rewrites key judgement 3 as \u201cpossible\u201d, quotes both sources, and records the change in memo v3.1. The other judgements stay as they are.'],
+                ['remove', 'Move out of key judgements', 'Confirming moves the sentence to background context. It is no longer a key judgement and no longer needs two sources.']] },
+      { id: 'b2', claim: 'c7', text: 'Implication on Baltic ports rests on a provisional source', resolved: false,
+        fixes: [['caveat', 'Keep with a stated caveat', 'Confirming adds \u201cbased on a single unconfirmed report\u201d to the sentence. The source stays provisional and is listed as such.'],
+                ['assure', 'Wait for source assurance', 'Confirming holds publication until the assurance review of this source is recorded.']] }
+    ];
+
+    var currentId = 'c5';
+    var published = false;
+
+    var claimById = function (id) { return claims.filter(function (c) { return c.id === id; })[0]; };
+    var openBlockers = function () { return blockers.filter(function (b) { return !b.resolved; }); };
+    var mark = function (cls, word) { return '<span class="mark ' + cls + '">' + esc(word) + '</span>'; };
+
+    function claimSpan(c) {
+      return '<span role="button" tabindex="0" class="claim-btn' + (c.assess === 'gap' ? ' is-gap' : '') + '" data-claim="' + c.id + '" aria-pressed="' + (c.id === currentId) + '" aria-label="' + esc(c.text) + '. ' + ASSESS[c.assess] + '. Show sources.">' + esc(c.text) + '</span>';
+    }
+
+    function renderDecision() {
+      if (published) {
+        $('decision').innerHTML = '<section><div class="caution is-done">' + mark('done', 'Published') + '<span>Memo v3.1 approved for publication by FDIHR. The decision and every claim trace are in the audit trail.</span></div><p class="next-step"><a class="btn-primary" href="/concepts/output.html">Open the published memo</a></p></section>';
+        return;
+      }
+      var open = openBlockers();
+      var counts = { covered: 0, partial: 0, gap: 0, unclear: 0 };
+      claims.forEach(function (c) { counts[c.assess]++; });
+      $('decision').innerHTML =
+        '<div class="plate">' +
+          '<div class="plate-head"><div>' +
+            '<div class="plate-kicker">' + (open.length ? mark('attention', open.length + (open.length === 1 ? ' blocker' : ' blockers')) : mark('covered', 'Ready')) + '<span>Publication decision</span></div>' +
+            '<h3 class="plate-title">' + (open.length ? 'Resolve ' + open.length + ' ' + (open.length === 1 ? 'blocker' : 'blockers') + ' before you can approve' : 'Every blocker is resolved. Approve when you have read the memo.') + '</h3>' +
+            '<div class="plate-meta">Covered <span class="figures">' + counts.covered + '</span> · partial <span class="figures">' + counts.partial + '</span> · gap <span class="figures">' + counts.gap + '</span> · unclear <span class="figures">' + counts.unclear + '</span> of <span class="figures">' + claims.length + '</span> claims</div>' +
+          '</div>' +
+          '<div class="btn-row plate-actions">' +
+            '<button class="btn-primary" type="button" id="btn-publish"' + (open.length ? ' disabled aria-describedby="publish-why"' : '') + '>Approve for publication</button>' +
+            '<button class="btn-inverse" type="button" id="btn-return">Return to synthesis</button>' +
+          '</div></div>' +
+          (open.length ? '<p class="plate-confirm" id="publish-why">Approval opens when no blocker is left. Choose a blocker to see its claim and the ways to resolve it.</p>' : '<p class="plate-confirm">Confirming publishes memo v3.1 to Vestas leadership and freezes its sources and traces. Analyses and drafts stay as they are.</p>') +
+          '<ul class="blockers">' + blockers.map(function (b) {
+            return '<li class="' + (b.resolved ? 'resolved' : '') + '">' + (b.resolved ? mark('covered', 'Resolved') : mark('attention', 'Blocker')) +
+              '<span class="b-text">' + esc(b.text) + '</span>' +
+              '<button class="btn-link" type="button" data-claim="' + b.claim + '">Show claim</button></li>';
+          }).join('') + '</ul>' +
+        '</div>' +
+        '<section class="coverage" aria-label="Support across claims">' +
+          '<div class="coverage-bar" aria-hidden="true">' +
+            '<span class="c" style="flex-grow:' + counts.covered + '"></span>' +
+            '<span class="p" style="flex-grow:' + counts.partial + '"></span>' +
+            '<span class="g" style="flex-grow:' + counts.gap + '"></span>' +
+            '<span class="u" style="flex-grow:' + counts.unclear + '"></span>' +
+          '</div>' +
+          '<div class="coverage-legend">' +
+            mark('covered', 'Covered') + '<span class="figures">' + counts.covered + '</span>' +
+            mark('partial', 'Partial') + '<span class="figures">' + counts.partial + '</span>' +
+            mark('gap', 'Gap') + '<span class="figures">' + counts.gap + '</span>' +
+            mark('unclear', 'Unclear') + '<span class="figures">' + counts.unclear + '</span>' +
+          '</div>' +
+        '</section>';
+    }
+
+    function kjBlock(c) {
+      return '<div class="kj"><span class="kj-n">' + c.kj + '</span><div class="kj-body"><p>' + claimSpan(c) + '.</p>' +
+        '<div class="kj-marks">' + mark(c.assess, ASSESS[c.assess]) + '<span class="meta">' + esc(c.calib) + ' · ' + c.ev.length + (c.ev.length === 1 ? ' source' : ' sources') + '</span></div></div></div>';
+    }
+
+    function renderMemo() {
+      var c = function (id) { return claimSpan(claimById(id)); };
+      $('memo').innerHTML =
+        '<section class="memo-part"><h3>Bottom line</h3><p class="bluf">' + c('c1') + '; ' + c('c2') + '.</p></section>' +
+        '<section class="memo-part"><h3>Key judgements</h3>' + ['c3', 'c4', 'c5', 'c6'].map(function (id) { return kjBlock(claimById(id)); }).join('') + '</section>' +
+        '<section class="memo-part"><h3>Implications for Vestas</h3>' +
+          '<p>' + c('c7') + '. Installation schedules that depend on single Baltic hubs carry the most exposure, because alternative routing adds days rather than hours.</p>' +
+          '<p>' + c('c8') + '. Access reviews for third-party and field-service accounts are the most direct control within Vestas\u2019 reach.</p></section>' +
+        '<section class="memo-part"><h3>Indicators to watch</h3>' +
+          '<p>Further cable or port incidents in the Baltic within weeks of each other; renewed credential spraying reported by sector peers; and ' + c('c9') + '.</p></section>';
+    }
+
+    function renderTrace() {
+      var c = claimById(currentId);
+      var idx = claims.indexOf(c);
+      var b = c.blocker ? blockers.filter(function (x) { return x.id === c.blocker; })[0] : null;
+      var html =
+        '<div class="section-head"><h3>Claim ' + (idx + 1) + ' of ' + claims.length + '</h3>' +
+          '<span class="meta">' + esc(c.where) + '</span></div>' +
+        (b && !b.resolved ? '<div class="caution">' + mark('attention', 'Blocker') + '<span>' + esc(b.text) + '.</span></div>' : '') +
+        '<p class="trace-claim-text">' + esc(c.text.charAt(0).toUpperCase() + c.text.slice(1)) + '.</p>' +
+        '<div class="trace-marks">' + mark(c.assess, ASSESS[c.assess]) + '<span class="meta">Calibrated as ' + esc(c.calib.toLowerCase()) + '</span></div>' +
+        '<h4 class="trace-h">Supporting evidence <span class="meta">' + c.ev.length + '</span></h4>' +
+        '<ul class="ev-list">' + c.ev.map(function (e) {
+          var s = sources[e[0]];
+          return '<li class="ev"><blockquote>\u201c' + esc(e[1]) + '\u201d</blockquote>' +
+            '<div class="ev-source">' + esc(s.name) + '</div>' +
+            '<div class="ev-meta"><span>' + esc(s.tier) + '</span>' + mark(s.assurance[0], s.assurance[1]) + '<span class="anchor">' + esc(e[2]) + '</span><span>' + esc(s.retrieved) + '</span></div></li>';
+        }).join('') + '</ul>' +
+        (c.contra ? '<h4 class="trace-h">Contradicting evidence <span class="meta">1</span></h4><ul class="ev-list"><li class="ev"><blockquote>\u201c' + esc(c.contra[1]) + '\u201d</blockquote><div class="ev-source">' + esc(sources[c.contra[0]].name) + '</div><div class="ev-meta"><span>' + esc(sources[c.contra[0]].tier) + '</span>' + mark('covered', 'Reviewed') + '<span class="anchor">' + esc(c.contra[2]) + '</span></div></li></ul>' : '') +
+        '<h4 class="trace-h">Challenge and adjudication</h4><div class="challenge-note"><p>' + esc(c.challenge) + '</p></div>' +
+        (b && !b.resolved ? '<h4 class="trace-h">Resolve this blocker</h4><div class="trace-actions">' + b.fixes.map(function (f, n) {
+            return '<div class="fix-option"><button class="btn-secondary" type="button" data-fix="' + b.id + ':' + f[0] + '">' + esc(f[1]) + '</button><p class="meta">' + esc(f[2]) + '</p></div>';
+          }).join('') + '</div>' : '') +
+        (b && b.resolved ? '<p class="meta">' + mark('covered', 'Resolved') + ' ' + esc(b.resolution) + '</p>' : '');
+
+      var body = $('trace');
+      body.classList.add('swapping');
+      requestAnimationFrame(function () {
+        body.innerHTML = html;
+        requestAnimationFrame(function () { body.classList.remove('swapping'); });
+      });
+    }
+
+    function renderSources() {
+      $('sources').innerHTML = Object.keys(sources).map(function (k) {
+        var s = sources[k];
+        var n = claims.filter(function (c) { return c.ev.some(function (e) { return e[0] === k; }) || (c.contra && c.contra[0] === k); }).length;
+        return '<tr><td>' + esc(s.name) + '</td><td>' + esc(s.tier) + '</td><td>' + mark(s.assurance[0], s.assurance[1]) + '</td><td class="num">' + n + '</td><td class="compact figures">' + esc(s.retrieved) + '</td></tr>';
+      }).join('');
+    }
+
+    function select(id, focus) {
+      currentId = id;
+      document.querySelectorAll('.claim-btn').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-claim') === id)); });
+      renderTrace();
+      if (focus) {
+        var btn = document.querySelector('.claim-btn[data-claim="' + id + '"]');
+        if (btn) { btn.focus({ preventScroll: true }); btn.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+      }
+    }
+
+    function applyFix(blockerId, fix) {
+      var b = blockers.filter(function (x) { return x.id === blockerId; })[0];
+      var c = claimById(b.claim);
+      b.resolved = true;
+      if (fix === 'downgrade') { c.text = 'A state-linked group was possibly behind the October intrusion at a Nordic grid operator; sources disagree'; c.assess = 'partial'; c.calib = 'Possible'; c.ev.push(c.contra); delete c.contra; b.resolution = 'Downgraded to possible; both sources quoted.'; }
+      if (fix === 'remove') { c.assess = 'partial'; c.calib = 'Context'; b.resolution = 'Moved to background context.'; }
+      if (fix === 'caveat') { c.text = c.text + ', based on a single unconfirmed report'; b.resolution = 'Caveat added; source stays provisional.'; }
+      if (fix === 'assure') { b.resolved = false; window.showToast('Publication held until the source assurance review is recorded.'); return; }
+      renderDecision(); renderMemo(); renderTrace();
+      window.showToast(b.text + ': resolved.');
+    }
+
+    document.addEventListener('click', function (e) {
+      var claim = e.target.closest('[data-claim]');
+      if (claim) { select(claim.getAttribute('data-claim'), !claim.classList.contains('claim-btn')); return; }
+      var fix = e.target.closest('[data-fix]');
+      if (fix) { var p = fix.getAttribute('data-fix').split(':'); applyFix(p[0], p[1]); return; }
+      if (e.target.id === 'btn-publish' && !openBlockers().length) {
+        published = true; renderDecision();
+        document.querySelector('.activity-strip .now').innerHTML = '<span class="mark done">Published</span><span>Memo v3.1 published to Vestas leadership</span>';
+        document.querySelector('.activity-strip li[aria-current]').innerHTML = '<span class="mark done">Publication</span>';
+        document.querySelector('.activity-strip li[aria-current]').removeAttribute('aria-current');
+        var yours = document.querySelector('.activity-strip .yours');
+        yours.textContent = 'Open the published memo'; yours.href = '/concepts/output.html';
+        window.showToast('Memo v3.1 approved for publication: done.'); return;
+      }
+      if (e.target.id === 'btn-return') { window.showToast('Returned to synthesis with your notes. The memo stays at v3.'); return; }
+      var tab = e.target.closest('.view-tab');
+      if (tab) {
+        document.querySelectorAll('.view-tab').forEach(function (t) {
+          var on = t === tab;
+          t.setAttribute('aria-selected', String(on));
+          t.tabIndex = on ? 0 : -1;
+          document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+        });
+      }
+    });
+    document.addEventListener('keydown', function (e) {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.classList && e.target.classList.contains('claim-btn')) {
+        e.preventDefault(); select(e.target.getAttribute('data-claim'), false); return;
+      }
+      if (e.target.matches('input, textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key !== 'j' && e.key !== 'k') return;
+      e.preventDefault();
+      var idx = claims.map(function (c) { return c.id; }).indexOf(currentId);
+      var next = claims[Math.max(0, Math.min(claims.length - 1, idx + (e.key === 'j' ? 1 : -1)))];
+      select(next.id, true);
+    });
+
+    renderDecision();
+    renderMemo();
+    renderTrace();
+    renderSources();
+  })();
+  </script>
+</body>
+</html>

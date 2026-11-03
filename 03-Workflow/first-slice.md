@@ -6,9 +6,15 @@ Human references below are either one of the four target surfaces (intent, publi
 
 ## Product boundary
 
+**Current implementation update (2026-11-02):** Firecrawl source retrieval and its Settings key
+management have been removed. Seerist collection leads now remain pending for the planned RSS-connected
+source list; no publisher page is fetched. Existing run artifacts and historical retrieval records are
+preserved. The sections below that describe Firecrawl retrieval or retrieved-source re-intake document
+the superseded implementation, not the current executable path.
+
 This implementation is the first narrow slice of a general Seerist-plus-OSINT memo tool. Cyber threat intelligence and the CIA Director test question validate the workflow; they do not constrain future memo subjects. The target includes every Seerist endpoint approved for organizational use plus bounded OSINT search, discovery, and retrieval.
 
-The current baseline does not claim that breadth yet. It implements bounded `/v1/wod` collection and discovery and canonicalization of captured provider content. Leads route to `pending_rss_source`; RSS acquisition and new native-content candidate conversion remain incremental work. New endpoints and search mechanisms must be added from observed responses through explicit role mapping, provenance-preserving adapters, and focused tests. The downstream question, evidence, source-assurance, synthesis, and memo contracts remain domain-neutral unless a selected memo profile adds stricter requirements.
+The current baseline does not claim that breadth yet. It implements bounded `/v1/wod` collection and discovery and canonicalization of captured provider content. Leads route to `pending_rss`; RSS acquisition and new native-content candidate conversion remain incremental work. New endpoints and search mechanisms must be added from observed responses through explicit role mapping, provenance-preserving adapters, and focused tests. The downstream question, evidence, source-assurance, synthesis, and memo contracts remain domain-neutral unless a selected memo profile adds stricter requirements.
 
 The canonical target architecture in `memo-workflow.md` is not a fixed implementation contract. This completed slice remains the implementation baseline until a subsequent slice is accepted.
 
@@ -26,7 +32,7 @@ The generic probe and representative live requests are working. Observed contrac
 The probe established three provider roles:
 
 1. Evidence candidates: source-linked records with sufficient captured content for human review.
-2. Collection leads: news/social summaries, cluster records, hotspots, and Scribe events that require source resolution or retrieval.
+2. Collection leads: news/social summaries, cluster records, hotspots, and Scribe events that remain pending until an approved source workflow is available.
 3. Context: country background, risk ratings, Pulse, and future-looking provider assessments that may inform analysis but do not independently corroborate claims.
 
 ## Completed slice: approved research intent and bounded collection
@@ -85,7 +91,7 @@ Initial command integration used synthetic artifacts in an isolated temporary di
 ## Current slice: collection leads pending RSS
 
 Collection leads retain their provider metadata and approved-question lineage,
-but route to `pending_rss_source`. The dashboard displays "Waiting for RSS" and
+but route to `pending_rss`. The dashboard displays "Waiting for RSS" and
 does not offer publisher-page retrieval. The planned RSS-connected source list
 is not implemented; no replacement retrieval provider is silently substituted.
 
@@ -126,6 +132,8 @@ The dashboard's Settings chooser lists the locally authenticated Copilot account
 The real NV source completed this path as `partially-relevant` with three exact anchors and destination `evidence_candidate_proposal / pending_human_review`. It reports the visit, possible purposes, Ratcliffe-to-Bortnikov participation, and Baltic hybrid-threat implications, but does not establish that the visit occurred specifically on 27 August or provide explicit cyber implications.
 
 ## Historical slice: positive-assessment candidate conversion (retired)
+
+Future RSS candidates require their own observed, mapped, tested source adapter and approved workflow boundary.
 
 One resolved retrieval result + its verified source-lead lineage + one validated positive question-relevance assessment -> one new evidence candidate routed to pending policy admission or compatibility review.
 

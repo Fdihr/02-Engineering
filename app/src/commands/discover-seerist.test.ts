@@ -29,7 +29,7 @@ for (const name of ["collect:seerist", "discover:seerist", "probe:seerist"]) {
         env: {
           ...process.env,
           SEERIST_API_KEY: "",
-          SEERIST_RUN_DIR: resolve(tempRoot, "seerist-runs")
+          SEERIST_RUN_DIR: resolve(tempRoot, "seerist-runs"),
         }
       });
       assert.equal(result.status, 1, result.stderr);

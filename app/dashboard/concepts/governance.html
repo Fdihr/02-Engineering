@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Governance · CTI workbench (concept)</title>
+  <!--
+    THESIS: The rules every analysis runs under are versioned packs, approved on their own cadence and never per memo.
+  -->
+  <script src="/concepts/concepts.js"></script>
+  <link rel="stylesheet" href="/design_system.css">
+  <link rel="stylesheet" href="legacy-run_view.css">
+  <link rel="stylesheet" href="/concepts/concepts.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-left">
+        <div class="brand">
+          <img src="/assets/vestas/Vestas_White.svg" alt="Vestas">
+          <h1>CTI workbench</h1>
+        </div>
+        <nav class="topnav" aria-label="Main">
+          <a href="/concepts/decision-inbox.html">Home <span class="n">6</span></a>
+          <a href="/concepts/governance.html" aria-current="page">Governance</a>
+          <a href="/concepts/process-map.html">Process map</a>
+        </nav>
+      </div>
+      <div class="topbar-actions">
+        <span class="signed">Signed in as <strong>FDIHR</strong></span>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Dark theme</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <div>
+        <h2>Governance</h2>
+        <p class="meta">Versioned rules. Approved on their own cadence, never per memo. Every analysis records the versions it used. Concept with illustrative data.</p>
+      </div>
+      <div class="keys" aria-label="Keyboard shortcuts">
+        <span><kbd>J</kbd><kbd>K</kbd> next, previous</span>
+        <span><kbd>R</kbd> write a reason</span>
+      </div>
+    </div>
+
+    <div class="inbox">
+      <div>
+        <div class="filters" role="group" aria-label="Filter rule packs" id="filters"></div>
+        <ul class="queue" id="queue" aria-label="Rule packs"></ul>
+        <div class="empty-state" id="queue-empty" hidden>
+          <h3>Nothing in this view</h3>
+          <p>No rule pack is waiting for you. Choose All to see every pack.</p>
+        </div>
+      </div>
+
+      <section class="detail" aria-live="polite" aria-labelledby="detail-title">
+        <div class="detail-body" id="detail"></div>
+      </section>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+  (function () {
+    var packs = [
+      {
+        id: 'memo-standard', title: 'Memo standard v1', owner: 'FDIHR', approved: 'Approved 12 Aug 2026', status: 'active',
+        facts: [['Version', 'v1'], ['Approved by', 'FDIHR'], ['Approved on', '<span class="figures">12 Aug 2026</span>'], ['Checksum', '<code>sha256 4be1…a09c</code>'], ['Used by', '<span class="figures">4</span> analyses']],
+        rules: ['Every key judgement carries a likelihood and a support mark.', 'A single-source key judgement blocks publication until a person accepts it.', 'Limitations must state the support check status.', 'The bottom line fits in three sentences.', 'Every source is listed with its tier.']
+      },
+      {
+        id: 'assurance', title: 'Source assurance policy v4', owner: 'FDIHR', approved: 'Proposed 31 Oct 2026', status: 'waiting', kind: 'policy',
+        facts: [['Version', 'v4, replaces v3 (active since 3 Sep 2026)'], ['Proposed by', 'FDIHR'], ['Used by', '<span class="figures">0</span> analyses until approved']],
+        rules: [],
+        plate: {
+          kicker: 'Governance decision', title: 'Approve source assurance policy v4', meta: 'Proposed by FDIHR · 31 Oct',
+          quote: 'Adds: an official source must name its issuing body. Changes: social posts can support context only. Changes: a provisional source cannot be the only support for a key judgement.',
+          confirm: 'Confirming makes v4 the policy for new analyses. Analyses already running keep v3; published outputs are unchanged.',
+          primary: 'Approve v4', secondary: 'Reject', done: ['Active', 'covered', 'Source assurance policy v4 approved and active for new analyses.'], doneSecondary: ['Rejected', 'closed', 'Source assurance policy v4 rejected. v3 stays the policy.']
+        },
+        diff: [
+          ['Official sources', '<del>An official source is a government or CERT publisher.</del>', '<ins>An official source must also name its issuing body.</ins>'],
+          ['Social posts', '<del>Social posts can support a claim when two agree.</del>', '<ins>Social posts can support context only.</ins>'],
+          ['Provisional sources', '<del>A provisional source can be the only support for a claim.</del>', '<ins>A provisional source cannot be the only support for a key judgement.</ins>']
+        ],
+        affected: [['qti-2026-q3', 'Keeps v3. Memo v3 awaits publication.'], ['ransomware-mfg-2026-10', 'Keeps v3 while collection runs.'], ['nordic-baltic-2026-11', 'Starts under v4 once its research plan is approved.']]
+      },
+      {
+        id: 'context', title: 'Organisational context pack v2', owner: 'Security leadership', approved: 'Approved 20 Sep 2026', status: 'active',
+        facts: [['Version', 'v2'], ['Approved by', 'FDIHR'], ['Approved on', '<span class="figures">20 Sep 2026</span>'], ['Checksum', '<code>sha256 c71d…2f80</code>'], ['Used by', '<span class="figures">3</span> analyses']],
+        rules: ['Names the regions, sites and service lines that count as Vestas operations.', 'Lists supplier categories that raise relevance.', 'Defines the leadership audience and their decisions.', 'Applied only when an analysis asks to map relevance to Vestas.']
+      },
+      {
+        id: 'outlets', title: 'Outlet reliability table v1', owner: 'FDIHR', approved: 'Approved 12 Aug 2026', status: 'active',
+        facts: [['Version', 'v1'], ['Approved by', 'FDIHR'], ['Approved on', '<span class="figures">12 Aug 2026</span>'], ['Checksum', '<code>sha256 88a3…d15e</code>'], ['Used by', '<span class="figures">4</span> analyses']],
+        rules: ['Assigns each known publisher a tier from 1 to 4.', 'Unknown publishers start at tier 4 until reviewed.', 'Tier changes need an approved new version.', 'Tier informs admission but never replaces a person\u2019s decision.']
+      },
+      {
+        id: 'calibration', title: 'Support calibration policy', owner: 'FDIHR', approved: 'Provisional since 5 Oct 2026', status: 'provisional',
+        facts: [['Version', 'Provisional'], ['Approved by', 'Not yet approved'], ['Checksum', '<code>sha256 0d52…7be9</code>'], ['Used by', '<span class="figures">2</span> analyses']],
+        rules: ['Maps support checks to covered, partial and gap.', 'Model-only checks are shown as unvalidated.', 'Needs a validated sample before it can be approved.', 'Memos state that calibration is provisional.']
+      },
+      {
+        id: 'attempts', title: 'Assurance attempts authorisation', owner: 'Source assurance', approved: 'Requested 31 Oct 2026', status: 'waiting', kind: 'attempts',
+        facts: [['Scope', 'qti-2026-q3, 3 admitted sources'], ['Policy', 'Active policy at the time of the attempt'], ['Model', 'One extract and one review per source']],
+        rules: [],
+        plate: {
+          kicker: 'Governance decision', title: 'Authorise 3 source assurance attempts', meta: 'Requested by the workflow · 31 Oct',
+          quote: 'Utility OT advisory, national CERT. Ministry statement on subsea cable damage. Industry ISAC weekly summary.',
+          confirm: 'Confirming authorises one assurance attempt for each of the 3 sources under the active policy. No other source is touched.',
+          primary: 'Authorise 3 attempts', secondary: 'Reject', done: ['Active', 'covered', '3 assurance attempts authorised.'], doneSecondary: ['Rejected', 'closed', 'Assurance attempts rejected. The sources stay provisional.']
+        },
+        diff: null,
+        affected: [['qti-2026-q3', 'Three provisional sources would be checked before synthesis uses them.']]
+      }
+    ];
+
+    var filter = 'all';
+    var currentId = packs[0].id;
+    var $ = function (id) { return document.getElementById(id); };
+    var esc = window.escapeHtml;
+
+    function mark(p) {
+      if (p.status === 'waiting') return ['attention', 'Waiting for you'];
+      if (p.status === 'provisional') return ['unclear', 'Provisional'];
+      if (p.status === 'rejected') return ['closed', 'Rejected'];
+      return ['covered', 'Active'];
+    }
+    function waitingCount() { return packs.filter(function (p) { return p.status === 'waiting'; }).length; }
+    function visible() { return packs.filter(function (p) { return filter === 'all' || p.status === 'waiting'; }); }
+    function find(id) { return packs.filter(function (p) { return p.id === id; })[0]; }
+
+    function renderFilters() {
+      $('filters').innerHTML =
+        '<button class="chip-btn" type="button" data-filter="all" aria-pressed="' + (filter === 'all') + '">All<span class="n">' + packs.length + '</span></button>' +
+        '<button class="chip-btn" type="button" data-filter="waiting" aria-pressed="' + (filter === 'waiting') + '">Waiting<span class="n">' + waitingCount() + '</span></button>';
+    }
+
+    function renderQueue() {
+      var list = visible();
+      $('queue').innerHTML = list.map(function (p) {
+        var m = mark(p);
+        return '<li data-id="' + p.id + '"><button class="queue-item" type="button" data-id="' + p.id + '" aria-current="' + (p.id === currentId) + '">' +
+          '<span class="q-title">' + esc(p.title) + '</span>' +
+          '<span class="q-meta"><span>' + esc(p.owner) + '</span><span>' + esc(p.approved) + '</span></span>' +
+          '<span class="q-state"><span class="mark ' + m[0] + '">' + m[1] + '</span></span>' +
+          '</button></li>';
+      }).join('');
+      $('queue').hidden = list.length === 0;
+      $('queue-empty').hidden = list.length !== 0;
+    }
+
+    function rowsHtml(items) {
+      return '<ul class="rows">' + items.map(function (r) {
+        return '<li>' + (Array.isArray(r) ? '<strong>' + esc(r[0]) + '</strong> <span class="meta">' + esc(r[1]) + '</span>' : esc(r)) + '</li>';
+      }).join('') + '</ul>';
+    }
+
+    function detailHtml(p) {
+      var m = mark(p);
+      var html = '';
+      if (p.status === 'waiting') {
+        var pl = p.plate;
+        html += '<div class="plate">' +
+          '<div class="plate-kicker"><span class="mark attention">Governance decision</span></div>' +
+          '<h3 class="plate-title" id="detail-title">' + esc(pl.title) + '</h3>' +
+          '<div class="plate-meta">' + esc(pl.meta) + '</div>' +
+          '<blockquote class="plate-quote">' + esc(pl.quote) + '</blockquote>' +
+          '<p class="plate-confirm">' + esc(pl.confirm) + '</p>' +
+          '<div class="reason-field"><label for="reason">Reason, recorded with your decision</label>' +
+          '<input id="reason" type="text" autocomplete="off" placeholder="For example: closes the single-source gap seen in Q3">' +
+          '<div class="reason-error" id="reason-error" hidden>Add a reason first. It is stored with the decision and shown in the audit trail.</div></div>' +
+          '<div class="btn-row"><button class="btn-primary" type="button" data-act="approve">' + esc(pl.primary) + '</button>' +
+          '<button class="btn-inverse" type="button" data-act="reject">' + esc(pl.secondary) + '</button></div></div>';
+        html += '<section><div class="section-head"><h3>Facts</h3></div><dl class="facts">' +
+          p.facts.map(function (f) { return '<dt>' + f[0] + '</dt><dd>' + f[1] + '</dd>'; }).join('') + '</dl></section>';
+        if (p.diff) {
+          html += '<section><div class="section-head"><h3>What changes</h3><span class="meta">3 rules</span></div><div class="diff">' +
+            p.diff.map(function (d) { return '<p><span class="label">' + esc(d[0]) + '</span>' + d[1] + ' ' + d[2] + '</p>'; }).join('') + '</div></section>';
+        }
+        html += '<section><div class="section-head"><h3>Analyses affected</h3></div>' + rowsHtml(p.affected) + '</section>';
+        return html;
+      }
+      html += '<section><div class="section-head"><h3 id="detail-title">' + esc(p.title) + '</h3><span class="mark ' + m[0] + '">' + m[1] + '</span></div>';
+      if (p.note) html += '<p class="caution is-done">' + esc(p.note) + '</p>';
+      html += '<dl class="facts">' + p.facts.map(function (f) { return '<dt>' + f[0] + '</dt><dd>' + f[1] + '</dd>'; }).join('') + '</dl></section>';
+      if (p.rules.length) html += '<section><div class="section-head"><h3>Main rules</h3></div>' + rowsHtml(p.rules) + '</section>';
+      if (p.decision) html += '<section><div class="section-head"><h3>Decision</h3></div><p class="meta">' + esc(p.decision) + '</p></section>';
+      return html;
+    }
+
+    function renderDetail() {
+      var p = find(currentId);
+      var body = $('detail');
+      if (!p) {
+        body.innerHTML = '<div class="empty-state"><h3 id="detail-title">Choose a rule pack</h3><p>Select a row on the left, or press J.</p></div>';
+        return;
+      }
+      var html = detailHtml(p);
+      body.classList.add('swapping');
+      requestAnimationFrame(function () {
+        body.innerHTML = html;
+        requestAnimationFrame(function () { body.classList.remove('swapping'); });
+      });
+    }
+
+    function select(id) { currentId = id; renderQueue(); renderDetail(); }
+
+    function move(step) {
+      var list = visible();
+      if (!list.length) return;
+      var idx = list.map(function (x) { return x.id; }).indexOf(currentId);
+      var next = list[Math.max(0, Math.min(list.length - 1, idx + step))] || list[0];
+      select(next.id);
+      var btn = document.querySelector('.queue-item[data-id="' + next.id + '"]');
+      if (btn) btn.focus();
+    }
+
+    function decide(act) {
+      var p = find(currentId);
+      if (!p || p.status !== 'waiting') return;
+      var field = $('reason');
+      if (field && !field.value.trim()) {
+        $('reason-error').hidden = false;
+        field.setAttribute('aria-invalid', 'true');
+        field.focus();
+        return;
+      }
+      var approved = act === 'approve';
+      var outcome = approved ? p.plate.done : p.plate.doneSecondary;
+      var reason = field.value.trim();
+      p.status = approved ? 'active' : 'rejected';
+      p.approved = (approved ? 'Approved' : 'Rejected') + ' 2 Nov 2026';
+      p.note = outcome[2];
+      p.decision = (approved ? 'Approved' : 'Rejected') + ' by FDIHR on 2 Nov 2026. Reason: ' + reason;
+      p.facts = p.facts.filter(function (f) { return f[0] !== 'Used by'; });
+      p.rules = p.affected.map(function (r) { return r[0] + ': ' + r[1]; });
+      p.plate = null;
+      if (filter === 'waiting') {
+        var rest = visible();
+        currentId = rest.length ? rest[0].id : null;
+      }
+      renderFilters();
+      renderQueue();
+      renderDetail();
+      window.showToast(outcome[2] + ' Recorded as FDIHR.');
+    }
+
+    $('filters').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-filter]');
+      if (!b) return;
+      filter = b.getAttribute('data-filter');
+      var list = visible();
+      if (list.length && !list.some(function (x) { return x.id === currentId; })) currentId = list[0].id;
+      renderFilters(); renderQueue(); renderDetail();
+    });
+    $('queue').addEventListener('click', function (e) {
+      var b = e.target.closest('.queue-item');
+      if (b) select(b.getAttribute('data-id'));
+    });
+    $('detail').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-act]');
+      if (b) decide(b.getAttribute('data-act'));
+    });
+    $('detail').addEventListener('input', function (e) {
+      if (e.target.id === 'reason') { $('reason-error').hidden = true; e.target.removeAttribute('aria-invalid'); }
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.target.matches('input, textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === 'j') { e.preventDefault(); move(1); }
+      if (e.key === 'k') { e.preventDefault(); move(-1); }
+      if (e.key === 'r' && $('reason')) { e.preventDefault(); $('reason').focus(); }
+    });
+
+    renderFilters();
+    renderQueue();
+    renderDetail();
+  })();
+  </script>
+</body>
+</html>

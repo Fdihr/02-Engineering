@@ -96,7 +96,7 @@ test("keeps a source-linked news summary pending the RSS source list", () => {
 
   assert.equal(result.value.item.role, "collection_lead");
   assert.equal(result.value.item.contentCompleteness, "summary_only");
-  assert.equal(result.value.decision.destination, "pending_rss_source");
+  assert.equal(result.value.decision.destination, "pending_rss");
   assert.equal(result.value.decision.approvalStatus, "not_applicable");
 });
 

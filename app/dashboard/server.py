@@ -7,9 +7,12 @@ import html
 import json
 import os
 import re
+import secrets
 import subprocess
+import sys
 import threading
 import time
+from http.cookies import CookieError, SimpleCookie
 import uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -18,6 +21,7 @@ from string import Template
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
+from . import auth, settings
 from .model import RELEVANCE_REQUEST_PATH, ai_stage_for, build_run_view
 from .relevance_bridge import build_relevance_prompt, build_response, parse_model_answer
 from .scan import _fs_path, list_available_runs, read_artifact_text, resolve_inside_run, scan_run_directory
@@ -40,14 +44,22 @@ STATIC_FILES = {
     "/run_view.css": (DASHBOARD_DIR / "run_view.css", "text/css; charset=utf-8"),
     "/run_view.js": (DASHBOARD_DIR / "run_view.js", "text/javascript; charset=utf-8"),
     "/run_panes.js": (DASHBOARD_DIR / "run_panes.js", "text/javascript; charset=utf-8"),
+    "/login.js": (DASHBOARD_DIR / "login.js", "text/javascript; charset=utf-8"),
+    "/login.css": (DASHBOARD_DIR / "login.css", "text/css; charset=utf-8"),
     "/assets/vestas/Vestas_White.svg": (DASHBOARD_DIR / "assets" / "vestas" / "Vestas_White.svg", "image/svg+xml"),
 }
+SESSION_COOKIE = "cti_workbench_session"
+SESSION_SECONDS = 8 * 60 * 60
 
 
 def render_page(run_id: str, poll_ms: int = 2000) -> str:
     safe_id = re.sub(r"[^a-zA-Z0-9._-]", "", run_id)
     template = Template((DASHBOARD_DIR / "page.html").read_text(encoding="utf-8"))
     return template.substitute(run_id=html.escape(safe_id, quote=True), poll_ms=max(500, int(poll_ms)))
+
+
+def render_login_page() -> str:
+    return (DASHBOARD_DIR / "login.html").read_text(encoding="utf-8")
 
 
 def _valid_id(value: Any) -> str | None:
@@ -1094,12 +1106,20 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
         intake_path = _command_output_in_run(runs_root / run_id, steps[-1])
         if intake_path is None:
             return 400, {"ok": False, "runId": run_id, "steps": steps, "error": "Provider intake artifact is missing or outside the selected run."}
-        intake = json.loads(Path(_fs_path(intake_path)).read_text(encoding="utf-8"))
+        try:
+            intake = json.loads(Path(_fs_path(intake_path)).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return 400, {"ok": False, "runId": run_id, "steps": steps, "error": "Intake result is not available."}
+        if not isinstance(intake, dict):
+            return 400, {"ok": False, "runId": run_id, "steps": steps, "error": "Intake result must be a JSON object."}
         item = intake.get("item") or {}
-        if item.get("role") == "collection_lead":
+        decision = intake.get("decision") or {}
+        if not isinstance(item, dict) or not isinstance(decision, dict):
+            return 400, {"ok": False, "runId": run_id, "steps": steps, "error": "Intake item and decision must be JSON objects."}
+        if item.get("role") == "collection_lead" or decision.get("destination") == "pending_rss":
             return 200, {
                 "ok": True, "runId": run_id, "steps": steps,
-                "status": "pending_rss_source",
+                "status": "pending_rss", "pendingRss": True,
                 "message": "Lead retained pending the RSS-connected source list. Publisher pages are not fetched.",
             }
         if item.get("role") == "evidence_candidate" and item.get("contentCompleteness") == "captured_content":
@@ -1124,6 +1144,9 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
 def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPRequestHandler]:
     cache: dict[str, dict[str, Any]] = {}
     cache_lock = threading.Lock()
+    auth_lock = threading.Lock()
+    sessions: dict[str, dict[str, Any]] = {}
+    login_flows: dict[str, dict[str, Any]] = {}
     runs_root = run_dir.parent
 
     def _resolve_target_run(requested_run: str | None) -> tuple[Path, str]:
@@ -1171,16 +1194,143 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
                 cache[target_id] = {"at": time.monotonic(), "view": view}
                 return view
 
+        def _session_token(self) -> str:
+            cookie = SimpleCookie()
+            try:
+                cookie.load(self.headers.get("Cookie", ""))
+            except CookieError:
+                return ""
+            morsel = cookie.get(SESSION_COOKIE)
+            return morsel.value if morsel else ""
+
+        def _session_user(self) -> dict[str, str] | None:
+            if not settings.entra_sso_enabled(os.environ):
+                return None
+            token = self._session_token()
+            with auth_lock:
+                session = sessions.get(token)
+                if not session:
+                    return None
+                if session["expiresAt"] <= time.time():
+                    sessions.pop(token, None)
+                    return None
+                if (session["tenantId"].casefold() != os.environ["ENTRA_TENANT_ID"].casefold()
+                        or session["clientId"].casefold() != os.environ["ENTRA_CLIENT_ID"].casefold()):
+                    sessions.pop(token, None)
+                    return None
+                return session["user"]
+
+        def _send_auth_error(self, message: str = "Sign in with your Microsoft Entra account to continue.") -> None:
+            self._send(401, "application/json; charset=utf-8", json.dumps({"ok": False, "error": message}))
+
+        def _begin_entra_sign_in(self) -> None:
+            if not settings.entra_sso_enabled(os.environ):
+                self._send(409, "application/json; charset=utf-8",
+                           json.dumps({"ok": False, "error": "Set the Entra tenant and application IDs before signing in."}))
+                return
+            flow_id = secrets.token_urlsafe(24)
+            tenant_id = os.environ["ENTRA_TENANT_ID"]
+            client_id = os.environ["ENTRA_CLIENT_ID"]
+            with auth_lock:
+                login_flows[flow_id] = {"status": "pending", "createdAt": time.time()}
+
+            def sign_in() -> None:
+                try:
+                    user = auth.authenticate(tenant_id, client_id)
+                    if (not settings.entra_sso_enabled(os.environ)
+                            or os.environ["ENTRA_TENANT_ID"].casefold() != tenant_id.casefold()
+                            or os.environ["ENTRA_CLIENT_ID"].casefold() != client_id.casefold()):
+                        raise auth.EntraSignInError("Entra configuration changed during sign-in.")
+                    with auth_lock:
+                        flow = login_flows.get(flow_id)
+                        if flow:
+                            flow.update({"status": "complete", "user": user, "tenantId": tenant_id, "clientId": client_id})
+                except auth.EntraSignInError as error:
+                    with auth_lock:
+                        flow = login_flows.get(flow_id)
+                        if flow:
+                            flow.update({"status": "failed", "error": str(error)})
+                except (OSError, RuntimeError, TimeoutError, ValueError):
+                    with auth_lock:
+                        flow = login_flows.get(flow_id)
+                        if flow:
+                            flow.update({"status": "failed", "error": "Microsoft sign-in could not be completed. Try again."})
+
+            threading.Thread(target=sign_in, name="entra-sign-in", daemon=True).start()
+            self._send(202, "application/json; charset=utf-8", json.dumps({"ok": True, "flowId": flow_id}))
+
+        def _login_status(self, flow_id: str) -> None:
+            with auth_lock:
+                for key, flow in list(login_flows.items()):
+                    if time.time() - flow["createdAt"] > 600:
+                        login_flows.pop(key, None)
+                flow = login_flows.get(flow_id)
+                if not flow:
+                    response = {"status": "expired"}
+                    cookie_headers = None
+                elif flow["status"] == "complete":
+                    user = flow["user"]
+                    session_token = flow.get("sessionToken")
+                    if not session_token:
+                        session_token = secrets.token_urlsafe(32)
+                        sessions[session_token] = {
+                            "user": user,
+                            "tenantId": flow["tenantId"],
+                            "clientId": flow["clientId"],
+                            "expiresAt": time.time() + SESSION_SECONDS,
+                        }
+                        flow["sessionToken"] = session_token
+                    response = {"status": "complete", "user": user}
+                    cookie_headers = {
+                        "Set-Cookie": f"{SESSION_COOKIE}={session_token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={SESSION_SECONDS}"
+                    }
+                elif flow["status"] == "failed":
+                    response = {"status": "failed", "error": flow["error"]}
+                    cookie_headers = None
+                else:
+                    response = {"status": "pending"}
+                    cookie_headers = None
+            self._send(200, "application/json; charset=utf-8", json.dumps(response, ensure_ascii=False), cookie_headers)
+
         def do_GET(self) -> None:
             parsed = urlsplit(self.path)
             query = parse_qs(parsed.query)
             requested_run = query.get("run", [None])[0]
+            public_auth_paths = {"/api/auth/session", "/api/auth/poll"}
+            public_assets = set(STATIC_FILES) | set(FONT_FILES)
+            authenticated = self._session_user() if settings.entra_sso_enabled(os.environ) else None
+            if settings.entra_sso_enabled(os.environ) and not authenticated and parsed.path not in public_auth_paths | public_assets:
+                if parsed.path == "/":
+                    self._send(200, "text/html; charset=utf-8", render_login_page())
+                elif parsed.path.startswith("/api/"):
+                    self._send_auth_error()
+                else:
+                    self._send(404, "text/plain; charset=utf-8", "Not found")
+                return
+            if parsed.path == "/api/auth/session":
+                self._send(200, "application/json; charset=utf-8", json.dumps({
+                    "enabled": settings.entra_sso_enabled(os.environ),
+                    "authenticated": bool(authenticated),
+                    "user": authenticated,
+                }, ensure_ascii=False))
+                return
+            if parsed.path == "/api/auth/poll":
+                self._login_status(query.get("flowId", [""])[0])
+                return
             if parsed.path == "/":
                 _, target_id = _resolve_target_run(requested_run)
                 self._send(200, "text/html; charset=utf-8", render_page(target_id))
                 return
             if parsed.path == "/api/runs":
                 self._send(200, "application/json; charset=utf-8", json.dumps({"runs": list_available_runs(runs_root), "defaultRunId": run_id}, ensure_ascii=False))
+                return
+            if parsed.path == "/api/settings":
+                self._send(200, "application/json; charset=utf-8", json.dumps({
+                    "keys": settings.key_status(os.environ),
+                    "config": settings.config_status(os.environ),
+                    "runsFolder": settings.runs_folder_info(runs_root),
+                    "platform": sys.platform,
+                }, ensure_ascii=False))
                 return
             if parsed.path in ("/api/copilot-settings", "/api/copilot-models"):
                 try:
@@ -1257,35 +1407,106 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
         def _method_not_allowed(self) -> None:
             self._send(405, "text/plain; charset=utf-8", "Read-only", {"Allow": "GET"})
 
-        def do_POST(self) -> None:
-            parsed = urlsplit(self.path)
-            if parsed.path != "/api/action":
-                self._method_not_allowed()
-                return
+        def _read_post_payload(self) -> dict[str, Any] | None:
+            """Apply the same-origin, content-type and size guards; sends the error and returns None on failure."""
             host = self.headers.get("Host", "")
             allowed_hosts = {f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}"}
             origin = self.headers.get("Origin")
             if host not in allowed_hosts or (origin is not None and origin != f"http://{host}"):
                 self._send(403, "application/json", json.dumps({"ok": False, "error": "Local same-origin actions only."}))
-                return
+                return None
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 self._send(415, "application/json", json.dumps({"ok": False, "error": "JSON content type required."}))
-                return
+                return None
             try:
                 length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
                 length = 0
             if length <= 0 or length > MAX_POST_BYTES:
                 self._send(400, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "Invalid request payload size."}))
-                return
+                return None
             try:
                 payload = json.loads(self.rfile.read(length).decode("utf-8"))
             except (UnicodeError, json.JSONDecodeError):
                 self._send(400, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "Invalid JSON body."}))
-                return
+                return None
             if not isinstance(payload, dict):
                 self._send(400, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "Expected JSON object."}))
+                return None
+            return payload
+
+        def _handle_settings_post(self, path: str, payload: dict[str, Any]) -> None:
+            name = payload.get("name")
+            if path == "/api/settings/config":
+                if not isinstance(name, str) or name not in settings.CONFIG_NAMES:
+                    self._send(400, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "Unknown configuration name."}))
+                    return
+                cleaned = settings.validate_config(name, payload.get("value"))
+                if cleaned is None:
+                    self._send(400, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "Enter a valid ID or HTTPS endpoint URL."}))
+                    return
+                try:
+                    persisted = settings.save_config(name, cleaned)
+                except OSError:
+                    self._send(500, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "Could not store configuration on this computer."}))
+                    return
+                body = {"ok": True, "config": settings.config_status(os.environ), "persisted": persisted}
+                body["ssoEnabled"] = settings.entra_sso_enabled(os.environ)
+                self._send(200, "application/json; charset=utf-8", json.dumps(body, ensure_ascii=False))
                 return
+            if not isinstance(name, str) or name not in settings.KEY_NAMES:
+                self._send(400, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "Unknown key name."}))
+                return
+            if path == "/api/settings/key":
+                cleaned = settings.validate_key(payload.get("value"))
+                if cleaned is None:
+                    self._send(400, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "That does not look like a key. Paste the whole key without spaces."}))
+                    return
+                try:
+                    persisted = settings.save_key(name, cleaned)
+                except OSError:
+                    self._send(500, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "Could not store the key on this computer."}))
+                    return
+                body = {"ok": True, "keys": settings.key_status(os.environ), "persisted": persisted}
+            elif path == "/api/settings/key/remove":
+                try:
+                    persisted = settings.remove_key(name)
+                except OSError:
+                    self._send(500, "application/json; charset=utf-8", json.dumps({"ok": False, "error": "Could not remove the key from this computer."}))
+                    return
+                body = {"ok": True, "keys": settings.key_status(os.environ), "persisted": persisted}
+            else:
+                body = {"ok": True, "result": settings.check_connection(name, os.environ)}
+            self._send(200, "application/json; charset=utf-8", json.dumps(body, ensure_ascii=False))
+
+        def do_POST(self) -> None:
+            path = urlsplit(self.path).path
+            if path not in ("/api/action", "/api/settings/key", "/api/settings/key/remove", "/api/settings/check", "/api/settings/config", "/api/auth/start", "/api/auth/logout"):
+                self._method_not_allowed()
+                return
+            payload = self._read_post_payload()
+            if payload is None:
+                return
+            authenticated = self._session_user() if settings.entra_sso_enabled(os.environ) else None
+            if settings.entra_sso_enabled(os.environ) and not authenticated and path != "/api/auth/start":
+                self._send_auth_error()
+                return
+            if path == "/api/auth/start":
+                self._begin_entra_sign_in()
+                return
+            if path == "/api/auth/logout":
+                token = self._session_token()
+                with auth_lock:
+                    sessions.pop(token, None)
+                self._send(200, "application/json; charset=utf-8", json.dumps({"ok": True}), {
+                    "Set-Cookie": f"{SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0"
+                })
+                return
+            if path != "/api/action":
+                self._handle_settings_post(path, payload)
+                return
+            if authenticated:
+                payload["reviewerId"] = authenticated["objectId"]
             try:
                 status_code, response_obj = _handle_analyst_action(runs_root, run_dir, payload)
             except FileExistsError:
@@ -1326,6 +1547,8 @@ def create_server(
     port: int = 4317,
     cache_ms: int = 1500,
 ) -> ThreadingHTTPServer:
+    if settings.entra_sso_enabled(os.environ) and host not in ("127.0.0.1", "localhost", "::1"):
+        raise ValueError("Entra sign-in requires a loopback-only dashboard binding.")
     resolved_run_dir = Path(run_dir).resolve()
     selected_id = run_id or resolved_run_dir.name
     handler = _make_handler(resolved_run_dir, selected_id, max(0, cache_ms))

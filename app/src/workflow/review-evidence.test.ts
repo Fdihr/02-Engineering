@@ -442,7 +442,7 @@ test("collection leads cannot pass the evidence gate", () => {
       decision: {
         ...intake.decision,
         role: "collection_lead",
-        destination: "pending_rss_source",
+        destination: "pending_rss",
         approvalStatus: "not_applicable"
       }
     }

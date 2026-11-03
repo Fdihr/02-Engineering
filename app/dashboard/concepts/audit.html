@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Audit · CTI workbench (concept)</title>
+  <!--
+    THESIS: The audit page answers "what happened, who decided it, and on what record" in reading order.
+    The history is the page; the state of every step sits beside it and filters it.
+  -->
+  <script src="/concepts/concepts.js"></script>
+  <link rel="stylesheet" href="/design_system.css">
+  <link rel="stylesheet" href="legacy-run_view.css">
+  <link rel="stylesheet" href="/concepts/concepts.css">
+  <link rel="stylesheet" href="/concepts/audit.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-left">
+        <div class="brand">
+          <img src="/assets/vestas/Vestas_White.svg" alt="Vestas">
+          <h1>CTI workbench</h1>
+        </div>
+        <nav class="topnav" aria-label="Main">
+          <a href="/concepts/decision-inbox.html">Home <span class="n">6</span></a>
+          <a href="/concepts/governance.html">Governance</a>
+          <a href="/concepts/process-map.html">Process map</a>
+        </nav>
+      </div>
+      <div class="topbar-actions">
+        <span class="signed">Signed in as <strong>FDIHR</strong></span>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Dark theme</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <div>
+        <a class="parent-link" href="/concepts/decision-inbox.html">Home</a>
+        <h2>Audit</h2>
+        <p class="meta">Europe cyber and geopolitical outlook, Q4 2026 · analysis qti-2026-q3 · 13 events, 46 records on disk · last change 1 Nov 2026, 16:24. Concept with illustrative data.</p>
+      </div>
+    </div>
+
+    <p class="question-line">Which cyber and geopolitical threats will most affect Vestas operations in Europe in Q4 2026?</p>
+    <div class="activity-strip" role="status">
+      <span class="now"><span class="mark attention">Waiting</span><span>Memo v3 is verified and waiting for publication approval</span></span>
+      <ol class="stages" aria-label="Stages">
+        <li><span class="mark done">Intent</span></li>
+        <li><span class="mark done">Evidence</span></li>
+        <li><span class="mark done">Findings</span></li>
+        <li><span class="mark done">Writing</span></li>
+        <li aria-current="step"><span class="mark">Publication</span></li>
+      </ol>
+      <a class="yours" href="/concepts/document-review.html">Open publication review</a>
+    </div>
+
+    <div class="audit-layout">
+      <section class="audit-main" aria-labelledby="history-h">
+        <div class="section-head"><h3 id="history-h">What happened</h3><p class="meta">Newest first. Select an event to see the record behind it.</p></div>
+        <div class="audit-tools">
+          <div class="filters" id="filters" role="group" aria-label="Show events"></div>
+        </div>
+        <p class="scope-note" id="scope-note" hidden><span>Showing events for <strong id="scope-name"></strong></span><button class="btn-link" type="button" id="scope-clear">Show all steps</button></p>
+        <div id="timeline"></div>
+        <div class="empty-state" id="timeline-empty" hidden>
+          <h3>No events match</h3>
+          <p>Nothing of this kind happened in the selected step. <button class="btn-link" type="button" id="empty-clear">Show all events</button></p>
+        </div>
+      </section>
+
+      <aside class="audit-aside" aria-label="Step status, sources and automatic steps">
+        <div>
+          <div class="section-head"><h3>Where each step stands</h3></div>
+          <table class="steps" id="steps">
+            <thead><tr><th scope="col">Step</th><th scope="col">Status</th><th scope="col" class="n">Records</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <ul class="legend" aria-label="Status key">
+            <li><span class="mark done">Approved</span> by a person</li>
+            <li><span class="mark covered">Recorded</span> by the system</li>
+            <li><span class="mark running">Running</span> not finished</li>
+            <li><span class="mark">Waiting</span> not started</li>
+            <li><span class="mark attention">Provisional</span> needs a decision</li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="section-head"><h3>Sources</h3><p class="meta">3 of 9 shown</p></div>
+          <table class="src-grid">
+            <thead><tr><th scope="col">Source</th><th scope="col" class="c">Extract</th><th scope="col" class="c">Review</th><th scope="col" class="c">Note</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="src-name">Utility OT intrusion linked to a state-aligned group<span class="meta">National CERT bulletin · tier 2</span></td>
+                <td class="c"><span class="mark covered" aria-label="Recorded" title="Recorded, 1 attempt"></span></td>
+                <td class="c"><span class="mark done" aria-label="Approved" title="Approved by FDIHR"></span></td>
+                <td class="c"><span class="mark done" aria-label="Approved" title="Approved by FDIHR"></span></td>
+              </tr>
+              <tr>
+                <td class="src-name">Exposed turbine controllers found on public networks<span class="meta">Specialist security media · tier 3</span></td>
+                <td class="c"><span class="mark covered" aria-label="Recorded" title="Recorded, 1 attempt"></span></td>
+                <td class="c"><span class="mark done" aria-label="Approved" title="Approved by FDIHR"></span></td>
+                <td class="c"><span class="mark done" aria-label="Approved" title="Approved by FDIHR"></span></td>
+              </tr>
+              <tr>
+                <td class="src-name">Port security checks delay Baltic cargo<span class="meta">Regional news report · tier 3</span></td>
+                <td class="c"><span class="mark covered" aria-label="Recorded" title="Recorded, 2 attempts"></span></td>
+                <td class="c"><span class="mark attention" aria-label="Provisional" title="Kept as provisional by exception"></span></td>
+                <td class="c"><span class="mark running" aria-label="Running" title="Note not finished"></span></td>
+              </tr>
+            </tbody>
+          </table>
+          <p><button class="btn-link" type="button" data-toast="The full source table opens in Evidence.">See all 9 sources in Evidence</button></p>
+        </div>
+
+        <div class="next-auto">
+          <div class="section-head"><h3>Automatic steps</h3></div>
+          <p>Looks for the next step the system can take on its own. It never approves, admits or publishes anything.</p>
+          <button class="btn-secondary" type="button" id="check-next">Check for an automatic step</button>
+          <p class="result" id="next-result" role="status" hidden></p>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+  (function () {
+    var STEPS = [
+      { stage: 'Intent', rows: [
+        ['intent', 'Intent', 'done', 'Approved', 3]
+      ] },
+      { stage: 'Evidence', rows: [
+        ['collection', 'Seerist collection', 'covered', 'Recorded', 2],
+        ['classify', 'Source classification', 'covered', 'Recorded', 3],
+        ['identity', 'Duplicate sources merged', 'covered', 'Recorded', 4],
+        ['relevance', 'Question relevance', 'running', 'Running', 7],
+        ['admission', 'Evidence admission', 'done', 'Approved', 3]
+      ] },
+      { stage: 'Findings', rows: [
+        ['synthesis', 'Synthesis', 'done', 'Approved', 2],
+        ['challenge', 'Challenge', 'covered', 'Recorded', 2],
+        ['adjudication', 'Adjudication', '', 'Waiting', 1],
+        ['judgements', 'Key judgements', 'covered', 'Recorded', 2]
+      ] },
+      { stage: 'Writing', rows: [
+        ['memo', 'Memo', 'done', 'Approved', 5],
+        ['verification', 'Verification', 'covered', 'Recorded', 1]
+      ] },
+      { stage: 'Publication', rows: [
+        ['publication', 'Publication', 'attention', 'Provisional', 1]
+      ] }
+    ];
+
+    var EVENTS = [
+      { day: '1 Nov 2026', time: '16:24', kind: 'machine', who: 'System', step: 'verification',
+        text: 'Verification finished: 14 claims checked, 2 blockers raised on key judgement 3.',
+        file: 'verification/verification-report.json', facts: [['Claims checked', '14'], ['Blockers', '2, both on key judgement 3']], link: ['Open publication review', '/concepts/document-review.html'] },
+      { day: '1 Nov 2026', time: '16:20', kind: 'model', who: 'Model · memo writer', step: 'memo',
+        text: 'Memo v3 written from 4 key judgements and 9 sources.',
+        file: 'memo/memo-v3.md', facts: [['Model run', 'memo-write #3'], ['Input', '4 key judgements, 9 sources']], link: ['Open publication review', '/concepts/document-review.html'] },
+      { day: '1 Nov 2026', time: '11:10', kind: 'human', who: 'FDIHR', step: 'synthesis',
+        text: 'Synthesis approved. Adjudication of key judgement 3 left open.',
+        file: 'synthesis/approval.json', facts: [['Decision', 'Approved'], ['Open item', 'Key judgement 3, sources disagree']] },
+      { day: '1 Nov 2026', time: '10:42', kind: 'model', who: 'Model · challenger', step: 'challenge',
+        text: 'Challenge raised 2 objections to key judgement 3.',
+        file: 'synthesis/challenge.json', facts: [['Model run', 'challenge #1'], ['Objections', '2']] },
+      { day: '31 Oct 2026', time: '15:30', kind: 'machine', who: 'System', step: 'synthesis',
+        text: 'Synthesis built from 9 admitted sources.',
+        file: 'synthesis/build.json', facts: [['Sources used', '9'], ['Draft judgements', '4']] },
+      { day: '31 Oct 2026', time: '14:09', kind: 'exception', who: 'FDIHR', step: 'admission',
+        text: 'Exception: researcher social post admitted as context only.',
+        reason: 'Only source for the timing of the claim; not used for any judgement.',
+        file: 'admission/exceptions/ex-002.json', facts: [['Rule overridden', 'Tier 5 sources are not admitted'], ['Limit', 'Context only']] },
+      { day: '31 Oct 2026', time: '14:05', kind: 'exception', who: 'FDIHR', step: 'admission',
+        text: 'Exception: provisional port security source kept.',
+        reason: 'No other source covers Baltic port delays; marked provisional in the memo.',
+        file: 'admission/exceptions/ex-001.json', facts: [['Rule overridden', 'Provisional sources need a second source'], ['Limit', 'Marked provisional']] },
+      { day: '31 Oct 2026', time: '13:50', kind: 'human', who: 'FDIHR', step: 'admission',
+        text: '7 sources admitted as evidence, 2 rejected.',
+        file: 'admission/decisions.json', facts: [['Admitted', '7'], ['Rejected', '2, off topic']], link: ['Open Evidence', '/concepts/analysis.html'] },
+      { day: '30 Oct 2026', time: '09:20', kind: 'model', who: 'Model · relevance', step: 'relevance',
+        text: 'Question relevance scored for 11 sources; 4 still running.',
+        file: 'relevance/scores.json', facts: [['Model run', 'relevance #2'], ['Scored', '7 of 11']] },
+      { day: '29 Oct 2026', time: '16:00', kind: 'machine', who: 'System', step: 'identity',
+        text: 'Duplicate sources merged: 11 items became 9 sources.',
+        file: 'sources/canonical.json', facts: [['Items in', '11'], ['Sources out', '9']] },
+      { day: '29 Oct 2026', time: '15:40', kind: 'machine', who: 'System', step: 'classify',
+        text: '11 items classified by source type and tier.',
+        file: 'sources/classification.json', facts: [['Items', '11'], ['Tiers', '1 to 5']] },
+      { day: '28 Oct 2026', time: '08:30', kind: 'machine', who: 'System', step: 'collection',
+        text: 'Seerist collection finished: 11 items from 2 calls.',
+        file: 'collection/seerist-wod.json', facts: [['Endpoint', '/v1/wod'], ['Calls', '2'], ['Items', '11']] },
+      { day: '14 Oct 2026', time: '09:12', kind: 'human', who: 'FDIHR', step: 'intent',
+        text: 'Intent approved: 1 question, Europe, Q4 2026, 5 lenses.',
+        file: 'intent/approval.json', facts: [['Question', '1'], ['Region', 'Europe'], ['Period', 'Q4 2026']], link: ['Open Intent', '/concepts/intent-review.html'] }
+    ];
+
+    var KINDS = [['all', 'All'], ['human', 'People'], ['exception', 'Exceptions'], ['model', 'Model'], ['machine', 'System']];
+    var KIND_LABEL = { human: 'Decision by a person', exception: 'Exception decided by a person', model: 'Model step', machine: 'System step' };
+    var kind = 'all';
+    var step = null;
+    var open = null;
+
+    function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function stepName(key) {
+      for (var i = 0; i < STEPS.length; i++) for (var j = 0; j < STEPS[i].rows.length; j++) if (STEPS[i].rows[j][0] === key) return STEPS[i].rows[j][1];
+      return key;
+    }
+    function inStep(e) { return !step || e.step === step; }
+
+    function renderFilters() {
+      document.getElementById('filters').innerHTML = KINDS.map(function (k) {
+        var n = EVENTS.filter(function (e) { return inStep(e) && (k[0] === 'all' || e.kind === k[0]); }).length;
+        return '<button class="chip-btn" type="button" data-kind="' + k[0] + '" aria-pressed="' + (kind === k[0]) + '">' + k[1] + '<span class="n">' + n + '</span></button>';
+      }).join('');
+    }
+
+    function renderSteps() {
+      var body = '';
+      STEPS.forEach(function (g) {
+        body += '<tr class="stage-row"><th scope="rowgroup" colspan="3">' + g.stage + '</th></tr>';
+        g.rows.forEach(function (r) {
+          body += '<tr class="step"><td><button class="step-btn" type="button" data-step="' + r[0] + '" aria-pressed="' + (step === r[0]) + '">' + r[1] + '</button></td>' +
+            '<td class="st"><span class="mark ' + r[2] + '">' + r[3] + '</span></td><td class="n">' + r[4] + '</td></tr>';
+        });
+      });
+      document.querySelector('#steps tbody').innerHTML = body;
+    }
+
+    function renderTimeline() {
+      var list = EVENTS.filter(function (e) { return inStep(e) && (kind === 'all' || e.kind === kind); });
+      var html = '', day = null;
+      list.forEach(function (e) {
+        var id = EVENTS.indexOf(e);
+        if (e.day !== day) {
+          if (day !== null) html += '</ol>';
+          var n = list.filter(function (x) { return x.day === e.day; }).length;
+          html += '<h4 class="day-head">' + e.day + '<span class="meta">' + n + (n === 1 ? ' event' : ' events') + '</span></h4><ol class="events">';
+          day = e.day;
+        }
+        var expanded = open === id;
+        html += '<li class="event ' + e.kind + '">' +
+          '<button class="event-row" type="button" data-ev="' + id + '" aria-expanded="' + expanded + '" aria-controls="ev-' + id + '">' +
+            '<span class="ev-time">' + e.time + '</span>' +
+            '<span class="ev-kind ' + e.kind + '" role="img" aria-label="' + KIND_LABEL[e.kind] + '" title="' + KIND_LABEL[e.kind] + '"></span>' +
+            '<span class="ev-text">' + esc(e.text) + '</span>' +
+            '<span class="ev-who">' + esc(e.who) + '</span>' +
+            (e.reason ? '<span class="ev-reason">Reason: ' + esc(e.reason) + '</span>' : '') +
+          '</button>' +
+          '<div class="ev-detail" id="ev-' + id + '"><div><div class="ev-detail-body">' +
+            '<dl class="facts">' +
+              '<dt>Step</dt><dd>' + esc(stepName(e.step)) + '</dd>' +
+              '<dt>Done by</dt><dd>' + esc(e.who) + ' · ' + KIND_LABEL[e.kind].toLowerCase() + '</dd>' +
+              e.facts.map(function (f) { return '<dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + '</dd>'; }).join('') +
+              '<dt>Record</dt><dd><span class="file">' + esc(e.file) + '</span></dd>' +
+            '</dl>' +
+            (e.link ? '<a class="btn-link" href="' + e.link[1] + '">' + e.link[0] + '</a>' : '') +
+          '</div></div></div></li>';
+      });
+      if (day !== null) html += '</ol>';
+      document.getElementById('timeline').innerHTML = html;
+      document.getElementById('timeline-empty').hidden = list.length > 0;
+      var note = document.getElementById('scope-note');
+      note.hidden = !step;
+      if (step) document.getElementById('scope-name').textContent = stepName(step);
+    }
+
+    function render() { renderFilters(); renderSteps(); renderTimeline(); }
+    function clearAll() { kind = 'all'; step = null; render(); }
+
+    document.addEventListener('click', function (e) {
+      var t = e.target.closest ? e.target : null;
+      if (!t) return;
+      var b;
+      if ((b = t.closest('[data-kind]'))) { kind = b.getAttribute('data-kind'); open = null; render(); return; }
+      if ((b = t.closest('[data-step]'))) { var s = b.getAttribute('data-step'); step = step === s ? null : s; open = null; render(); return; }
+      if ((b = t.closest('[data-ev]'))) {
+        var id = +b.getAttribute('data-ev');
+        open = open === id ? null : id;
+        document.querySelectorAll('.event-row').forEach(function (r) { r.setAttribute('aria-expanded', String(+r.getAttribute('data-ev') === open)); });
+        return;
+      }
+      if (t.closest('#scope-clear')) { step = null; render(); return; }
+      if (t.closest('#empty-clear')) { clearAll(); return; }
+      if (t.closest('#check-next')) {
+        var r = document.getElementById('next-result');
+        r.textContent = 'Nothing to run automatically. The next step needs a person: approve publication in publication review.';
+        r.hidden = false;
+        return;
+      }
+      if ((b = t.closest('[data-toast]'))) { window.showToast(b.getAttribute('data-toast')); }
+    });
+
+    render();
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · CTI workbench</title>
+  <script>
+    (function () {
+      try { if (localStorage.getItem('app_theme') === 'dark') document.documentElement.classList.add('dark'); }
+      catch (error) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="/design_system.css">
+  <link rel="stylesheet" href="/run_view.css">
+  <link rel="stylesheet" href="/login.css">
+  <script src="/login.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="topbar-inner login-topbar">
+      <div class="brand">
+        <img src="/assets/vestas/Vestas_White.svg" alt="Vestas">
+        <h1>CTI workbench</h1>
+      </div>
+    </div>
+  </header>
+  <main id="main" class="login-main">
+    <h2>Sign in</h2>
+    <p>Use your Microsoft Entra work account to access the analyst workbench.</p>
+    <p>Your first successful sign-in provisions your workbench access. Your account must already belong to the configured organisation.</p>
+    <button class="btn-primary" id="entra-sign-in" type="button">Sign in with Microsoft</button>
+    <p class="login-status" id="login-status" role="status" aria-live="polite"></p>
+  </main>
+</body>
+</html>

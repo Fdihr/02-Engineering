@@ -1,6 +1,6 @@
 # Contract Index
 
-Use this file as the index of active contracts.
+Use this file as the index of active contracts. Historical retrieval contracts are listed separately below and are not implementation instructions.
 
 ## Active contracts
 

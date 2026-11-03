@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Document review · CTI workbench (concept 3)</title>
+  <!--
+    THESIS: Approve the document the reader will receive. Every claim in the text opens its evidence; blockers sit in the margin where they occur.
+    OWN-WORLD: ECS "weather window". Night Sky bar, a paper page on a sunken canvas, ruled side panel, assessment marks plus words.
+    STORY: The reviewer reads the memo as a page, switches between text, confidence and changes, resolves blockers and rewrites in place, then approves each output separately.
+    FIRST VIEWPORT: Question, activity strip, output tabs with display modes, the page on the left, the review panel on the right.
+    FORM: Alternative to claim-trace.html, same step, same example, same data. Concept with illustrative data.
+  -->
+  <script src="/concepts/concepts.js"></script>
+  <link rel="stylesheet" href="/design_system.css">
+  <link rel="stylesheet" href="legacy-run_view.css">
+  <link rel="stylesheet" href="/concepts/concepts.css">
+  <link rel="stylesheet" href="/concepts/document-review.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-left">
+        <div class="brand">
+          <img src="/assets/vestas/Vestas_White.svg" alt="Vestas">
+          <h1>CTI workbench</h1>
+        </div>
+        <nav class="topnav" aria-label="Main">
+          <a href="/concepts/decision-inbox.html">Home <span class="n">6</span></a>
+          <a href="/concepts/governance.html">Governance</a>
+          <a href="/concepts/process-map.html">Process map</a>
+        </nav>
+      </div>
+      <div class="topbar-actions">
+        <span class="signed">Signed in as <strong>FDIHR</strong></span>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Dark theme</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <div>
+        <a class="parent-link" href="/concepts/decision-inbox.html">Home</a>
+        <h2>Publication review</h2>
+        <p class="meta">Europe cyber and geopolitical outlook, Q4 2026 · memo v3 for Vestas leadership · written yesterday at 16:20 · memo standard v1 · analysis qti-2026-q3. Concept with illustrative data. <a class="btn-link" href="/concepts/claim-trace.html">Switch to the claim list</a></p>
+      </div>
+      <div class="keys" aria-label="Keyboard shortcuts">
+        <span><kbd>J</kbd><kbd>K</kbd> next, previous claim</span>
+        <span><kbd>Esc</kbd> deselect</span>
+      </div>
+    </div>
+
+    <p class="question-line">Which cyber and geopolitical threats will most affect Vestas operations in Europe in Q4 2026?</p>
+    <div class="activity-strip" role="status">
+      <span class="now" id="strip-now"><span class="mark attention">Waiting for you</span><span>Memo v3 is ready, with <span class="figures">2</span> blockers to resolve</span></span>
+      <ol class="stages" aria-label="Stages">
+        <li><span class="mark done">Intent</span></li>
+        <li><span class="mark done">Evidence</span></li>
+        <li><span class="mark done">Findings</span></li>
+        <li><span class="mark done">Writing</span></li>
+        <li aria-current="step" id="strip-pub"><span class="mark attention">Publication</span></li>
+      </ol>
+      <a class="yours" id="strip-yours" href="/concepts/analysis.html">Open the analysis</a>
+    </div>
+
+    <div class="output-bar">
+      <nav class="view-tabs" role="tablist" aria-label="Outputs">
+        <button class="view-tab" type="button" role="tab" id="tab-memo" aria-selected="true" aria-controls="doc" data-tab="memo">Memo <span class="tab-count" id="count-memo"></span></button>
+        <button class="view-tab" type="button" role="tab" id="tab-brief" aria-selected="false" tabindex="-1" aria-controls="doc" data-tab="brief">Brief <span class="tab-count" id="count-brief"></span></button>
+        <button class="view-tab" type="button" role="tab" id="tab-assessment" aria-selected="false" tabindex="-1" aria-controls="doc" data-tab="assessment">Assessment <span class="tab-count" id="count-assessment"></span></button>
+      </nav>
+      <div class="modes" role="group" aria-label="Show">
+        <span>Show:</span>
+        <div class="segmented" id="modes">
+          <button class="seg-btn" type="button" data-mode="text" aria-pressed="true">Text</button>
+          <button class="seg-btn" type="button" data-mode="confidence" aria-pressed="false">Confidence</button>
+          <button class="seg-btn" type="button" data-mode="changes" aria-pressed="false">Changes since v2 <span class="tab-count" id="count-changes"></span></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="doc-layout">
+      <div>
+        <p class="legend" id="legend" hidden></p>
+        <div class="doc-canvas" id="doc" role="tabpanel" aria-label="Document"></div>
+      </div>
+      <aside class="side" aria-label="Review panel" aria-live="polite">
+        <div id="panel"></div>
+      </aside>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/concepts/document-review.js"></script>
+</body>
+</html>

@@ -109,9 +109,6 @@ def _settle(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _summary(steps: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
-    pending = next((s for s in steps if s["state"] == "pending"), None)
-    if pending:
-        return "pending", pending
     for state in ("you", "ai"):
         found = next((s for s in steps if s["state"] == state), None)
         if found:
@@ -120,6 +117,9 @@ def _summary(steps: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
         found = next((s for s in steps if s["state"] == state), None)
         if found:
             return summary, found
+    pending = next((s for s in steps if s["state"] == "pending"), None)
+    if pending:
+        return "pending", pending
     provisional = next((s for s in steps if s["state"] == "provisional"), None)
     if provisional and steps[-1]["state"] == "done":
         return "provisional", provisional
@@ -675,10 +675,10 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> d
     requirement_text = {r["id"]: r["text"] for r in panel1.get("requirements", []) if r.get("status") == "approved"}
     memo = _memo_view(run_id, full, rounds, notes, requirement_text)
 
-    pending_by_lead = {row["lead"]["providerItemId"]: row["state"] == "pending" for row in rows if row["lead"]}
     lead_list = sorted(leads.values(), key=lambda l: l["providerTimestamp"], reverse=True)
     lead_list.sort(key=lambda l: (l["tier"], -l["score"]))
     row_by_lead = {row["lead"]["providerItemId"]: row["id"] for row in rows if row["lead"]}
+    pending_by_lead = {row["lead"]["providerItemId"]: row["state"] == "pending" for row in rows if row["lead"]}
     for lead in lead_list:
         lead["rowId"] = row_by_lead.get(lead["providerItemId"], "")
         lead["pendingRss"] = pending_by_lead.get(lead["providerItemId"], False)

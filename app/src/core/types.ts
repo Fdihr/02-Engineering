@@ -186,7 +186,7 @@ export type RouteDecision = {
   destination:
     | "source_canonicalization"
     | "human_review"
-    | "pending_rss_source"
+    | "pending_rss"
     | "context_only";
   approvalStatus: "pending_human_review" | "not_applicable";
   ruleId: string;

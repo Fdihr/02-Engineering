@@ -6,7 +6,7 @@ Status: Active implementation constraints for the current script-first slices.
 
 Keep each script small enough to understand locally while preserving boundaries that can support later providers, batching, persistence, and user interfaces when those needs are demonstrated.
 
-The product is a general evidence-grounded memo tool over the approved Seerist API surface plus OSINT search, discovery, and retrieval. Cyber threat intelligence is the first working profile, not a core-module boundary. Domain modules should therefore express research intent, evidence, context, relevance, claims, and memo output without assuming that every question is cyber-specific or requires Vestas relevance.
+The product is a general evidence-grounded memo tool over the approved Seerist API surface and planned connected source lists. Cyber threat intelligence is the first working profile, not a core-module boundary. Domain modules should therefore express research intent, evidence, context, relevance, claims, and memo output without assuming that every question is cyber-specific or requires Vestas relevance.
 
 All organization-approved Seerist endpoints are target acquisition surfaces, but only observed and tested endpoints belong to the executable baseline. Each new endpoint or OSINT mechanism terminates at a narrow adapter and the existing provider-neutral role and source contracts whenever those contracts remain sufficient.
 
@@ -23,6 +23,8 @@ flowchart LR
     Intake --> Workflow
     Intake --> Pending[Collection lead pending RSS source list]
     Intake --> Canonicalize[Captured provider content + stable anchors]
+    Pending --> Receipt[Future governed source adapter]
+    Receipt --> Canonicalize[Lossless source document + stable anchors]
     Canonicalize --> Relevance[AI question-relevance proposal]
     Relevance --> Reintake[Validate pending source candidate]
     Reintake --> Admission[Controller policy admission]

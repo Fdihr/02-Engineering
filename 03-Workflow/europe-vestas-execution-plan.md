@@ -59,7 +59,7 @@ Produce an end-to-end, evidence-grounded intelligence memo analyzing the last tw
   1. Execute bounded Seerist `/v1/wod` discovery and collection across the 2-month European window.
   2. Classify returned Seerist items (`intake:seerist`):
      - Native Seerist analyst reports with full bodies route directly to `canonicalize:source`.
-     - Collection leads with publisher URLs route to `pending_rss_source`; publisher pages are not fetched.
+     - Collection leads with publisher URLs route to `pending_rss`; publisher pages are not fetched.
   3. Run AI question-relevance (`prepare:question-relevance` -> `record:question-relevance`) for captured content. This cannot itself create a new evidence candidate; native-content candidate conversion remains incremental work. Existing validated candidates retain explicit admission.
 - **Commands:**
   ```powershell

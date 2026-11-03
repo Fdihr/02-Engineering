@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Process map · CTI workbench</title>
+  <!--
+    THESIS: One route from question to output. Seven windows; you only act at the marked gates. Machine work is never a window of its own: it stays visible in an activity strip under the question.
+    OWN-WORLD: ECS "weather window", extending the Decision Inbox (concept 1): ruled list left, selected detail right, Night Sky plate only when a decision is open.
+    FIRST VIEWPORT: Title, one-line story, legend, then the activity strip at full detail because it appears everywhere.
+    FORM: Process map. Rows = windows in the order an analyst meets them; machine hand-offs sit between them; governance sits outside.
+  -->
+  <script src="/concepts/concepts.js"></script>
+  <link rel="stylesheet" href="/design_system.css">
+  <link rel="stylesheet" href="legacy-run_view.css">
+  <link rel="stylesheet" href="/concepts/concepts.css">
+  <link rel="stylesheet" href="/concepts/process-map.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-left">
+        <div class="brand">
+          <img src="/assets/vestas/Vestas_White.svg" alt="Vestas">
+          <h1>CTI workbench</h1>
+        </div>
+        <nav class="topnav" aria-label="Main">
+          <a href="/concepts/decision-inbox.html">Home <span class="n">6</span></a>
+          <a href="/concepts/governance.html">Governance</a>
+          <a href="/concepts/process-map.html" aria-current="page">Process map</a>
+        </nav>
+      </div>
+      <div class="topbar-actions">
+        <span class="signed">Signed in as <strong>FDIHR</strong></span>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Dark theme</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <div>
+        <h2>From question to memo</h2>
+        <p class="meta">Seven windows, four places where you decide. Sketches show layout only; every window extends the Home layout.</p>
+      </div>
+    </div>
+
+    <p class="map-lede">You ask a question. The workbench proposes what to research, collects and checks sources, builds findings and writes the output. It stops and asks you only at a gate. Everything it does in between stays visible under the question, so you never have to go looking for progress.</p>
+
+    <div class="map-legend" aria-label="Legend">
+      <span class="mark attention">You decide here</span>
+      <span class="mark running">Machine works, you can watch</span>
+      <span class="mark unclear">Read and explore</span>
+    </div>
+
+    <!-- The activity strip, at full detail -->
+    <section class="strip-spec" aria-labelledby="strip-h">
+      <h3 id="strip-h">Activity strip</h3>
+      <p class="meta">Not a window. It sits directly under the question on every window that belongs to an analysis, and as one line per analysis on Home. Where an AI is producing something in place, such as a scope draft or a memo section, the same running mark appears at that spot and the content fills in as it arrives.</p>
+
+      <p class="question-line">How are state-linked actors targeting European wind and grid operators, Q4 2026?</p>
+      <div class="activity-strip" role="status">
+        <span class="now"><span class="mark running">Collecting</span><span>Seerist events and OSINT sources, <span class="figures">42</span> of <span class="figures">120</span> calls</span></span>
+        <ol class="stages" aria-label="Stages">
+          <li><span class="mark done">Intent</span></li>
+          <li aria-current="step"><span class="mark running">Evidence</span></li>
+          <li>Findings</li>
+          <li>Writing</li>
+          <li>Publication</li>
+        </ol>
+        <a class="yours" href="/concepts/decision-inbox.html">Waiting for you: <span class="figures">1</span> decision</a>
+      </div>
+
+      <div class="table-wrap strip-states">
+        <table>
+          <thead><tr><th>State</th><th>The strip says</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mark running">Running</span></td><td>What the machine or AI is doing now, with a count when it can be counted</td><td>AI checking relevance, 18 of 64 sources</td></tr>
+            <tr><td><span class="mark attention">Waiting for you</span></td><td>What it needs and where to decide it</td><td>1 source needs your decision: two publishers disagree</td></tr>
+            <tr><td><span class="mark">Waiting</span></td><td>What it is waiting on, and that you need do nothing</td><td>Waiting for a model answer, request sent 09:41</td></tr>
+            <tr><td><span class="mark failed">Stopped</span></td><td>What failed and what happens next</td><td>Seerist returned an error twice; retry at 10:15 within budget</td></tr>
+            <tr><td><span class="mark done">Finished</span></td><td>What is ready and who acts next</td><td>Memo v3 ready for your review</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <h3 class="map-section-h">The route</h3>
+    <ol class="flow">
+
+      <!-- 1 Home -->
+      <li class="step">
+        <div class="step-n" aria-hidden="true">1</div>
+        <div>
+          <div class="step-head"><h3>Home</h3><span class="mark attention">Exceptions decided here</span></div>
+          <p class="step-job">One queue of everything that concerns you: decisions waiting, then your analyses with their live activity line. Select one and its detail opens on the right. This is concept 1, extended.</p>
+          <dl class="facts">
+            <dt>On the left</dt><dd><ul><li>Decisions first, in workflow priority: exceptions, intent, publication, governance</li><li>Then analyses: question, stage, one-line activity, age</li><li>Filters with counts; “New analysis” at the top</li></ul></dd>
+            <dt>On the right</dt><dd>For a decision: the plate, a reason field and the evidence behind it. For an analysis: its activity strip, stage, and links into its windows.</dd>
+            <dt>You</dt><dd>Decide exceptions with a reason. Open intent or publication reviews. Start a new analysis.</dd>
+            <dt>Exception kinds</dt><dd>Uncertain relevance, sources that disagree, a contested key judgement, a failure the machine could not recover from</dd>
+          </dl>
+        </div>
+        <div class="step-sketch">
+          <div class="sk" aria-hidden="true">
+            <div class="sk-top"></div>
+            <div class="sk-body">
+              <div class="sk-l h" style="--w:45%"></div>
+              <div class="sk-seg"><span class="on"></span><span></span><span></span><span></span></div>
+              <div class="sk-split">
+                <div class="sk-col">
+                  <div class="sk-row sel"><span class="sk-dot ask"></span><div class="sk-stack"><span class="sk-l ink" style="--w:85%"></span><span class="sk-l" style="--w:50%"></span></div></div>
+                  <div class="sk-row"><span class="sk-dot ask"></span><div class="sk-stack"><span class="sk-l ink" style="--w:70%"></span><span class="sk-l" style="--w:45%"></span></div></div>
+                  <div class="sk-row"><span class="sk-dot"></span><div class="sk-stack"><span class="sk-l ink" style="--w:75%"></span><span class="sk-l" style="--w:40%"></span></div></div>
+                  <div class="sk-row"><span class="sk-dot run"></span><div class="sk-stack"><span class="sk-l ink" style="--w:80%"></span><span class="sk-l" style="--w:60%"></span></div></div>
+                  <div class="sk-row"><span class="sk-dot run"></span><div class="sk-stack"><span class="sk-l ink" style="--w:65%"></span><span class="sk-l" style="--w:55%"></span></div></div>
+                </div>
+                <div class="sk-col">
+                  <div class="sk-plate"><span class="sk-l" style="--w:40%"></span><span class="sk-l h" style="--w:80%"></span><span class="sk-l" style="--w:90%"></span><span class="sk-field" style="--h:9px"></span><div class="sk-btns"><span class="sk-btn"></span><span class="sk-btn ghost"></span></div></div>
+                  <div class="sk-row"><span class="sk-l" style="--w:30%"></span><span class="sk-l ink"></span></div>
+                  <div class="sk-row"><span class="sk-l" style="--w:30%"></span><span class="sk-l ink"></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="sk-caption">Selected decision opens the plate on the right.</p>
+        </div>
+      </li>
+
+      <!-- 2 New analysis -->
+      <li class="step">
+        <div class="step-n" aria-hidden="true">2</div>
+        <div>
+          <div class="step-head"><h3>New analysis</h3><span class="mark unclear">You write, nothing runs yet</span></div>
+          <p class="step-job">Ask the question in your own words and say what you need back. Short, because the next window does the structuring.</p>
+          <dl class="facts">
+            <dt>You give</dt><dd><ul><li>Topic or question, free text</li><li>Output: brief, memo or assessment</li><li>Audience, geography, time window</li><li>Profile: cyber, geopolitical, physical security, supply chain</li><li>Whether to map relevance to Vestas</li></ul></dd>
+            <dt>Then</dt><dd>“Propose research plan” sends you to Intent review while the AI drafts it. No sources are collected and no provider is called.</dd>
+          </dl>
+          <p class="step-note">Anything you leave blank, the AI may fill in, but it is marked as an assumption with its reason on the next window.</p>
+        </div>
+        <div class="step-sketch">
+          <div class="sk" aria-hidden="true">
+            <div class="sk-top"></div>
+            <div class="sk-body">
+              <div class="sk-l h" style="--w:35%"></div>
+              <div class="sk-field" style="--h:38px"></div>
+              <div class="sk-l" style="--w:20%"></div>
+              <div class="sk-seg"><span></span><span class="on"></span><span></span></div>
+              <div class="sk-split" style="--cols:1fr 1fr 1fr">
+                <div class="sk-col"><span class="sk-l" style="--w:50%"></span><span class="sk-field"></span></div>
+                <div class="sk-col"><span class="sk-l" style="--w:60%"></span><span class="sk-field"></span></div>
+                <div class="sk-col"><span class="sk-l" style="--w:55%"></span><span class="sk-field"></span></div>
+              </div>
+              <div class="sk-btns"><span class="sk-btn" style="--w:60px"></span></div>
+            </div>
+          </div>
+          <p class="sk-caption">One column, question field first.</p>
+        </div>
+      </li>
+
+      <!-- 3 Intent review -->
+      <li class="step">
+        <div class="step-n" aria-hidden="true">3</div>
+        <div>
+          <div class="step-head"><h3>Intent review</h3><span class="mark attention">Gate: approve once</span></div>
+          <p class="step-job">See exactly what will be researched before anything is collected. One approval covers scope, research questions and budget.</p>
+          <dl class="facts">
+            <dt>Top</dt><dd>The question and the activity strip (“AI drafting research questions…” while it fills in)</dd>
+            <dt>Scope</dt><dd>Purpose, audience, geography, time window, output. Each value marked “Stated by you” or “Assumed”, with the reason.</dd>
+            <dt>Research questions</dt><dd>Ruled list with rationale. Edit, remove or add. Questions cannot widen the scope.</dd>
+            <dt>Collection budget</dt><dd>Providers, call limit, time window</dd>
+            <dt>Plate</dt><dd>“Approve research plan”. Confirming starts collection within this budget. Nothing else changes.</dd>
+          </dl>
+        </div>
+        <div class="step-sketch">
+          <div class="sk" aria-hidden="true">
+            <div class="sk-top"></div>
+            <div class="sk-body">
+              <div class="sk-l light" style="--w:85%"></div>
+              <div class="sk-strip"><span class="sk-dot run"></span><span class="sk-l" style="--w:50%"></span></div>
+              <div class="sk-split" style="--cols:7fr 5fr">
+                <div class="sk-col">
+                  <div class="sk-row"><span class="sk-l" style="--w:25%"></span><span class="sk-l ink"></span><span class="sk-dot"></span></div>
+                  <div class="sk-row"><span class="sk-l" style="--w:25%"></span><span class="sk-l ink"></span><span class="sk-dot ask"></span></div>
+                  <div class="sk-row"><span class="sk-l" style="--w:25%"></span><span class="sk-l ink"></span><span class="sk-dot"></span></div>
+                  <div class="sk-row"><span class="sk-stack"><span class="sk-l ink"></span><span class="sk-l" style="--w:60%"></span></span></div>
+                  <div class="sk-row"><span class="sk-stack"><span class="sk-l ink" style="--w:80%"></span><span class="sk-ai"><span class="sk-dot run"></span></span></span></div>
+                </div>
+                <div class="sk-col">
+                  <div class="sk-plate"><span class="sk-l h" style="--w:85%"></span><span class="sk-l"></span><span class="sk-l" style="--w:70%"></span><div class="sk-btns"><span class="sk-btn" style="--w:40px"></span></div></div>
+                  <div class="sk-row"><span class="sk-l" style="--w:40%"></span><span class="sk-l ink"></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="sk-caption">Assumed values carry the attention mark; a question still drafting shows the AI mark.</p>
+        </div>
+      </li>
+
+      <!-- Machine hand-off: evidence -->
+      <li class="handoff">
+        <div aria-hidden="true"></div>
+        <div class="handoff-body">
+          <span class="mark running">Machine works, shown in the activity strip</span>
+          <ol class="chain">
+            <li>Collect from Seerist and OSINT</li>
+            <li>Classify each result</li>
+            <li>Retrieve source text and anchors</li>
+            <li>AI checks relevance to each question</li>
+            <li>Admit by policy</li>
+            <li>Source assurance</li>
+          </ol>
+          <p class="meta">Uncertain relevance, disagreeing sources and failures appear on Home as decisions. Everything else needs nothing from you.</p>
+        </div>
+      </li>
+
+      <!-- 4 Analysis -->
+      <li class="step">
+        <div class="step-n" aria-hidden="true">4</div>
+        <div>
+          <div class="step-head"><h3>Analysis</h3><span class="mark unclear">Read and explore</span></div>
+          <p class="step-job">Everything the analysis knows, as it grows. Same list-and-detail layout as Home: select a row, its detail opens on the right.</p>
+          <dl class="facts">
+            <dt>Top</dt><dd>The question and the activity strip</dd>
+            <dt>Evidence tab</dt><dd>Admitted sources with tier, assurance and the questions they answer. Detail: quote on a rule, anchor, retrieval date. Excluded sources folded below with their reason.</dd>
+            <dt>Findings tab</dt><dd>Findings grouped by research question, key judgements with support marks, challenge and adjudication, and open gaps</dd>
+            <dt>Decisions</dt><dd>Any exception for this analysis is listed here and links to Home, where you decide it</dd>
+          </dl>
+          <p class="step-note">No approvals live here. Changes to the outcome are requested at publication review, so there are only four places where you decide.</p>
+        </div>
+        <div class="step-sketch">
+          <div class="sk" aria-hidden="true">
+            <div class="sk-top"></div>
+            <div class="sk-body">
+              <div class="sk-l light" style="--w:85%"></div>
+              <div class="sk-strip"><span class="sk-dot run"></span><span class="sk-l" style="--w:45%"></span><span class="sk-dot ask"></span></div>
+              <div class="sk-tabs"><span class="on"></span><span></span></div>
+              <div class="sk-split">
+                <div class="sk-col">
+                  <div class="sk-row"><span class="sk-l ink"></span><span class="sk-dot cov"></span></div>
+                  <div class="sk-row sel"><span class="sk-l ink"></span><span class="sk-dot cov"></span></div>
+                  <div class="sk-row"><span class="sk-l ink"></span><span class="sk-dot ask"></span></div>
+                  <div class="sk-row"><span class="sk-l ink"></span><span class="sk-dot cov"></span></div>
+                  <div class="sk-row"><span class="sk-l ink" style="--w:70%"></span><span class="sk-ai"><span class="sk-dot run"></span></span></div>
+                </div>
+                <div class="sk-col">
+                  <span class="sk-l h" style="--w:70%"></span>
+                  <div class="sk-quote"><span class="sk-l ink"></span><span class="sk-l ink" style="--w:75%"></span></div>
+                  <div class="sk-row"><span class="sk-l" style="--w:30%"></span><span class="sk-l ink"></span></div>
+                  <div class="sk-row"><span class="sk-l" style="--w:30%"></span><span class="sk-l ink"></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="sk-caption">Evidence tab: a source still being checked shows the AI mark in its row.</p>
+        </div>
+      </li>
+
+      <!-- Machine hand-off: writing -->
+      <li class="handoff">
+        <div aria-hidden="true"></div>
+        <div class="handoff-body">
+          <span class="mark running">Machine works, shown in the activity strip</span>
+          <ol class="chain">
+            <li>Build claims</li>
+            <li>Challenge</li>
+            <li>Adjudicate</li>
+            <li>Map relevance to Vestas, if asked</li>
+            <li>Write to the memo standard</li>
+            <li>Independent verification</li>
+          </ol>
+          <p class="meta">A contested key judgement becomes a decision on Home. When verification finishes, the strip says the output is ready for your review.</p>
+        </div>
+      </li>
+
+      <!-- 5 Publication review -->
+      <li class="step">
+        <div class="step-n" aria-hidden="true">5</div>
+        <div>
+          <div class="step-head"><h3>Publication review</h3><span class="mark attention">Gate: approve, return or reject</span></div>
+          <p class="step-job">Read the output as its reader will, and open the evidence behind any claim. This is concept 2.</p>
+          <dl class="facts">
+            <dt>Top</dt><dd>The question, the activity strip, and the plate with blockers from verification</dd>
+            <dt>Left</dt><dd>The memo, every claim clickable, with its support mark</dd>
+            <dt>Right</dt><dd>Trace for the selected claim: quotes, sources, tier, assurance, contradicting evidence, challenge</dd>
+            <dt>Sampled checks</dt><dd>Five claim-to-source rows chosen at random. You record whether each source supports its claim.</dd>
+            <dt>You</dt><dd>Approve, reject, or return to the stage that owns the problem with a note</dd>
+          </dl>
+        </div>
+        <div class="step-sketch">
+          <div class="sk" aria-hidden="true">
+            <div class="sk-top"></div>
+            <div class="sk-body">
+              <div class="sk-l light" style="--w:85%"></div>
+              <div class="sk-plate"><span class="sk-l h" style="--w:60%"></span><span class="sk-l" style="--w:80%"></span><div class="sk-btns"><span class="sk-btn"></span><span class="sk-btn ghost"></span></div></div>
+              <div class="sk-bar"><span style="flex:5"></span><span style="flex:2"></span><span style="flex:1"></span></div>
+              <div class="sk-split" style="--cols:7fr 5fr">
+                <div class="sk-col">
+                  <span class="sk-l h" style="--w:30%"></span>
+                  <span class="sk-l ink"></span><span class="sk-l ink" style="--w:80%"></span>
+                  <div class="sk-row sel"><span class="sk-l ink"></span></div>
+                  <span class="sk-l ink" style="--w:90%"></span><span class="sk-l ink" style="--w:60%"></span>
+                </div>
+                <div class="sk-col">
+                  <span class="sk-l h" style="--w:50%"></span>
+                  <div class="sk-quote"><span class="sk-l ink"></span><span class="sk-l ink" style="--w:70%"></span></div>
+                  <div class="sk-quote"><span class="sk-l ink"></span><span class="sk-l ink" style="--w:55%"></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="sk-caption">Memo left, trace right; approval stays closed while blockers remain.</p>
+        </div>
+      </li>
+
+      <!-- 6 Output -->
+      <li class="step">
+        <div class="step-n" aria-hidden="true">6</div>
+        <div>
+          <div class="step-head"><h3>Output</h3><span class="mark done">Published</span></div>
+          <p class="step-job">The finished brief, memo or assessment, read cleanly, with everything behind it one step away.</p>
+          <dl class="facts">
+            <dt>Reader</dt><dd>Bottom line, key judgements, implications, indicators to watch, sources. Limitations stated, including “support check: model-only, unvalidated” until calibration is approved.</dd>
+            <dt>Actions</dt><dd>Export to PDF or Word, copy a link, start a follow-up analysis from this one</dd>
+            <dt>Audit trail</dt><dd>Every decision with its reason and who made it, and the versions of policies, standards and context used</dd>
+            <dt>Versions</dt><dd>Earlier versions and what changed</dd>
+          </dl>
+        </div>
+        <div class="step-sketch">
+          <div class="sk" aria-hidden="true">
+            <div class="sk-top"></div>
+            <div class="sk-body">
+              <div class="sk-split" style="--cols:8fr 3fr">
+                <div class="sk-col">
+                  <span class="sk-l h" style="--w:75%"></span>
+                  <span class="sk-l" style="--w:45%"></span>
+                  <span class="sk-l light"></span><span class="sk-l light" style="--w:70%"></span>
+                  <div class="sk-row"><span class="sk-l ink"></span></div>
+                  <span class="sk-l ink"></span><span class="sk-l ink" style="--w:85%"></span>
+                  <div class="sk-row"><span class="sk-l ink" style="--w:90%"></span></div>
+                  <span class="sk-l ink" style="--w:65%"></span>
+                </div>
+                <div class="sk-col">
+                  <div class="sk-btns"><span class="sk-btn" style="--w:100%"></span></div>
+                  <div class="sk-row"><span class="sk-dot cov"></span><span class="sk-l"></span></div>
+                  <div class="sk-row"><span class="sk-dot cov"></span><span class="sk-l"></span></div>
+                  <div class="sk-row"><span class="sk-dot"></span><span class="sk-l"></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="sk-caption">Reading width for the document, actions and audit in a narrow margin.</p>
+        </div>
+      </li>
+    </ol>
+
+    <!-- Outside every analysis -->
+    <ol class="flow outside" start="7">
+      <li class="step">
+        <div class="step-n" aria-hidden="true">7</div>
+        <div>
+          <div class="step-head"><h3>Governance</h3><span class="mark attention">Gate, on its own cadence</span></div>
+          <p class="step-job">The rules every analysis runs under. Changed rarely and never per memo. Pending approvals also appear on Home.</p>
+          <dl class="facts">
+            <dt>Left</dt><dd>Memo standard, organisational context packs, source assurance policies, outlet reliability tables, each with its current version</dd>
+            <dt>Right</dt><dd>The proposed version with a change list against the current one, and which analyses would use it</dd>
+            <dt>You</dt><dd>Approve or reject a new version. Analyses record the exact versions they used, so nothing changes under a finished output.</dd>
+          </dl>
+        </div>
+        <div class="step-sketch">
+          <div class="sk" aria-hidden="true">
+            <div class="sk-top"></div>
+            <div class="sk-body">
+              <div class="sk-l h" style="--w:30%"></div>
+              <div class="sk-split">
+                <div class="sk-col">
+                  <div class="sk-row sel"><span class="sk-l ink"></span><span class="sk-dot ask"></span></div>
+                  <div class="sk-row"><span class="sk-l ink"></span><span class="sk-dot cov"></span></div>
+                  <div class="sk-row"><span class="sk-l ink"></span><span class="sk-dot cov"></span></div>
+                  <div class="sk-row"><span class="sk-l ink"></span><span class="sk-dot cov"></span></div>
+                </div>
+                <div class="sk-col">
+                  <div class="sk-plate"><span class="sk-l h" style="--w:70%"></span><span class="sk-l"></span><div class="sk-btns"><span class="sk-btn"></span><span class="sk-btn ghost"></span></div></div>
+                  <div class="sk-row"><span class="sk-l ink" style="--w:60%"></span></div>
+                  <div class="sk-row"><span class="sk-l ink" style="--w:80%"></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="sk-caption">Same list-and-detail pattern; the plate opens for a pending version.</p>
+        </div>
+      </li>
+    </ol>
+  </main>
+</body>
+</html>

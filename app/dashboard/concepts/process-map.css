@@ -1,0 +1,95 @@
+/* Process map: the whole route from question to output, one row per window.
+   Sketches are low-detail wireframes built from the Decision Inbox pattern. */
+
+.map-lede { max-width:68ch; margin:0 0 32px; font-size:var(--text-body); }
+.map-legend { display:flex; flex-wrap:wrap; gap:8px 24px; margin:0 0 40px; }
+
+/* Activity strip: the real element, shown at full detail */
+.strip-spec { margin:0 0 56px; }
+.strip-spec h3, .map-section-h { margin:0 0 4px; font-size:var(--text-heading); font-weight:500; }
+.strip-spec > .meta { margin:0 0 16px; max-width:68ch; }
+.strip-states { margin-top:24px; }
+.strip-states td:first-child { white-space:nowrap; }
+
+/* The flow */
+.flow { margin:0; padding:0; list-style:none; counter-reset:step; }
+.step { display:grid; grid-template-columns:3rem minmax(0, 1fr) minmax(0, 26rem); gap:0 40px; padding:40px 0; border-top:1px solid var(--rule); }
+.step-n { color:var(--ink-2); font-size:var(--text-title); font-weight:300; line-height:1; font-variant-numeric:tabular-nums; }
+.step-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 16px; }
+.step-head h3 { margin:0; font-size:var(--text-heading); font-weight:500; }
+.step-job { max-width:60ch; margin:8px 0 20px; font-size:var(--text-body); }
+.step .facts { grid-template-columns:8rem minmax(0, 1fr); }
+.step .facts dd ul { margin:0; padding-left:1.1em; }
+.step .facts dd li + li { margin-top:2px; }
+.step-note { margin:12px 0 0; color:var(--ink-2); font-size:var(--text-meta); max-width:60ch; }
+
+.handoff { display:grid; grid-template-columns:3rem minmax(0, 1fr); gap:0 40px; padding:0 0 40px; }
+.handoff-body { padding:14px 16px; background:var(--sunken); border-radius:var(--radius-control); }
+.handoff-body .mark { margin-bottom:8px; }
+.chain { display:flex; flex-wrap:wrap; gap:4px 0; margin:0; padding:0; list-style:none; font-size:var(--text-ui); }
+.chain li:not(:last-child)::after { margin:0 10px; color:var(--ink-2); content:"\2192"; }
+.handoff-body .meta { margin:8px 0 0; }
+
+.outside { margin-top:16px; padding-top:40px; border-top:1px solid var(--ink); }
+
+/* Sketch primitives */
+.sk { display:flex; flex-direction:column; aspect-ratio:4 / 3; overflow:hidden; background:var(--canvas); border:1px solid var(--rule); border-radius:var(--radius-surface); }
+.sk-top { flex:none; height:14px; background:var(--shell); }
+.sk-body { display:flex; flex:1; flex-direction:column; gap:6px; min-height:0; padding:10px 12px; }
+.sk-l { flex:none; width:var(--w, 100%); height:5px; background:var(--rule); border-radius:2px; }
+.sk-l.ink { background:var(--ink-2); opacity:.45; }
+.sk-l.h { height:9px; background:var(--ink-2); opacity:.6; }
+.sk-l.light { height:12px; background:var(--ink-2); opacity:.3; }
+.sk-split { display:grid; flex:1; grid-template-columns:var(--cols, 5fr 7fr); gap:12px; min-height:0; }
+.sk-col { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.sk-row { display:flex; align-items:center; gap:6px; padding:5px 0; border-top:1px solid var(--rule); }
+.sk-row.sel { margin:0 -4px; padding:5px 4px; background:var(--band); }
+.sk-row > .sk-l { flex:1; }
+.sk-stack { display:flex; flex:1; flex-direction:column; gap:4px; min-width:0; }
+.sk-dot { flex:none; box-sizing:border-box; width:7px; height:7px; border:1px solid var(--ink-2); border-radius:50%; }
+.sk-dot.run { border-color:var(--action); background:radial-gradient(circle, var(--action) 0 1.5px, transparent 2px); }
+.sk-dot.ask { background:var(--fn-yellow); }
+.sk-dot.cov { background:var(--covered); border-color:var(--covered); }
+.sk-dot.part { border-color:var(--covered); background:linear-gradient(90deg, var(--covered) 50%, transparent 50%); }
+.sk-strip { display:flex; flex:none; align-items:center; gap:6px; padding:4px 6px; background:var(--sunken); border-radius:2px; }
+.sk-strip .sk-l { flex:1; }
+.sk-plate { display:flex; flex:none; flex-direction:column; gap:5px; padding:7px; background:var(--shell); border-radius:4px; }
+.sk-plate .sk-l { background:var(--shell-ink-2); opacity:.55; }
+.sk-plate .sk-l.h { background:var(--shell-ink); opacity:.9; }
+.sk-btns { display:flex; flex:none; gap:4px; }
+.sk-btn { width:var(--w, 26px); height:9px; background:var(--action); border-radius:2px; }
+.sk-btn.ghost { background:transparent; border:1px solid var(--control); }
+.sk-plate .sk-btn { background:var(--shell-ink); }
+.sk-plate .sk-btn.ghost { background:transparent; border-color:var(--shell-ink-2); }
+.sk-field { flex:none; height:var(--h, 12px); border:1px solid var(--control); border-radius:2px; }
+.sk-seg { display:flex; flex:none; gap:0; }
+.sk-seg span { width:30px; height:10px; border:1px solid var(--control); }
+.sk-seg span + span { border-left:0; }
+.sk-seg span.on { background:var(--band); border-color:var(--action); }
+.sk-tabs { display:flex; flex:none; gap:12px; padding-bottom:3px; border-bottom:1px solid var(--rule); }
+.sk-tabs span { width:24px; height:5px; background:var(--rule); border-radius:2px; }
+.sk-tabs span.on { background:var(--ink-2); box-shadow:0 4px 0 -1px var(--action); }
+.sk-bar { display:flex; flex:none; height:6px; gap:2px; }
+.sk-bar span { background:var(--covered); }
+.sk-bar span:nth-child(2) { background:var(--partial); }
+.sk-bar span:nth-child(3) { background:var(--absent); }
+.sk-quote { display:flex; flex-direction:column; gap:4px; padding-left:6px; border-left:1px solid var(--ink-2); }
+.sk-ai { display:inline-flex; flex:none; align-items:center; gap:4px; }
+.sk-ai::after { width:18px; height:5px; background:var(--action); opacity:.35; border-radius:2px; content:""; }
+.sk-fill { flex:1; }
+.sk-caption { margin:8px 0 0; color:var(--ink-2); font-size:var(--text-meta); }
+
+@media (max-width:1023px) {
+  .step { grid-template-columns:2.5rem minmax(0, 1fr); gap:0 20px; }
+  .step-sketch { grid-column:2; margin-top:24px; max-width:26rem; }
+  .handoff { grid-template-columns:2.5rem minmax(0, 1fr); gap:0 20px; }
+}
+@media (max-width:639px) {
+  .step { grid-template-columns:minmax(0, 1fr); }
+  .step-n { margin-bottom:12px; font-size:var(--text-heading); }
+  .step-sketch { grid-column:1; }
+  .handoff { grid-template-columns:minmax(0, 1fr); }
+  .handoff > :first-child { display:none; }
+  .step .facts { grid-template-columns:minmax(0, 1fr); }
+  .step .facts dt { padding-bottom:0; border-bottom:0; }
+}
