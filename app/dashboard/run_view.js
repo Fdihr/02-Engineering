@@ -10,16 +10,21 @@
     busy: false,
     pendingRender: false,
     newMode: false,
+    draft: false,
     expanded: {},
     openRounds: {},
     drafts: {},
     promptAt: {},
     sourceFilter: '',
-    leadFilter: 'open',
-    selectedLeads: {},
+    homeFilter: 'all',
+    homeSel: '',
+    leadFilter: 'pending',
     recent: [],
     dirty: {},
-    copilotModel: null
+    copilotModel: null,
+    catalogLoaded: false,
+    modelLoading: false,
+    settingsLoaded: false
   };
   var pollMs = Math.max(1000, Number(body.getAttribute('data-poll-ms')) || 2000);
   var TABS = ['now', 'brief', 'sources', 'synthesis', 'memo', 'audit', 'settings'];
@@ -219,13 +224,11 @@
       'approve:requirements': ['Information requirements approved', f['Requirements'] ? f['Requirements'] + ' requirements' : ''],
       'discover:seerist': ['Seerist leads collected', (f['Candidates'] || '0') + ' ranked leads from ' + (f['API calls'] || '0') + ' API calls'],
       'intake:seerist': [reused ? 'Lead already classified' : 'Lead classified', reused ? 'Reused the existing record' : humanise(f['Role']) + ' → ' + humanise(f['Route'])],
-      'retrieve:source': ['Full article retrieved', f['Outcome'] ? humanise(f['Outcome']) + ' · ' + humanise(f['Reason']) : ''],
       'canonicalize:source': ['Article text prepared', f['Segments'] ? f['Segments'] + ' anchored text segments' : ''],
       'prepare:question-relevance': ['Relevance check prepared', 'Next: run Copilot relevance'],
       'review:evidence': ['Admission decision recorded', humanise(f['Decision']) + (f['Reviewer'] ? ' by ' + f['Reviewer'] : '')],
       'check:ai-answer': ['AI answer checked', f['Quotes'] ? 'All ' + f['Quotes'] + ' quotes matched the source exactly' : ''],
       'record:question-relevance': ['AI relevance check recorded', f['Verdict'] ? 'Verdict: ' + humanise(f['Verdict']) : ''],
-      'reintake:source': ['Evidence candidate created', 'Next: your admission decision'],
       'record:assurance-review': ['Source review recorded', humanise(f['Review status']) + (f['Verdicts'] ? ' · ' + f['Verdicts'] + ' verdicts' : '')],
       'assemble:assurance': ['Source note assembled', (f['In-scope observations'] ? f['In-scope observations'] + ' in-scope observations' : '') + (f['Gaps'] ? ' · ' + f['Gaps'] + ' gaps' : '')],
       'measure:assurance': ['Assurance measured', 'Support failure rate ' + (f['Support failure rate'] || 'n/a')],
@@ -447,43 +450,67 @@
   }
 
   /* ---------- Navigation ---------- */
-  function selectTab(tab, focusTab) {
-    if (TABS.indexOf(tab) < 0) tab = 'now';
-    state.tab = tab;
-    if (tab === 'settings' && !state.catalogLoaded) loadModels();
-    TABS.forEach(function (name) {
-      var button = document.getElementById('tab-' + name);
-      var selected = name === tab;
-      button.setAttribute('aria-selected', selected ? 'true' : 'false');
-      button.tabIndex = selected ? 0 : -1;
-      document.getElementById('pane-' + name).hidden = !selected;
+  var ROUTES = {
+    'home': { pane: 'now' },
+    'new': { pane: 'brief', title: 'New analysis', sub: 'Nothing is collected until you approve the research plan.' },
+    'intent': { pane: 'brief', title: 'Intent review', run: true },
+    'analysis/evidence': { pane: 'sources', title: 'Evidence', run: true },
+    'analysis/findings': { pane: 'synthesis', title: 'Findings', run: true },
+    'review': { pane: 'memo', title: 'Publication review', run: true },
+    'output': { pane: 'memo', title: 'Output', run: true },
+    'audit': { pane: 'audit', title: 'Audit', run: true },
+    'settings': { pane: 'settings', title: 'Settings', sub: 'Keys and connections for this computer. Keys are stored in your Windows user environment and never shown in full.' }
+  };
+  var TAB_ROUTE = { now: 'home', brief: 'intent', sources: 'analysis/evidence', synthesis: 'analysis/findings', memo: 'review', audit: 'audit' };
+  function currentRoute() {
+    var route = (window.location.hash || '').replace(/^#\/?/, '');
+    return ROUTES[route] ? route : 'home';
+  }
+  function applyRoute() {
+    var route = currentRoute();
+    var previous = state.route;
+    state.route = route;
+    state.newMode = route === 'new';
+    if (route !== 'new' && route !== 'intent') state.draft = false;
+    state.tab = ROUTES[route].pane;
+    TABS.forEach(function (name) { document.getElementById('pane-' + name).hidden = name !== state.tab; });
+    document.getElementById('nav-home').setAttribute('aria-current', route === 'home' ? 'page' : 'false');
+    document.getElementById('nav-audit').setAttribute('aria-current', route === 'audit' ? 'page' : 'false');
+    document.getElementById('nav-settings').setAttribute('aria-current', route === 'settings' ? 'page' : 'false');
+    document.getElementById('nav-new').setAttribute('aria-current', route === 'new' ? 'page' : 'false');
+    if (route === 'new' && previous !== 'new' && window.CTI.startNew) window.CTI.startNew();
+    if (route === 'settings' && !state.catalogLoaded && !state.modelLoading) {
+      if (state.settingsLoaded) loadModels();
+      else loadSavedModel().then(loadModels);
+    }
+    render(true);
+    var target = state.pendingScroll;
+    state.pendingScroll = null;
+    window.requestAnimationFrame(function () {
+      var id = target && (target.row ? 'src-' + target.row : target.round ? 'round-' + target.round : target.focus ? 'focus-' + target.focus : '');
+      var node = id ? document.getElementById(id) : null;
+      if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      else if (previous !== route) window.scrollTo({ top: 0 });
     });
-    if (focusTab) document.getElementById('tab-' + tab).focus();
-    var url = new URL(window.location.href);
-    url.hash = tab === 'now' ? '' : tab;
-    window.history.replaceState({}, '', url.toString());
+  }
+  function navigate(route, target) {
+    state.pendingScroll = target || null;
+    if (currentRoute() === route && (window.location.hash || '') === '#/' + route) return applyRoute();
+    window.location.hash = '#/' + route;
   }
   function go(target) {
     if (!target) return;
-    if (target.row) { state.expanded[target.row] = true; state.sourceFilter = 'all'; }
+    if (target.row) { state.expanded[target.row] = true; state.sourceFilter = 'all'; state.selectedSource = target.row; }
     if (target.round) state.openRounds[target.round] = true;
-    if (target.tab === 'brief') state.newMode = false;
-    selectTab(target.tab || 'now');
-    render(true);
-    window.requestAnimationFrame(function () {
-      var id = target.row ? 'src-' + target.row : target.round ? 'round-' + target.round : target.focus ? 'focus-' + target.focus : '';
-      var node = id ? document.getElementById(id) : null;
-      if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      else window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
+    navigate(TAB_ROUTE[target.tab || 'now'] || 'home', target);
   }
+  function selectTab(tab) { go({ tab: tab }); }
   function switchRun(runId) {
     if (!runId || runId === state.runId) return;
     state.runId = runId;
     state.lastText = '';
     state.expanded = {};
     state.openRounds = {};
-    state.selectedLeads = {};
     state.sourceFilter = '';
     var url = new URL(window.location.href);
     url.searchParams.set('run', runId);
@@ -492,155 +519,282 @@
     refresh();
   }
 
-  /* ---------- Header, progress and counts ---------- */
-  var PHASE_WORDS = { done: ['reviewed', 'Done'], active: ['in-progress', 'In progress'], ready: ['pending', 'Ready'], stale: ['provisional', 'Out of date'], attention: ['failed', 'Needs attention'], todo: ['pending', 'Not started'] };
-  var PHASE_TARGET = { frame: { tab: 'brief' }, collect: { tab: 'brief', focus: 'collect' }, evidence: { tab: 'sources' }, assure: { tab: 'sources' }, synthesise: { tab: 'synthesis' }, memo: { tab: 'memo' } };
+  /* ---------- Run window header and activity strip ---------- */
+  var PHASE_LABEL = { frame: 'Intent', collect: 'Evidence', evidence: 'Evidence', assure: 'Evidence', synthesise: 'Findings', memo: 'Writing' };
+  var STAGES = [
+    { label: 'Intent', phases: ['frame'] },
+    { label: 'Evidence', phases: ['collect', 'evidence', 'assure'] },
+    { label: 'Findings', phases: ['synthesise'] },
+    { label: 'Writing', phases: ['memo'] },
+    { label: 'Publication', phases: [] }
+  ];
+  var LIVE = { active: 1, ready: 1, stale: 1, attention: 1 };
+  function stageStates(j) {
+    var byKey = {};
+    j.phases.forEach(function (p) { byKey[p.key] = p.state; });
+    return STAGES.map(function (stage) {
+      var states = stage.phases.map(function (k) { return byKey[k] || 'todo'; });
+      if (!stage.phases.length) {
+        var gate = j.memo && j.memo.gate;
+        if (!gate) return 'todo';
+        return gate.humanApprovalAvailable ? 'ready' : 'attention';
+      }
+      if (states.every(function (s) { return s === 'done'; })) return 'done';
+      return states.some(function (s) { return LIVE[s]; }) ? 'ready' : 'todo';
+    });
+  }
+  function renderStrip(j) {
+    var strip = el('div', 'activity-strip');
+    strip.setAttribute('role', 'group');
+    strip.setAttribute('aria-label', 'Analysis progress');
+    var states = stageStates(j);
+    var current = states.findIndex(function (s) { return s !== 'done'; });
+    var now = el('span', 'now');
+    var mine = j.queue.filter(function (q) { return q.actor === 'you'; })[0];
+    var next = mine || j.queue[0];
+    if (!next) {
+      add(now, el('span', 'mark done', 'Nothing is waiting'));
+    } else if (next.actor === 'you') {
+      add(now, el('span', 'mark attention', 'Waiting for you'), next.title);
+    } else {
+      add(now, el('span', 'ai-mark', 'AI step ready'), next.title);
+    }
+    var list = el('ol', 'stages');
+    STAGES.forEach(function (stage, i) {
+      var li = el('li');
+      if (i === current) li.setAttribute('aria-current', 'step');
+      var cls = states[i] === 'done' ? 'mark done' : states[i] === 'attention' ? 'mark attention' : i === current ? 'mark running' : null;
+      add(li, el('span', cls, stage.label));
+      list.appendChild(li);
+    });
+    add(strip, now, list);
+    if (next) add(strip, add(el('span', 'yours'), linkButton(next.actor === 'you' ? 'Open your next step' : 'Open the AI step', function () { go(next.target); })));
+    return strip;
+  }
+  function renderDraftStrip() {
+    var strip = el('div', 'activity-strip');
+    strip.setAttribute('role', 'group');
+    strip.setAttribute('aria-label', 'Analysis progress');
+    add(strip, add(el('span', 'now'), el('span', 'mark attention', 'Waiting for you'), 'Research plan drafted. Nothing has been collected.'));
+    var list = el('ol', 'stages');
+    STAGES.forEach(function (stage, i) {
+      var li = el('li');
+      if (i === 0) li.setAttribute('aria-current', 'step');
+      add(li, el('span', i === 0 ? 'mark attention' : null, stage.label));
+      list.appendChild(li);
+    });
+    add(strip, list, add(el('span', 'yours'), linkButton('Edit the question', function () { navigate('new'); })));
+    return strip;
+  }
   function renderHead() {
     var j = journey();
+    var route = state.route || currentRoute();
+    var def = ROUTES[route];
     var head = document.createDocumentFragment();
-    var q = j && j.brief.question;
+    if (route === 'home') return replace(document.getElementById('run-head'), head);
+    var crumb = el('a', 'parent-link', 'Home');
+    crumb.href = '#/home';
+    var title = el('div', 'page-head');
+    add(title, crumb, el('h2', null, def.title));
+    if (def.sub) add(title, el('div', 'meta', def.sub));
+    if (route === 'intent' && state.draft) {
+      var dq = document.getElementById('in-question').value.trim();
+      var dg = document.getElementById('in-geo').value.trim();
+      add(title, el('div', 'meta', ['Draft analysis ' + document.getElementById('in-run-id').value.trim(), dg, document.getElementById('in-audience').value.trim()].filter(Boolean).join(' · ') + '. Nothing has been collected.'));
+      head.appendChild(title);
+      add(head, el('p', 'question-line', dq || 'No question yet'), renderDraftStrip());
+      return replace(document.getElementById('run-head'), head);
+    }
     var scope = j && j.brief.scope;
-    add(head, el('div', 'meta', 'Analysis ' + state.runId));
-    add(head, el('h2', 'run-question', q ? q.question : 'No approved question yet'));
-    if (scope) {
-      var facts = el('div', 'run-facts');
-      [['Geographies', (scope.geographies || []).join(', ')], ['Window', (scope.from || '').slice(0, 10) + ' → ' + (scope.to || '').slice(0, 10)], ['Audience', scope.audience], ['Approved by', scope.approvedBy]].forEach(function (pair) {
-        if (!pair[1]) return;
-        var span = el('span');
-        add(span, pair[0] + ': ', el('strong', null, pair[1]));
-        facts.appendChild(span);
-      });
-      head.appendChild(facts);
+    var q = j && j.brief.question;
+    if (def.run) {
+      var bits = ['Analysis ' + state.runId];
+      if (scope) bits.push((scope.geographies || []).join(', '), (scope.from || '').slice(0, 10) + ' → ' + (scope.to || '').slice(0, 10), scope.audience);
+      add(title, el('div', 'meta', bits.filter(Boolean).join(' · ')));
+    }
+    if (route === 'review' && j && j.memo) {
+      var keys = el('div', 'keys');
+      keys.setAttribute('aria-label', 'Keyboard shortcuts');
+      add(keys, add(el('span'), el('kbd', null, 'J'), el('kbd', null, 'K'), ' next, previous claim'), add(el('span'), el('kbd', null, 'Esc'), ' deselect'));
+      title.classList.add('head-keys');
+      title.appendChild(keys);
+    }
+    head.appendChild(title);
+    if (def.run && j) {
+      add(head, el('p', 'question-line', q ? q.question : 'No approved question yet'), renderStrip(j));
     }
     replace(document.getElementById('run-head'), head);
-
-    var bar = document.createDocumentFragment();
-    (j ? j.phases : []).forEach(function (phase) {
-      var li = el('li', 'phase ' + phase.state);
-      var b = el('button');
-      b.type = 'button';
-      var word = PHASE_WORDS[phase.state] || ['pending', phase.state];
-      var waiting = [];
-      if (phase.waiting.you) waiting.push(phase.waiting.you + ' for you');
-      if (phase.waiting.ai) waiting.push(phase.waiting.ai + ' AI');
-      add(b, el('span', 'phase-label', phase.label), statusMark(word[0], word[1] + (waiting.length ? ' · ' + waiting.join(' · ') : '')), phase.summary ? el('span', 'phase-summary', phase.summary) : null);
-      b.addEventListener('click', function () { go(PHASE_TARGET[phase.key]); });
-      li.appendChild(b);
-      bar.appendChild(li);
-    });
-    replace(document.getElementById('phasebar'), bar);
-
-    function count(id, text, hot) {
-      var node = document.getElementById(id);
-      node.textContent = text;
-      node.className = 'tab-count' + (hot ? ' hot' : '');
-    }
+  }
+  function renderCounts() {
+    var j = journey();
     if (!j) return;
-    var actionRows = j.sources.filter(function (r) { return r.state === 'action'; }).length;
-    var roundWork = j.queue.filter(function (q) { return q.target.tab === 'synthesis'; }).length;
-    count('count-now', j.queue.length ? String(j.queue.length) : '', j.queue.length > 0);
-    count('count-sources', actionRows ? actionRows + ' / ' + j.sources.length : String(j.sources.length || ''), actionRows > 0);
-    count('count-synthesis', roundWork ? String(roundWork) : (j.rounds.length ? 'R' + j.rounds.length : ''), roundWork > 0);
-    count('count-memo', j.memo ? (j.memo.isCurrent ? 'draft' : 'out of date') : '', Boolean(j.memo && !j.memo.isCurrent));
-    var openEx = (state.view.counts && state.view.counts.openExceptions) || 0;
-    count('count-audit', openEx ? String(openEx) : '', openEx > 0);
+    function count(id, n) { document.getElementById(id).textContent = n ? String(n) : ''; }
+    count('count-home', j.queue.filter(function (q) { return q.actor === 'you'; }).length);
+    count('count-audit', (state.view.counts && state.view.counts.openExceptions) || 0);
   }
 
-  /* ---------- Now ---------- */
-  var PHASE_LABEL = { frame: 'Frame', collect: 'Collect', evidence: 'Admit evidence', assure: 'Assure sources', synthesise: 'Synthesise', memo: 'Memo' };
+  /* ---------- Home ---------- */
+  var HOME_FILTERS = [['all', 'All'], ['decision', 'Decisions'], ['ai', 'AI steps'], ['option', 'Next options']];
+  var KIND_LABEL = { decision: 'Decision for you', ai: 'AI step', option: 'Next option' };
+  var WINDOW_LABEL = { now: 'Home', brief: 'Intent', sources: 'Evidence', synthesis: 'Findings', memo: 'Publication review', audit: 'Audit' };
+  function homeItems(j) {
+    var items = [];
+    j.queue.forEach(function (q, i) {
+      var kind = q.actor === 'you' ? 'decision' : 'ai';
+      items.push({ id: kind + ':' + i + ':' + q.title, kind: kind, title: q.title, detail: q.detail, phase: q.phase, target: q.target });
+    });
+    j.suggestions.forEach(function (s, i) {
+      items.push({ id: 'option:' + i + ':' + s.title, kind: 'option', title: s.title, detail: s.detail, phase: '', target: s.target });
+    });
+    return items;
+  }
+  function itemMark(item) {
+    if (item.kind === 'decision') return el('span', 'mark attention', 'Waiting for you');
+    if (item.kind === 'ai') return el('span', 'ai-mark', 'AI step ready');
+    return el('span', 'mark', 'Suggested');
+  }
+  function queueRow(id, title, age, meta, mark, selected, onClick) {
+    var li = el('li');
+    var b = el('button', 'queue-item');
+    b.type = 'button';
+    b.setAttribute('data-id', id);
+    b.setAttribute('aria-current', selected ? 'true' : 'false');
+    add(b, el('span', 'q-title', title), age ? el('span', 'q-age', age) : null, el('span', 'q-meta', meta || ''), add(el('span', 'q-state'), mark));
+    b.addEventListener('click', onClick);
+    li.appendChild(b);
+    return li;
+  }
+  function factList(pairs) {
+    var dl = el('dl', 'facts');
+    pairs.forEach(function (pair) {
+      if (pair[1] === undefined || pair[1] === null || pair[1] === '') return;
+      add(dl, el('dt', null, pair[0]), add(el('dd'), pair[1]));
+    });
+    return dl;
+  }
+  function homeVisible(j) {
+    var all = homeItems(j);
+    return all.filter(function (i) { return state.homeFilter === 'all' || i.kind === state.homeFilter; });
+  }
+  function homeSelect(id) {
+    state.homeSel = id;
+    renderNow();
+    var btn = document.querySelector('#pane-now .queue-item[data-id="' + id.replace(/"/g, '\\"') + '"]');
+    if (btn) btn.focus();
+  }
+  function homeMove(step) {
+    var j = journey();
+    if (!j) return;
+    var list = homeVisible(j);
+    if (!list.length) return;
+    var idx = list.map(function (i) { return i.id; }).indexOf(state.homeSel);
+    homeSelect(list[Math.max(0, Math.min(list.length - 1, idx + step))].id);
+  }
+  function homeDetail(item, j) {
+    var box = el('div', 'detail-body');
+    if (!item) {
+      add(box, add(el('div', 'empty-state'), el('h3', null, j.queue.length || j.suggestions.length ? 'Choose an item' : 'Nothing is waiting'), el('p', null, j.queue.length || j.suggestions.length ? 'Select a row on the left, or press J.' : 'Every started step is complete. Open an analysis step or start a new analysis.')));
+      return box;
+    }
+    var plate = el('div', 'plate');
+    var kicker = el('div', 'plate-kicker');
+    add(kicker, itemMark(item), el('span', null, KIND_LABEL[item.kind] + (item.phase ? ' · ' + (PHASE_LABEL[item.phase] || '') : '')));
+    var title = el('h3', 'plate-title', item.title);
+    title.id = 'detail-title';
+    var open = el('button', 'btn-primary', item.kind === 'ai' ? 'Open the AI step' : 'Open');
+    open.type = 'button';
+    open.addEventListener('click', function () { go(item.target); });
+    var actions = el('div', 'btn-row');
+    add(actions, open);
+    if (item.kind === 'ai') {
+      add(actions, actButton('Check next step', 'btn-inverse', function () { postAction({ action: 'run-next', runId: state.runId }); }));
+    }
+    add(plate, kicker, title, el('p', 'plate-confirm', item.detail), actions);
+    box.appendChild(plate);
+
+    var row = item.target && item.target.row ? j.sources.filter(function (r) { return r.id === item.target.row; })[0] : null;
+    var lead = row && row.lead;
+    var facts = factList([
+      ['Kind', KIND_LABEL[item.kind]],
+      ['Phase', PHASE_LABEL[item.phase] || ''],
+      ['Opens', item.target ? WINDOW_LABEL[item.target.tab || 'now'] || '' : ''],
+      ['Source', row ? row.title : ''],
+      ['Article', row && row.url ? externalLink(row.url) : ''],
+      ['Publisher', row ? row.publisher : ''],
+      ['Seerist score', lead ? String(lead.score) : ''],
+      ['Published', lead && lead.providerTimestamp ? lead.providerTimestamp.slice(0, 10) : '']
+    ]);
+    add(box, add(el('section'), sectionHead('Facts', 'h3'), facts));
+    return box;
+  }
   function renderNow() {
     var j = journey();
     var pane = document.createDocumentFragment();
-    if (!j) { add(pane, el('div', 'empty', 'Loading…')); return replace(document.getElementById('pane-now'), pane); }
-    var split = el('div', 'split');
-    var left = el('div');
-    var right = el('div');
+    var host = document.getElementById('pane-now');
+    if (!j) { add(pane, el('div', 'empty', 'Loading…')); return replace(host, pane); }
+    var q = j.brief.question;
+    var all = homeItems(j);
+    var waiting = all.filter(function (i) { return i.kind === 'decision'; }).length;
+    var head = el('div', 'page-head home-head');
+    var titleBox = el('div');
+    add(titleBox, el('h2', null, 'Home'), el('p', 'meta', plural(waiting, 'decision') + ' waiting. The workflow moves only when you decide.'),
+      el('p', 'meta', 'Analysis ' + state.runId + (q ? ' · ' + q.question : '')));
+    var keys = el('div', 'keys');
+    keys.setAttribute('aria-label', 'Keyboard shortcuts');
+    add(keys, add(el('span'), el('kbd', null, 'J'), el('kbd', null, 'K'), ' next, previous'));
+    var newBtn = el('button', 'btn-primary', 'New analysis');
+    newBtn.type = 'button';
+    newBtn.addEventListener('click', function () { navigate('new'); });
+    add(head, titleBox, add(el('div', 'head-actions'), keys, newBtn));
+    pane.appendChild(head);
 
-    if (j.queue.length) {
-      var first = j.queue[0];
-      var plate = el('section', 'plate');
-      plate.setAttribute('aria-labelledby', 'next-title');
-      var kicker = el('div', 'plate-kicker');
-      add(kicker, actorMark(first.actor), 'Up next · ' + PHASE_LABEL[first.phase]);
-      var title = el('h2', null, first.title);
-      title.id = 'next-title';
-      var go1 = el('button', 'btn-primary', first.actor === 'ai' ? 'Open the AI step' : 'Open');
-      go1.type = 'button';
-      go1.addEventListener('click', function () { go(first.target); });
-      add(plate, kicker, title, el('div', 'meta', first.detail), add(el('div', 'btn-row'), go1));
-      left.appendChild(plate);
-      if (j.queue.length > 1) {
-        var also = el('section');
-        add(also, sectionHead('Also waiting (' + (j.queue.length - 1) + ')'));
-        var list = el('ul', 'rows');
-        j.queue.slice(1).forEach(function (item) {
-          var li = el('li', 'queue-row');
-          add(li, actorMark(item.actor), el('span', 'title', item.title), linkButton('Open', function () { go(item.target); }), el('span', 'meta', PHASE_LABEL[item.phase] + ' · ' + item.detail));
-          list.appendChild(li);
-        });
-        also.appendChild(list);
-        left.appendChild(also);
-      }
-    } else {
-      var idle = el('section');
-      add(idle, sectionHead('Nothing is waiting on you'), el('p', 'meta prose', 'Every started step is complete. Choose what to do next.'));
-      left.appendChild(idle);
-    }
-    if (j.suggestions.length) {
-      var sug = el('section');
-      add(sug, sectionHead(j.queue.length ? 'When that is done' : 'Next options'));
-      var sl = el('ul', 'rows');
-      j.suggestions.forEach(function (s) {
-        var li = el('li', 'queue-row');
-        add(li, el('span'), el('span', 'title', s.title), linkButton('Open', function () { go(s.target); }), el('span', 'meta', s.detail));
-        sl.appendChild(li);
+    var visible = homeVisible(j);
+    var selected = visible.filter(function (i) { return i.id === state.homeSel; })[0] || visible[0] || null;
+    state.homeSel = selected ? selected.id : '';
+
+    var inbox = el('div', 'inbox');
+    var listCol = el('div');
+    var filters = el('div', 'filters');
+    filters.setAttribute('role', 'group');
+    filters.setAttribute('aria-label', 'Filter the list');
+    HOME_FILTERS.forEach(function (def) {
+      var n = def[0] === 'all' ? all.length : all.filter(function (i) { return i.kind === def[0]; }).length;
+      var b = el('button', 'chip-btn', def[1]);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', state.homeFilter === def[0] ? 'true' : 'false');
+      add(b, el('span', 'n', n));
+      b.addEventListener('click', function () { state.homeFilter = def[0]; renderNow(); });
+      filters.appendChild(b);
+    });
+    listCol.appendChild(filters);
+    if (visible.length) {
+      var list = el('ul', 'queue');
+      list.setAttribute('aria-label', 'Decisions, AI steps and next options');
+      visible.forEach(function (item) {
+        list.appendChild(queueRow(item.id, item.title, PHASE_LABEL[item.phase] || '', item.detail, itemMark(item), selected && item.id === selected.id, function () { homeSelect(item.id); }));
       });
-      sug.appendChild(sl);
-      left.appendChild(sug);
-    }
-
-    var progress = el('section');
-    add(progress, sectionHead('Evidence funnel', 'h2'));
-    var funnel = el('p', 'funnel');
-    j.funnel.forEach(function (f, idx) {
-      if (idx) add(funnel, el('span', 'arrow', '→'));
-      add(funnel, el('span', 'n', f.value), el('span', 'l', f.label.toLowerCase()));
-    });
-    add(progress, funnel, el('p', 'meta', 'Leads come from Seerist ranking. Only admitted, reviewed sources can support claims in the memo.'));
-    right.appendChild(progress);
-
-    var memoBox = el('section');
-    add(memoBox, sectionHead('Memo', 'h2', j.memo ? linkButton('Read', function () { go({ tab: 'memo' }); }) : null));
-    if (j.memo) {
-      var m = j.memo;
-      add(memoBox, statusMark(m.isCurrent ? 'reviewed' : 'provisional', m.isCurrent ? 'Current draft (round ' + m.roundIndex + ')' : 'Out of date: written from round ' + (m.roundIndex || '?') + ', latest is round ' + m.currentRound));
-      add(memoBox, el('div', 'meta', plural(m.keyJudgments.length, 'key judgement') + ' · ' + when(m.createdAt)));
-      if (m.blockers.length) add(memoBox, el('div', 'meta', 'Not publishable: ' + m.blockers.map(function (b) { return b.label.toLowerCase(); }).join('; ')));
+      listCol.appendChild(list);
     } else {
-      add(memoBox, el('p', 'meta', 'No memo yet. It is written after the synthesis round and key-judgement selection.'));
+      add(listCol, add(el('div', 'empty-state'), el('h3', null, 'Nothing in this view'), el('p', null, 'Nothing of this kind is waiting. Choose another filter or All.')));
     }
-    right.appendChild(memoBox);
 
-    var recent = el('section');
-    add(recent, sectionHead('Recent activity', 'h2', linkButton('All events', function () { go({ tab: 'audit', focus: 'events' }); })));
-    var rl = el('ul', 'rows activity-list');
-    state.recent.forEach(function (r) {
-      var li = el('li');
-      add(li, el('span', 'meta figures', when(r.at)), statusMark(r.ok ? 'reviewed' : 'failed', r.title));
-      rl.appendChild(li);
+    var runs = (state.view.availableRuns || []).map(function (r) { return r.runId; });
+    if (runs.indexOf(state.runId) < 0) runs.unshift(state.runId);
+    add(listCol, add(el('h3', 'group-head'), 'Your analyses ', el('span', 'meta', String(runs.length))));
+    var rl = el('ul', 'queue');
+    rl.setAttribute('aria-label', 'Your analyses');
+    runs.forEach(function (id) {
+      var cur = id === state.runId;
+      rl.appendChild(queueRow('run:' + id, id, '', cur && q ? q.question : '', cur ? el('span', 'mark covered', 'Open now') : el('span', 'meta', 'Open'), false, function () { if (!cur) switchRun(id); }));
     });
-    (state.view.events || []).slice(0, 8).forEach(function (ev) {
-      var li = el('li');
-      add(li, el('span', 'meta figures', when(ev.at)), el('span', null, capital(humanise(String(ev.type).replace(/\./g, ' '))) + (ev.actor === 'human' ? ' (you)' : '')));
-      rl.appendChild(li);
-    });
-    if (!rl.firstChild) add(rl, add(el('li'), el('span', 'meta', 'No activity yet.')));
-    recent.appendChild(rl);
-    right.appendChild(recent);
+    listCol.appendChild(rl);
 
-    add(split, left, right);
-    pane.appendChild(split);
-    replace(document.getElementById('pane-now'), pane);
+    var detail = el('section', 'detail');
+    detail.setAttribute('aria-live', 'polite');
+    detail.appendChild(homeDetail(selected, j));
+    add(inbox, listCol, detail);
+    pane.appendChild(inbox);
+    replace(host, pane);
   }
 
   /* Brief, Sources, Synthesis, Memo and Audit register themselves from run_panes.js. */
@@ -655,6 +809,7 @@
     return fetch('/api/copilot-settings').then(function (res) { return res.json(); }).then(function (data) {
       if (data.error) throw new Error(data.error);
       state.copilotModel = data.settings.model;
+      state.settingsLoaded = true;
       document.getElementById('copilot-saved-model').textContent = state.copilotModel ? 'Saved for all AI stages: ' + state.copilotModel : 'No model selected.';
       render(true);
     }).catch(function (error) { settingsMessage(error.message, true); });
@@ -708,6 +863,7 @@
     state.pendingRender = false;
     syncRunSelect();
     renderHead();
+    renderCounts();
     renderNow();
     Object.keys(panes).forEach(function (name) { panes[name](); });
     setBusy(state.busy);
@@ -747,7 +903,7 @@
     analyst: analyst, journey: journey, statusMark: statusMark, actorMark: actorMark, lifecycle: lifecycle, artifactLink: artifactLink,
     linkButton: linkButton, actButton: actButton, setBlocked: setBlocked, sectionHead: sectionHead, kv: kv, externalLink: externalLink, bindDraft: bindDraft,
     dropDrafts: dropDrafts, field: field, selectInput: selectInput, textInput: textInput, openSheet: openSheet, viewArtifact: viewArtifact,
-    postAction: postAction, aiTask: aiTask, go: go, selectTab: selectTab, switchRun: switchRun, render: render, refresh: refresh, panes: panes,
+    postAction: postAction, aiTask: aiTask, go: go, navigate: navigate, selectTab: selectTab, switchRun: switchRun, render: render, refresh: refresh, panes: panes,
     STEP_MARK: STEP_MARK
   };
 
@@ -756,6 +912,39 @@
     var analystInput = document.getElementById('analyst-id');
     try { analystInput.value = localStorage.getItem('cti_reviewer_id') || ''; } catch (e) { /* storage unavailable */ }
     analystInput.classList.toggle('missing', !analyst());
+    var authAccount = document.getElementById('auth-account');
+    var signOut = document.getElementById('sign-out');
+    function checkAuthSession() {
+      fetch('/api/auth/session', { cache: 'no-store' }).then(function (response) {
+        return response.json().then(function (data) {
+          if (!response.ok) throw new Error(data.error || 'Authentication status could not be checked.');
+          return data;
+        });
+      }).then(function (session) {
+        if (session.enabled && !session.authenticated) {
+          window.location.assign('/');
+          return;
+        }
+        if (session.enabled && session.user) {
+          analystInput.value = session.user.username;
+          analystInput.readOnly = true;
+          analystInput.classList.remove('missing');
+          authAccount.textContent = session.user.displayName;
+          authAccount.hidden = false;
+          signOut.hidden = false;
+        } else {
+          analystInput.readOnly = false;
+          authAccount.hidden = true;
+          signOut.hidden = true;
+        }
+      }).catch(function () {});
+    }
+    checkAuthSession();
+    window.setInterval(checkAuthSession, 60000);
+    signOut.addEventListener('click', function () {
+      fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .then(function () { window.location.assign('/'); });
+    });
     var analystTimer = null;
     analystInput.addEventListener('input', function () {
       try { localStorage.setItem('cti_reviewer_id', analyst()); } catch (e) { /* storage unavailable */ }
@@ -766,31 +955,21 @@
     });
 
     document.getElementById('run-select').addEventListener('change', function (e) { switchRun(e.target.value); });
-    document.getElementById('btn-new').addEventListener('click', function () {
-      state.newMode = true;
-      selectTab('brief');
-      render(true);
-      if (window.CTI.startNew) window.CTI.startNew();
-    });
-    TABS.forEach(function (name, idx) {
-      var tab = document.getElementById('tab-' + name);
-      tab.addEventListener('click', function () { selectTab(name); render(true); });
-      tab.addEventListener('keydown', function (e) {
-        var delta = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-        if (e.key === 'Home') { e.preventDefault(); selectTab(TABS[0], true); return; }
-        if (e.key === 'End') { e.preventDefault(); selectTab(TABS[TABS.length - 1], true); return; }
-        if (!delta) return;
-        e.preventDefault();
-        selectTab(TABS[(idx + delta + TABS.length) % TABS.length], true);
-      });
-    });
+    window.addEventListener('hashchange', applyRoute);
     document.getElementById('btn-close-sheet').addEventListener('click', closeSheet);
     document.getElementById('sheet-backdrop').addEventListener('click', closeSheet);
     document.getElementById('btn-copy-sheet').addEventListener('click', function () {
       var text = document.getElementById('viewer').textContent;
       navigator.clipboard.writeText(text).catch(function () { /* user can still select the text */ });
     });
-    window.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
+    window.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeSheet();
+      if (state.route === 'review' && window.CTI.reviewKey && !e.ctrlKey && !e.metaKey && !e.altKey && !(e.target && e.target.matches && e.target.matches('input, textarea, select'))) window.CTI.reviewKey(e);
+      if (state.route !== 'home' || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target && e.target.matches && e.target.matches('input, textarea, select')) return;
+      if (e.key === 'j' || e.key === 'J') { e.preventDefault(); homeMove(1); }
+      if (e.key === 'k' || e.key === 'K') { e.preventDefault(); homeMove(-1); }
+    });
     document.getElementById('main').addEventListener('focusout', function () {
       window.setTimeout(function () { if (state.pendingRender && !isTyping()) render(false); }, 60);
     });
@@ -806,33 +985,32 @@
       document.documentElement.classList.toggle('dark', dark);
       try { localStorage.setItem('app_theme', dark ? 'dark' : 'light'); } catch (e) { /* storage unavailable */ }
       syncTheme();
-      loadSavedModel();
-      document.getElementById('btn-refresh-models').addEventListener('click', loadModels);
-      document.getElementById('copilot-model').addEventListener('change', function (event) {
-        document.getElementById('btn-save-model').disabled = !event.target.value || state.busy;
-        settingsMessage('Selection not saved yet.');
-      });
-      document.getElementById('btn-save-model').addEventListener('click', function () {
-        var model = document.getElementById('copilot-model').value;
-        document.getElementById('btn-save-model').disabled = true;
-        settingsMessage('Checking model availability and saving...');
-        postAction({ action: 'save-copilot-settings', model: model }, 'Saving the model').then(function (data) {
-          if (!data || !data.ok) {
-            settingsMessage(data && data.error || 'Could not save the model. Refresh models and retry.', true);
-            document.getElementById('btn-save-model').disabled = false;
-            return;
-          }
-          state.copilotModel = data.settings.model;
-          document.getElementById('copilot-saved-model').textContent = 'Saved for all AI stages: ' + state.copilotModel;
-          settingsMessage('Saved. All automatic AI stages now use ' + state.copilotModel + '.');
-          render(true);
-        });
+    });
+    document.getElementById('btn-refresh-models').addEventListener('click', loadModels);
+    document.getElementById('copilot-model').addEventListener('change', function (event) {
+      document.getElementById('btn-save-model').disabled = !event.target.value || state.busy;
+      settingsMessage('Selection not saved yet.');
+    });
+    document.getElementById('btn-save-model').addEventListener('click', function () {
+      var model = document.getElementById('copilot-model').value;
+      document.getElementById('btn-save-model').disabled = true;
+      settingsMessage('Checking model availability and saving...');
+      postAction({ action: 'save-copilot-settings', model: model }, 'Saving the model').then(function (data) {
+        if (!data || !data.ok) {
+          settingsMessage(data && data.error || 'Could not save the model. Refresh models and retry.', true);
+          document.getElementById('btn-save-model').disabled = false;
+          return;
+        }
+        state.copilotModel = data.settings.model;
+        document.getElementById('copilot-saved-model').textContent = 'Saved for all AI stages: ' + state.copilotModel;
+        settingsMessage('Saved. All automatic AI stages now use ' + state.copilotModel + '.');
+        render(true);
       });
     });
     syncTheme();
 
     if (window.CTI.initBrief) window.CTI.initBrief();
-    selectTab((window.location.hash || '').replace('#', '') || 'now');
+    applyRoute();
     refresh();
     window.setInterval(function () { if (!document.hidden && !state.busy) refresh(); }, pollMs);
   });

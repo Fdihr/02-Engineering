@@ -54,7 +54,7 @@ test("routes native evidence candidates to source canonicalization", () => {
   assert.equal(decision.approvalStatus, "not_applicable");
 });
 
-test("routes collection leads to source retrieval", () => {
+test("keeps collection leads pending until the RSS source list is available", () => {
   const lead: CollectionLead = {
     ...base,
     providerItemId: "news-001",
@@ -64,6 +64,6 @@ test("routes collection leads to source retrieval", () => {
   };
   const decision = decideRoute(lead);
 
-  assert.equal(decision.destination, "source_retrieval");
+  assert.equal(decision.destination, "pending_rss");
   assert.equal(decision.approvalStatus, "not_applicable");
 });

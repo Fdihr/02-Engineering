@@ -1,0 +1,9 @@
+.finding-group { margin:0 0 32px; }
+.finding-group .section-head { margin-bottom:8px; }
+.finding-text { margin:0 0 6px; font-size:var(--text-ui); }
+.finding-marks { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; }
+.list-note { margin:12px 0 0; }
+.excluded-reason { margin:0 0 16px; font-size:var(--text-ui); }
+
+.strip-action { margin:12px 0 0; }
+.strip-action .btn-primary { display:inline-flex; align-items:center; text-decoration:none; }

@@ -1,0 +1,108 @@
+/* Document review (concept 3). Tokens and shared components come from design_system.css, run_view.css and concepts.css. */
+
+.page-head .meta .btn-link { font-size:inherit; }
+.keys kbd + kbd { margin-left:-2px; }
+
+/* Output tabs row: tabs left, display mode right */
+.output-bar { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:8px 24px; margin:24px 0 24px; border-bottom:1px solid var(--rule); }
+.output-bar .view-tabs { margin:0; border-bottom:0; }
+.output-bar .modes { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding-bottom:6px; color:var(--ink-2); font-size:var(--text-meta); }
+.seg-btn .tab-count { margin-left:4px; }
+.seg-btn[aria-pressed="true"] .tab-count { color:var(--ink-2); }
+
+/* Layout: page left, review panel right */
+.doc-layout { display:grid; grid-template-columns:minmax(0, 1fr) clamp(20rem, 28vw, 26rem); gap:32px 48px; align-items:start; }
+.legend { display:flex; flex-wrap:wrap; align-items:center; gap:4px 20px; margin:0 0 12px; color:var(--ink-2); font-size:var(--text-meta); }
+.legend[hidden] { display:none; }
+
+/* The page is the one allowed surface: it stands for paper */
+.doc-canvas { padding:32px; background:var(--sunken); border-radius:var(--radius-surface); }
+.page { position:relative; max-width:720px; margin:0 auto; padding:56px 64px 56px 96px; background:var(--canvas); border:1px solid var(--rule); border-radius:var(--radius-surface); font-size:var(--text-body); line-height:1.7; }
+.page-inner { max-width:68ch; }
+.page h3.doc-title { margin:0 0 4px; font-size:var(--text-title); line-height:2.25rem; font-weight:300; text-wrap:balance; }
+.page .doc-meta { margin:0 0 32px; color:var(--ink-2); font-size:var(--text-meta); line-height:1.4; }
+.page section { margin:0 0 28px; padding-top:12px; border-top:1px solid var(--rule); }
+.page section > h4 { margin:0 0 10px; font-size:var(--text-heading); line-height:1.625rem; font-weight:500; }
+.page p { margin:0 0 12px; text-wrap:pretty; }
+.page ol, .page ul { margin:0 0 12px; padding-left:1.5rem; }
+.page li { margin:0 0 10px; padding-left:4px; }
+.page li::marker { color:var(--ink-2); font-variant-numeric:tabular-nums; }
+.page .bluf { font-size:1.0625rem; line-height:1.75rem; font-weight:300; }
+.page .endnotes { font-size:var(--text-ui); line-height:1.5; }
+.page .endnotes li { margin:0 0 6px; }
+.page .endnotes li:target { background:var(--tint); }
+.page .endnotes .meta { margin-left:6px; }
+.gaps-list { list-style:none; padding-left:0 !important; }
+.gaps-list li { padding-left:0; }
+.gaps-list .mark { margin-right:8px; }
+.gaps-list .meta { margin-left:8px; }
+
+/* Claims */
+.claim { display:inline; padding:0; margin:0; color:inherit; background:transparent; border:0; border-radius:2px; font:inherit; line-height:inherit; text-align:left; text-decoration:underline; text-decoration-color:var(--rule); text-decoration-thickness:1px; text-underline-offset:3px; cursor:pointer; transition:background var(--t-fast) var(--ease); -webkit-box-decoration-break:clone; box-decoration-break:clone; }
+.claim:hover { background:var(--hover); }
+.claim.shade-partial { background:var(--fn-yellow-tint); }
+.claim.shade-gap { background:var(--fn-red-tint); }
+.claim.shade-unclear { text-decoration-style:dashed; text-decoration-color:var(--ink-2); }
+.claim[aria-pressed="true"] { background:var(--tint); text-decoration-color:var(--action); text-decoration-thickness:2px; }
+.claim.is-blocker, .claim.is-blocker:hover { background:var(--fn-red-tint); }
+.claim:focus-visible, .seg-btn:focus-visible, .view-tab:focus-visible, .row-btn:focus-visible, .btn-link:focus-visible, .btn-ghost:focus-visible, .btn-primary:focus-visible, .btn-secondary:focus-visible, .refs a:focus-visible, .page .endnotes a:focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
+.claim del { color:var(--ink-2); text-decoration:line-through; text-decoration-color:var(--ink-2); }
+.claim ins { text-decoration:underline; text-decoration-color:var(--action); text-decoration-thickness:2px; text-underline-offset:3px; }
+.claim.fade { animation:claim-in var(--t-arrive) var(--ease); }
+@keyframes claim-in { from { opacity:0; } }
+.refs { margin-left:1px; font-size:0.72em; line-height:0; white-space:nowrap; }
+.refs a { color:var(--action); text-decoration:none; font-variant-numeric:tabular-nums; }
+.refs a + a { margin-left:4px; }
+.refs a:hover { text-decoration:underline; }
+.gutter { position:absolute; left:16px; display:flex; flex-direction:column; gap:2px; width:68px; font-size:var(--text-meta); line-height:1.4; }
+.gutter .mark { font-size:var(--text-meta); }
+
+/* Empty and loading states inside the page */
+.doc-empty { padding:16px 0 8px; }
+.doc-empty p { max-width:56ch; color:var(--ink-2); font-size:var(--text-ui); }
+.doc-writing .ai-mark { margin-bottom:16px; }
+.skel { height:12px; margin:0 0 12px; background:var(--hover); border-radius:var(--radius-control); }
+.skel.w1 { width:92%; } .skel.w2 { width:78%; } .skel.w3 { width:86%; } .skel.w4 { width:54%; }
+.skel-head { width:34%; height:16px; margin:24px 0 14px; }
+@media (prefers-reduced-motion:no-preference) { .skel { animation:skel-shimmer 1.4s var(--ease) infinite; } }
+@keyframes skel-shimmer { 50% { opacity:0.45; } }
+
+/* Review panel */
+.side { position:sticky; top:72px; max-height:calc(100dvh - 88px); overflow:auto; padding:0 4px 24px 0; }
+.panel-sec { margin:0 0 20px; padding-top:12px; border-top:1px solid var(--rule); }
+.panel-sec:first-child { padding-top:0; border-top:0; }
+.panel-sec h3, .panel-sec h4 { margin:0 0 8px; font-size:var(--text-label); font-weight:500; }
+.panel-sec .section-head { margin-bottom:8px; }
+.panel-sec p { margin:0 0 8px; font-size:var(--text-ui); max-width:68ch; }
+.panel-claim { margin:0 0 12px; font-size:var(--text-heading); line-height:1.625rem; font-weight:300; text-wrap:pretty; }
+.panel-marks { display:flex; flex-wrap:wrap; gap:6px 16px; margin:0 0 4px; }
+.rows-list { margin:0 0 12px; padding:0; list-style:none; border-top:1px solid var(--rule); }
+.rows-list li { border-bottom:1px solid var(--rule); }
+.row-btn { display:grid; grid-template-columns:auto minmax(0, 1fr); gap:2px 12px; align-items:baseline; width:100%; padding:10px 4px; color:var(--ink); background:transparent; border:0; font:inherit; font-size:var(--text-ui); text-align:left; cursor:pointer; transition:background var(--t-fast) var(--ease); }
+.row-btn:hover { background:var(--hover); }
+.rows-list .resolved-row { padding:10px 4px; display:grid; grid-template-columns:auto minmax(0, 1fr); gap:12px; align-items:baseline; font-size:var(--text-ui); color:var(--ink-2); }
+.panel-sec .ev-list { margin-bottom:12px; }
+.panel-sec .fix-option:first-of-type { border-top:0; padding-top:4px; }
+.btn-ghost { min-height:32px; padding:0 12px; color:var(--ink-2); background:transparent; border:1px solid transparent; border-radius:var(--radius-control); font-size:var(--text-meta); white-space:nowrap; cursor:pointer; transition:background var(--t-fast) var(--ease); }
+.btn-ghost:hover { color:var(--ink); background:var(--hover); }
+.rw-form .segmented { margin:0 0 10px; }
+.rw-form .btn-row { margin-top:8px; }
+.rw-prop { margin:12px 0 0; padding:12px 0 0; border-top:1px solid var(--rule); }
+.rw-prop .label { display:block; margin:0 0 2px; color:var(--ink-2); font-size:var(--text-meta); }
+.rw-prop del { color:var(--ink-2); text-decoration:line-through; }
+.rw-prop ins { text-decoration:underline; text-decoration-color:var(--action); text-decoration-thickness:2px; text-underline-offset:3px; }
+.rw-prop .check { display:flex; align-items:baseline; gap:8px; margin:8px 0 0; }
+.rw-none { margin-top:12px; }
+.done-note { display:flex; align-items:baseline; gap:8px; padding:10px 12px; background:var(--fn-green-tint); border-radius:var(--radius-control); font-size:var(--text-ui); }
+.panel-sec .btn-primary { margin-top:4px; }
+
+@media (max-width:1099px) {
+  .doc-layout { grid-template-columns:minmax(0, 1fr); }
+  .side { position:static; max-height:none; padding-top:8px; border-top:1px solid var(--rule); }
+}
+@media (max-width:639px) {
+  .doc-canvas { padding:12px; }
+  .page { padding:24px; }
+  .gutter { position:static; flex-direction:row; flex-wrap:wrap; gap:2px 10px; width:auto; margin-right:8px; }
+  .output-bar .view-tab { padding:0 10px; }
+}

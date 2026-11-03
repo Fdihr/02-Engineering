@@ -75,7 +75,7 @@ test("routes a captured analyst report to source canonicalization", () => {
   assert.equal(result.value.ledgerEntry.occurredAt, occurredAt);
 });
 
-test("routes a source-linked news summary to retrieval", () => {
+test("keeps a source-linked news summary pending for RSS", () => {
   const result = processSource(
     runId,
     occurredAt,
@@ -96,7 +96,7 @@ test("routes a source-linked news summary to retrieval", () => {
 
   assert.equal(result.value.item.role, "collection_lead");
   assert.equal(result.value.item.contentCompleteness, "summary_only");
-  assert.equal(result.value.decision.destination, "source_retrieval");
+  assert.equal(result.value.decision.destination, "pending_rss");
   assert.equal(result.value.decision.approvalStatus, "not_applicable");
 });
 

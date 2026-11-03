@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Output · CTI workbench (concept)</title>
+  <!--
+    THESIS: The published memo is read as a document, with its versions, audit trail and governing rules beside it, never mixed into it.
+  -->
+  <script src="/concepts/concepts.js"></script>
+  <link rel="stylesheet" href="/design_system.css">
+  <link rel="stylesheet" href="legacy-run_view.css">
+  <link rel="stylesheet" href="/concepts/concepts.css">
+  <link rel="stylesheet" href="/concepts/output.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-left">
+        <div class="brand">
+          <img src="/assets/vestas/Vestas_White.svg" alt="Vestas">
+          <h1>CTI workbench</h1>
+        </div>
+        <nav class="topnav" aria-label="Main">
+          <a href="/concepts/decision-inbox.html">Home <span class="n">6</span></a>
+          <a href="/concepts/governance.html">Governance</a>
+          <a href="/concepts/process-map.html">Process map</a>
+        </nav>
+      </div>
+      <div class="topbar-actions">
+        <span class="signed">Signed in as <strong>FDIHR</strong></span>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Dark theme</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <div>
+        <a class="parent-link" href="/concepts/decision-inbox.html">Home</a>
+        <h2>Output</h2>
+        <p class="meta">Europe cyber and geopolitical outlook, Q4 2026 · memo v3.1 for Vestas leadership · published 2 Nov 2026 by FDIHR · analysis qti-2026-q3. Concept with illustrative data.</p>
+      </div>
+    </div>
+
+    <p class="question-line">Which cyber and geopolitical threats will most affect Vestas operations in Europe in Q4 2026?</p>
+    <div class="activity-strip" role="status">
+      <span class="now"><span class="mark done">Published</span><span>Memo v3.1 published to Vestas leadership on 2 Nov 2026</span></span>
+      <ol class="stages" aria-label="Stages">
+        <li><span class="mark done">Intent</span></li>
+        <li><span class="mark done">Evidence</span></li>
+        <li><span class="mark done">Findings</span></li>
+        <li><span class="mark done">Writing</span></li>
+        <li><span class="mark done">Publication</span></li>
+      </ol>
+      <a class="yours" href="/concepts/new-analysis.html">Start a follow-up analysis</a>
+    </div>
+
+    <div class="output-layout">
+      <article class="output-article" aria-label="Published memo">
+        <h3 class="memo-title">Europe cyber and geopolitical outlook, Q4 2026</h3>
+
+        <section>
+          <h3>Bottom line</h3>
+          <p>State-linked pre-positioning in European utility OT networks is likely to continue through Q1 2027. Disruptive action against wind assets remains unlikely without a wider escalation. Ransomware and hybrid sabotage are the more immediate risks to Vestas operations.</p>
+        </section>
+
+        <section>
+          <h3>Key judgements</h3>
+          <ol>
+            <li>Remote-access gateways serving generation sites are the most frequently probed entry point.
+              <div class="meta"><span class="mark covered">Covered</span><span>Likelihood: likely</span></div></li>
+            <li>Ransomware remains the main cause of production disruption at European industrial manufacturers.
+              <div class="meta"><span class="mark covered">Covered</span><span>Likelihood: almost certain</span></div></li>
+            <li>Possibly a state-linked group was behind the October intrusion at a Nordic grid operator; sources disagree.
+              <div class="meta"><span class="mark partial">Partial</span><span>Likelihood: possible</span></div></li>
+            <li>Hybrid sabotage against Baltic subsea cables and ports will remain a recurring risk to logistics.
+              <div class="meta"><span class="mark covered">Covered</span><span>Likelihood: likely</span></div></li>
+          </ol>
+        </section>
+
+        <section>
+          <h3>Implications for Vestas</h3>
+          <p>Service technicians’ remote-maintenance accounts are an attractive target. Compromised maintenance credentials were the initial access vector in two of the cases reviewed, so access to generation sites should be treated as the first line of defence.</p>
+          <p>Port security disruption could delay component shipments through Baltic hubs. Security checks have added up to two days to some cargo handling, so logistics planning for Q4 should allow for that margin.</p>
+        </section>
+
+        <section>
+          <h3>Indicators to watch</h3>
+          <ul>
+            <li>A public claim of responsibility by a hacktivist group would signal intent to escalate.</li>
+            <li>New repeated authentication attempts against remote-access gateways at generation sites.</li>
+            <li>Further damage to Baltic subsea cables, and whether investigators establish intent.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>Limitations</h3>
+          <p>Key judgement 3 rests on one source that a tier 2 official bulletin contradicts, so it is worded as a possibility. One source on port security is provisional. A social post is used as context only.</p>
+          <p>Likelihood wording follows a provisional calibration; support check: model-only, unvalidated.</p>
+        </section>
+
+        <section>
+          <h3>Sources</h3>
+          <ol class="output-sources">
+            <li>National CERT bulletin · tier 2, official</li>
+            <li>Utility OT advisory, national CERT · tier 2, official</li>
+            <li>Control Risks analyst report · tier 1, analyst report</li>
+            <li>Specialist security media · tier 3, specialist media</li>
+            <li>Ministry statement on subsea cable damage · tier 2, official</li>
+            <li>Industry ISAC weekly summary · tier 3, specialist media</li>
+            <li>Regional news report on port security · tier 3, established media</li>
+            <li>Researcher social post · tier 5, social</li>
+            <li>EU agency threat landscape · tier 2, official</li>
+          </ol>
+        </section>
+      </article>
+
+      <aside class="output-aside" aria-label="Export, versions and audit">
+        <div>
+          <div class="btn-row">
+            <button class="btn-primary" type="button" data-toast="Exporting memo v3.1 as PDF.">Export as PDF</button>
+            <button class="btn-secondary" type="button" data-toast="Exporting memo v3.1 as Word.">Export as Word</button>
+          </div>
+          <p><button class="btn-link" type="button" data-toast="Link to memo v3.1 copied.">Copy link</button></p>
+        </div>
+
+        <div>
+          <div class="section-head"><h3>Versions</h3></div>
+          <ul class="rows">
+            <li><strong>v3.1</strong> <span class="mark done">Published</span><div class="when">2 Nov 2026 by FDIHR</div></li>
+            <li><strong>v3</strong> <span class="mark attention">Returned</span><div class="when">1 Nov 2026, returned with 2 blockers</div></li>
+            <li><strong>v2</strong> <span class="mark closed">Superseded</span><div class="when">30 Oct 2026</div></li>
+            <li><strong>v1</strong> <span class="mark closed">Superseded</span><div class="when">28 Oct 2026</div></li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="section-head"><h3>Audit trail</h3></div>
+          <ul class="rows">
+            <li>Intent approved<div class="when">14 Oct 2026, 09:12 · by FDIHR</div></li>
+            <li>Exception decided: provisional port source kept, reason recorded<div class="when">31 Oct 2026, 14:05 · by FDIHR</div></li>
+            <li>Exception decided: social post limited to context, reason recorded<div class="when">31 Oct 2026, 14:09 · by FDIHR</div></li>
+            <li>Memo v3 written and verified<div class="when">1 Nov 2026, 16:20 · by machine</div></li>
+            <li>Blockers resolved<div class="when">2 Nov 2026, 09:40 · by FDIHR</div></li>
+            <li>Memo v3.1 published<div class="when">2 Nov 2026, 10:02 · by FDIHR</div></li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="section-head"><h3>Ran under</h3></div>
+          <dl class="facts">
+            <dt>Memo standard</dt><dd>v1</dd>
+            <dt>Source assurance</dt><dd>Policy v3</dd>
+            <dt>Context pack</dt><dd>Organisational v2</dd>
+            <dt>Support calibration</dt><dd>Provisional</dd>
+          </dl>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+  (function () {
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('[data-toast]') : null;
+      if (b) { window.showToast(b.getAttribute('data-toast')); }
+    });
+  })();
+  </script>
+</body>
+</html>

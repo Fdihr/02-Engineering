@@ -6,9 +6,15 @@ Human references below are either one of the four target surfaces (intent, publi
 
 ## Product boundary
 
+**Current implementation update (2026-11-02):** Firecrawl source retrieval and its Settings key
+management have been removed. Seerist collection leads now remain pending for the planned RSS-connected
+source list; no publisher page is fetched. Existing run artifacts and historical retrieval records are
+preserved. The sections below that describe Firecrawl retrieval or retrieved-source re-intake document
+the superseded implementation, not the current executable path.
+
 This implementation is the first narrow slice of a general Seerist-plus-OSINT memo tool. Cyber threat intelligence and the CIA Director test question validate the workflow; they do not constrain future memo subjects. The target includes every Seerist endpoint approved for organizational use plus bounded OSINT search, discovery, and retrieval.
 
-The current baseline does not claim that breadth yet. It proves bounded `/v1/wod` collection and discovery and one-hop exact-URL OSINT retrieval. New endpoints and search mechanisms must be added incrementally from observed responses through explicit role mapping, provenance-preserving adapters, and focused tests. The downstream question, evidence, source-assurance, synthesis, and memo contracts remain domain-neutral unless a selected memo profile adds stricter requirements.
+The current baseline does not claim that breadth yet. It proves bounded `/v1/wod` collection and discovery; collection leads are routed to `pending_rss` until the RSS-connected source list is implemented. No live OSINT retrieval command is available. New endpoints and search mechanisms must be added incrementally from observed responses through explicit role mapping, provenance-preserving adapters, and focused tests. The downstream question, evidence, source-assurance, synthesis, and memo contracts remain domain-neutral unless a selected memo profile adds stricter requirements.
 
 The canonical target architecture in `memo-workflow.md` is not a fixed implementation contract. This completed slice remains the implementation baseline until a subsequent slice is accepted.
 
@@ -26,7 +32,7 @@ The generic probe and representative live requests are working. Observed contrac
 The probe established three provider roles:
 
 1. Evidence candidates: source-linked records with sufficient captured content for human review.
-2. Collection leads: news/social summaries, cluster records, hotspots, and Scribe events that require source resolution or retrieval.
+2. Collection leads: news/social summaries, cluster records, hotspots, and Scribe events that remain pending until an approved source workflow is available.
 3. Context: country background, risk ratings, Pulse, and future-looking provider assessments that may inform analysis but do not independently corroborate claims.
 
 ## Completed slice: approved research intent and bounded collection
@@ -82,7 +88,11 @@ The command confines the intake and raw artifact to its configured run root, has
 
 Initial command integration used synthetic artifacts in an isolated temporary directory. After that validation, human reviewer `FDIHR` approved the real retrieved-source candidate `nv-candidate-question-relevance-001` as decision `nv-evidence-review-001`.
 
-## Implemented slice: one-source retrieval
+## Retired slice: one-source Firecrawl retrieval
+
+This execution path was removed on 2026-11-02. `retrieve:source`, its HTTP transport, and `reintake:source`
+are no longer available. Seerist collection leads route to `pending_rss`; publisher URLs are retained as
+lead metadata and are not fetched. Previously collected artifacts are left untouched for historical review.
 
 One approved Seerist collection lead -> validate exact listed HTTPS URL -> one fixed Firecrawl v2 scrape -> bounded raw response -> canonical resolved or unresolved receipt.
 
@@ -96,7 +106,7 @@ The command validates intake route and approved research-question lineage before
 
 Firecrawl is recorded as the access provider while the publisher remains the source. Retrieved text is stored as untrusted content under the ignored run directory. `resolved` means content was captured; every result remains `approvalStatus: "not_requested"` and cannot enter evidence admission directly.
 
-The active boundary is `../02-Contracts/source-content-retrieval.md`. Deterministic and strict-TypeScript validation passes. On 2026-08-31, the selected NV lead completed one live exact-URL retrieval: Firecrawl returned HTTP 200, the final URL matched the requested publisher URL, and the canonical outcome was `resolved` with reason `content_retrieved`. Approval remained `not_requested`.
+The historical contract is `../02-Contracts/source-content-retrieval.md`. At the time, deterministic and strict-TypeScript validation passed. On 2026-08-31, the selected NV lead completed one live exact-URL retrieval: Firecrawl returned HTTP 200, the final URL matched the requested publisher URL, and the canonical outcome was `resolved` with reason `content_retrieved`. Approval remained `not_requested`.
 
 ## Implemented slice: canonical source document and anchors
 
@@ -129,7 +139,10 @@ The dashboard's Settings chooser lists the locally authenticated Copilot account
 
 The real NV source completed this path as `partially-relevant` with three exact anchors and destination `evidence_candidate_proposal / pending_human_review`. It reports the visit, possible purposes, Ratcliffe-to-Bortnikov participation, and Baltic hybrid-threat implications, but does not establish that the visit occurred specifically on 27 August or provide explicit cyber implications.
 
-## Completed slice: positive-assessment candidate conversion
+## Retired slice: positive-assessment retrieved-source conversion
+
+This Firecrawl-dependent re-intake path was removed with source retrieval. Future RSS candidates require
+their own observed, mapped, tested source adapter and approved workflow boundary.
 
 One resolved retrieval result + its verified source-lead lineage + one validated positive question-relevance assessment -> one new evidence candidate routed to pending policy admission or compatibility review.
 
@@ -143,7 +156,7 @@ The command confines every referenced artifact to the run root; verifies source-
 
 The evidence gate validates the exact positive-assessment shape, reopens and hashes the persisted assessment and decision, preserves assessment and retrieval lineage in an approved snapshot, and rejects artifact drift or altered relevance routing. Candidate creation events are controller-attributed; evidence decisions remain human-attributed.
 
-The active boundary is `../02-Contracts/retrieved-source-reintake.md`. Focused tests cover positive-only conversion, source and model artifact lineage, pending-only routing, path confinement, non-overwrite behavior, evidence-gate tampering, and assessment preservation through approval. On 2026-09-01, the live NV assessment was converted into candidate `nv-candidate-question-relevance-001` and subsequently approved by `FDIHR` as decision `nv-evidence-review-001`.
+The historical contract is `../02-Contracts/retrieved-source-reintake.md`. At the time, focused tests covered positive-only conversion, source and model artifact lineage, pending-only routing, path confinement, non-overwrite behavior, evidence-gate tampering, and assessment preservation through approval. On 2026-09-01, the live NV assessment was converted into candidate `nv-candidate-question-relevance-001` and subsequently approved by `FDIHR` as decision `nv-evidence-review-001`.
 
 ## Implemented slice: Panel 2 Extract under a deterministic controller
 

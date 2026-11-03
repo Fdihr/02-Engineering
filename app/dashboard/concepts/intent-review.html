@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Intent review · CTI workbench (concept)</title>
+  <!--
+    THESIS: Approve what will be researched, once. The scope, the research questions and the budget are read and edited before anything is collected.
+    OWN-WORLD: ECS "weather window". Night Sky bar, white canvas, ruled rows, one plate for the intent decision, marks that separate what you stated from what the AI assumed.
+    STORY: The analyst checks the assumed scope rows, adjusts the research questions, then approves the plan; collection starts and the question is locked for this run.
+    FIRST VIEWPORT: Header with question and stages, scope table on the left, the decision plate on the right.
+    FORM: Analysis qti-2026-q3, waiting at Intent.
+  -->
+  <script src="/concepts/concepts.js"></script>
+  <link rel="stylesheet" href="/design_system.css">
+  <link rel="stylesheet" href="legacy-run_view.css">
+  <link rel="stylesheet" href="/concepts/concepts.css">
+  <link rel="stylesheet" href="/concepts/intent-review.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-left">
+        <div class="brand">
+          <img src="/assets/vestas/Vestas_White.svg" alt="Vestas">
+          <h1>CTI workbench</h1>
+        </div>
+        <nav class="topnav" aria-label="Main">
+          <a href="/concepts/decision-inbox.html">Home <span class="n">6</span></a>
+          <a href="/concepts/governance.html">Governance</a>
+          <a href="/concepts/process-map.html">Process map</a>
+        </nav>
+      </div>
+      <div class="topbar-actions">
+        <span class="signed">Signed in as <strong>FDIHR</strong></span>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Dark theme</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <div>
+        <a class="parent-link" href="/concepts/decision-inbox.html">Home</a>
+        <h2>Intent review</h2>
+        <p class="meta">Europe cyber and geopolitical outlook, Q4 2026 · memo for Vestas leadership · analysis qti-2026-q3. Concept with illustrative data.</p>
+      </div>
+    </div>
+
+    <p class="question-line">Which cyber and geopolitical threats will most affect Vestas operations in Europe in Q4 2026?</p>
+    <div class="activity-strip" role="status" id="strip">
+      <span class="now" id="strip-now"><span class="mark attention">Waiting for you</span><span>Research plan drafted. Nothing has been collected.</span></span>
+      <ol class="stages" aria-label="Stages" id="stages">
+        <li aria-current="step"><span class="mark attention">Intent</span></li>
+        <li>Evidence</li>
+        <li>Findings</li>
+        <li>Writing</li>
+        <li>Publication</li>
+      </ol>
+      <a class="yours" id="strip-yours" href="/concepts/new-analysis.html">Edit the question</a>
+    </div>
+
+    <div class="review">
+      <div class="intent-main">
+        <section aria-labelledby="h-scope">
+          <div class="section-head"><h3 id="h-scope">Scope</h3><span class="meta">2 of 7 rows are assumed. Check them before you approve.</span></div>
+          <div class="table-wrap">
+            <table class="scope-table">
+              <thead><tr><th>Field</th><th>Value</th><th>Origin</th><th>Action</th></tr></thead>
+              <tbody id="scope"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section aria-labelledby="h-rq">
+          <div class="section-head"><h3 id="h-rq">Research questions</h3><span class="meta"><span class="figures" id="rq-count">4</span> questions</span></div>
+          <ul class="rows rq-list" id="rq"></ul>
+          <p class="rq-note"><button class="btn-secondary" type="button" id="rq-add">Add a question</button></p>
+          <p class="meta rq-note">Questions cannot widen the approved geography, topic or time window.</p>
+        </section>
+
+        <section aria-labelledby="h-budget">
+          <div class="section-head"><h3 id="h-budget">Collection budget</h3></div>
+          <dl class="facts">
+            <dt>Providers</dt><dd>Seerist events, OSINT search and retrieval</dd>
+            <dt>Call limit</dt><dd><span class="figures">120</span> calls</dd>
+            <dt>Model budget</dt><dd>Within the standard analysis allowance</dd>
+            <dt>Retention</dt><dd>Raw responses kept in the run folder, not committed</dd>
+          </dl>
+        </section>
+      </div>
+
+      <aside class="trace-pane plate-pane" aria-label="Intent decision" aria-live="polite">
+        <div id="decision"></div>
+      </aside>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+  (function () {
+    var esc = window.escapeHtml;
+    var $ = function (id) { return document.getElementById(id); };
+    var approved = false;
+    var collected = false;
+
+    var scope = [
+      { f: 'Purpose', v: 'Tell Vestas leadership which cyber and geopolitical threats are most likely to affect European operations next quarter', o: 'stated' },
+      { f: 'Audience', v: 'Vestas leadership', o: 'stated' },
+      { f: 'Geography', v: 'Europe (EU, UK and Norway)', o: 'stated' },
+      { f: 'Time window', v: '1 Oct to 31 Dec 2026', o: 'assumed', why: 'Stated as Q4 2026; the AI took the calendar quarter.' },
+      { f: 'Output', v: 'Memo', o: 'stated' },
+      { f: 'Threat topic', v: 'State-linked cyber activity, ransomware and hybrid sabotage against energy, manufacturing and logistics', o: 'assumed', why: 'Inferred from \u2018cyber and geopolitical threats\u2019 and Vestas operations.' },
+      { f: 'Map relevance to Vestas', v: 'Yes', o: 'stated' }
+    ];
+
+    var rqs = [
+      { q: 'How are state-linked actors targeting European energy and utility OT networks?', why: 'Sets the baseline of state-linked activity in scope.' },
+      { q: 'What is driving production disruption at European industrial manufacturers?', why: 'Covers criminal and other disruptive activity against manufacturing.' },
+      { q: 'What hybrid threats affect Baltic and North Sea logistics and subsea infrastructure?', why: 'Covers physical and cyber pressure on the corridors Vestas depends on.' },
+      { q: 'What does this mean for Vestas sites, service technicians and the supply chain?', why: 'Maps the findings to operations, using the organisational context pack.', pending: true }
+    ];
+
+    function mark(c, t) { return '<span class="mark ' + c + '">' + t + '</span>'; }
+
+    function renderScope() {
+      $('scope').innerHTML = scope.map(function (r, i) {
+        var val = r.editing
+          ? '<input type="text" aria-label="' + esc(r.f) + '" data-input="' + i + '" value="' + esc(r.v) + '">'
+          : esc(r.v) + (r.o === 'assumed' ? '<p class="meta">' + esc(r.why) + '</p>' : '');
+        var btn = approved ? '' : '<button class="btn-link" type="button" data-edit="' + i + '">' + (r.editing ? 'Save' : 'Edit') + '</button>';
+        return '<tr><th scope="row">' + esc(r.f) + '</th><td>' + val + '</td><td>' +
+          (r.o === 'stated' ? mark('covered', 'Stated by you') : mark('attention', 'Assumed')) + '</td><td>' + btn + '</td></tr>';
+      }).join('');
+    }
+
+    function renderRq() {
+      $('rq').innerHTML = rqs.map(function (r, i) {
+        if (r.pending) {
+          return '<li><div><span class="ai-mark">AI drafting…</span></div></li>';
+        }
+        var main = r.editing
+          ? '<div class="rq-edit"><input type="text" aria-label="Research question ' + (i + 1) + '" data-rq="' + i + '" value="' + esc(r.q) + '"></div>'
+          : '<strong>' + esc(r.q) + '</strong>';
+        var acts = approved ? '' :
+          '<span class="rq-actions"><button class="btn-link" type="button" data-rq-edit="' + i + '">' + (r.editing ? 'Save' : 'Edit') + '</button>' +
+          '<button class="btn-link" type="button" data-rq-remove="' + i + '">Remove</button></span>';
+        return '<li><div>' + main + '<div class="meta">' + esc(r.why) + '</div></div>' + acts + '</li>';
+      }).join('');
+      $('rq-count').textContent = rqs.filter(function (r) { return !r.pending; }).length;
+    }
+
+    function renderDecision() {
+      if (approved) {
+        $('decision').innerHTML = '<div class="caution is-done">' + mark('done', 'Approved') + '<span>Research plan v1 approved by FDIHR. The question, scope and research questions are locked for this run; changes need a new version.</span></div>' +
+          (collected ? '<p class="next-step"><a class="btn-primary" href="/concepts/analysis.html">Open the analysis</a></p>' : '');
+        return;
+      }
+      $('decision').innerHTML =
+        '<div class="plate">' +
+          '<div class="plate-kicker">' + mark('attention', 'Waiting for you') + '<span>Intent decision</span></div>' +
+          '<h3 class="plate-title">Approve the research plan</h3>' +
+          '<div class="plate-meta">Scope v1 · <span class="figures">' + rqs.length + '</span> research questions · budget <span class="figures">120</span> calls</div>' +
+          '<p class="plate-confirm">Confirming starts collection from Seerist and OSINT within this budget. The question, scope and research questions are locked for this run; changes need a new version.</p>' +
+          '<div class="btn-row">' +
+            '<button class="btn-primary" type="button" id="btn-approve">Approve research plan</button>' +
+            '<button class="btn-inverse" type="button" id="btn-back">Send back with notes</button>' +
+          '</div>' +
+        '</div>';
+    }
+
+    function approve() {
+      approved = true;
+      scope.forEach(function (r) { r.editing = false; });
+      rqs.forEach(function (r) { r.editing = false; });
+      $('strip-now').innerHTML = mark('running', 'Collecting') + '<span>Collecting, <span class="figures">0</span> of <span class="figures">120</span> calls</span>';
+      $('stages').innerHTML =
+        '<li><span class="mark done">Intent</span></li>' +
+        '<li aria-current="step"><span class="mark running">Evidence</span></li>' +
+        '<li>Findings</li><li>Writing</li><li>Publication</li>';
+      renderDecision(); renderScope(); renderRq();
+      window.showToast('Research plan approved. Collection has started.');
+      $('strip-yours').textContent = 'Follow it in the analysis';
+      $('strip-yours').href = '/concepts/analysis.html';
+      var calls = 0;
+      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var timer = setInterval(function () {
+        calls = reduce ? 120 : Math.min(120, calls + 6);
+        $('strip-now').innerHTML = mark('running', 'Collecting') + '<span>Collecting, <span class="figures">' + calls + '</span> of <span class="figures">120</span> calls</span>';
+        if (calls < 120) return;
+        clearInterval(timer);
+        collected = true;
+        $('strip-now').innerHTML = '<span class="ai-mark">AI checking relevance</span><span><span class="figures">120</span> calls collected, <span class="figures">64</span> sources found</span>';
+        renderDecision();
+        window.showToast('Collection finished. 64 sources are being checked for relevance.');
+      }, 150);
+    }
+
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      if (t.id === 'btn-approve') {
+        if (rqs.some(function (r) { return r.pending; })) { window.showToast('The AI is still drafting question 4. Approve when it finishes.'); return; }
+        approve(); return;
+      }
+      if (t.id === 'btn-back') { window.showToast('Sent back with your notes. The AI will redraft the plan; nothing is collected.'); return; }
+      if (t.id === 'rq-add') {
+        rqs.push({ q: 'New question', why: 'Added by you. Check it stays inside the approved scope.', editing: true });
+        renderRq(); renderDecision(); return;
+      }
+      var ed = t.closest('[data-edit]');
+      if (ed) {
+        var r = scope[+ed.getAttribute('data-edit')];
+        if (r.editing) {
+          var inp = document.querySelector('[data-input="' + ed.getAttribute('data-edit') + '"]');
+          r.v = inp.value; r.o = 'stated'; r.editing = false;
+        } else { r.editing = true; }
+        renderScope(); return;
+      }
+      var re = t.closest('[data-rq-edit]');
+      if (re) {
+        var q = rqs[+re.getAttribute('data-rq-edit')];
+        if (q.editing) { q.q = document.querySelector('[data-rq="' + re.getAttribute('data-rq-edit') + '"]').value; q.editing = false; }
+        else { q.editing = true; }
+        renderRq(); return;
+      }
+      var rm = t.closest('[data-rq-remove]');
+      if (rm) {
+        rqs.splice(+rm.getAttribute('data-rq-remove'), 1);
+        renderRq(); renderDecision();
+        window.showToast('Question removed from the plan.');
+      }
+    });
+
+    renderScope(); renderRq(); renderDecision();
+    setTimeout(function () {
+      rqs[3].pending = false;
+      renderRq(); renderDecision();
+    }, 1500);
+  })();
+  </script>
+</body>
+</html>
