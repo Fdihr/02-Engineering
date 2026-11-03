@@ -15,10 +15,12 @@ class Element {
     this.tagName = tag;
     this.textContent = text;
     this.children = [];
+    this.attributes = {};
+    this.events = {};
   }
   appendChild(node) { this.children.push(node); return node; }
-  setAttribute() {}
-  addEventListener() {}
+  setAttribute(key, value) { this.attributes[key] = value; }
+  addEventListener(key, callback) { this.events[key] = callback; }
 }
 
 const humanise = value => String(value).replace(/[-_]/g, ' ');
@@ -30,14 +32,21 @@ const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 const C = {
   state: { sourceFilter: 'all', sourceQuery: '', selectedSource: '', evidenceQuestion: '' },
-  el: (tag, cls, text) => new Element(tag, text),
+  el: (tag, cls, text) => { const node = new Element(tag, text); node.className = cls; return node; },
   add: (parent, ...children) => { children.forEach(child => child && parent.appendChild(child)); return parent; },
   clear() {},
   humanise,
   capital,
   when: () => '',
   plural,
-  panes: {}
+  panes: {},
+  actButton: text => new Element('button', text),
+  linkButton: (text, callback) => { const node = new Element('button', text); node.addEventListener('click', callback); return node; },
+  sectionHead: text => new Element('h2', text),
+  artifactLink: (url, text) => new Element('a', text),
+  kv: pairs => new Element('dl', pairs.flat().join(' ')),
+  replace: (host, content) => { C.rendered = content; },
+  render() {}
 };
 
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'run_panes.js'), 'utf8'), {
@@ -68,6 +77,7 @@ function journey(overrides) {
     brief: { requirements: [] },
     leads: [],
     sources: [],
+    rounds: [],
     ...overrides
   };
 }
@@ -229,4 +239,62 @@ test('explorer rowIds keep the journey row identity used by the existing drilldo
 test('run_panes registers the sources pane and the evidence helpers', () => {
   assert.equal(typeof C.panes.sources, 'function');
   assert.equal(typeof ev.model, 'function');
+});
+
+function nodes(node) {
+  return [node, ...node.children.flatMap(nodes)];
+}
+
+test('rendered coverage is primary and null links do not claim an evidence gap', () => {
+  C.state.evidenceView = 'coverage';
+  C.journey = () => journey({ evidenceWorkspace: projected({
+    questions: [{ id: 'IR1', text: 'Which incidents?', coverage: 'unassessed', sourceNoteIds: null, observationIds: null }]
+  }) });
+  C.panes.sources();
+  const all = nodes(C.rendered);
+  const text = all.map(n => n.textContent).join(' ');
+  assert.match(text, /Question-level evidence links are not projected/);
+  assert.doesNotMatch(text, /Gap: no observation/);
+  assert.equal(all.some(n => n.id === 'source-search'), false);
+  assert.equal(all.filter(n => n.tagName === 'select').length, 1);
+  const explorer = all.find(n => n.tagName === 'button' && n.textContent === 'Source explorer');
+  explorer.events.click();
+  assert.equal(C.state.evidenceView, 'explorer');
+  C.panes.sources();
+  assert.equal(nodes(C.rendered).some(n => n.id === 'source-search'), true);
+});
+
+test('no search matches clears the selected source and its drilldown', () => {
+  C.state.evidenceView = 'explorer';
+  C.state.sourceFilter = 'all';
+  C.state.sourceQuery = 'does-not-exist';
+  C.state.selectedSource = 'row-a';
+  C.journey = () => journey({ sources: [row({ id: 'row-a' })] });
+  C.panes.sources();
+  assert.equal(C.state.selectedSource, '');
+  assert.match(nodes(C.rendered).map(n => n.textContent).join(' '), /No sources match/);
+});
+
+test('fallback never treats legacy coverage as a projected assessment', () => {
+  const model = ev.model(journey({ brief: { requirements: [{ irId: 'IR1', text: 'Question', coverage: 'supported' }] } }));
+  assert.equal(model.projected, false);
+  assert.equal(model.questions[0].coverage, 'unassessed');
+});
+
+test('linked observations expose persisted text and source navigation, not an inferred verdict', () => {
+  C.state.evidenceView = 'coverage';
+  C.journey = () => journey({
+    sources: [row({ review: { observations: [{ observationId: 'obs-1', text: 'Persisted observation', quote: 'Exact passage' }] } })],
+    evidenceWorkspace: projected({
+      questions: [{ id: 'IR1', text: 'Question', coverage: 'unassessed', sourceNoteIds: [], observationIds: ['obs-1'] }],
+      sourceExplorer: [{ rowId: 'row-a', title: 'Source A', disposition: 'admitted' }]
+    })
+  });
+  C.panes.sources();
+  const all = nodes(C.rendered);
+  assert.ok(all.some(n => n.textContent === 'Persisted observation'));
+  assert.ok(all.some(n => n.tagName === 'blockquote' && n.textContent === 'Exact passage'));
+  all.find(n => n.textContent === 'Inspect source: Source A').events.click();
+  assert.equal(C.state.evidenceView, 'explorer');
+  assert.equal(C.state.selectedSource, 'row-a');
 });

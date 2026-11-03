@@ -1076,7 +1076,7 @@
           if (sourceNoteIds.indexOf(row.id) < 0) sourceNoteIds.push(row.id);
         });
       });
-      return { id: req.irId, text: req.text, coverage: req.coverage || 'unassessed', sourceNoteIds: sourceNoteIds, observationIds: observationIds };
+      return { id: req.irId, text: req.text, coverage: 'unassessed', sourceNoteIds: sourceNoteIds, observationIds: observationIds };
     });
     var items = [];
     j.sources.forEach(function (row) {
@@ -1096,7 +1096,8 @@
       },
       questions: questions,
       exceptions: { open: items.length, items: items },
-      explorer: explorer
+      explorer: explorer,
+      projected: false
     };
   }
   function projectedModel(j, ew) {
@@ -1114,7 +1115,8 @@
         return { id: q.id, text: q.text, coverage: q.coverage || 'unassessed', sourceNoteIds: Array.isArray(q.sourceNoteIds) ? q.sourceNoteIds : null, observationIds: Array.isArray(q.observationIds) ? q.observationIds : null };
       }),
       exceptions: { open: ew.exceptions.open, items: ew.exceptions.items },
-      explorer: explorer
+      explorer: explorer,
+      projected: true
     };
   }
   function evidenceModel(j) {
@@ -1143,6 +1145,7 @@
       return s;
     }
     var p = model.pipeline;
+    if (!model.projected) add(strip, el('p', 'meta', 'Workspace coverage is not projected for this run. Compatibility source records are shown below.'));
     if (p.leads) add(strip, stat(p.leads.count, 'Seerist leads', p.leads.basis));
     if (p.captured) add(strip, stat(p.captured.count, 'Captured sources', p.captured.basis));
     p.stages.forEach(function (s) { add(strip, stat(s.count, s.label, s.basis)); });
@@ -1158,7 +1161,17 @@
       add(nav, el('p', 'meta', 'No approved information requirements yet.'), C.linkButton('Open the brief', function () { C.go({ tab: 'brief' }); }));
       return nav;
     }
-    var list = el('ul', 'queue');
+    var picker = el('select', 'ev-question-picker');
+    picker.setAttribute('aria-label', 'Approved research question');
+    model.questions.forEach(function (q) {
+      var option = el('option', null, q.id + ' ' + q.text);
+      option.value = q.id;
+      picker.appendChild(option);
+    });
+    picker.value = selectedId;
+    picker.addEventListener('change', function () { state.evidenceQuestion = picker.value; C.render(true); });
+    add(nav, picker);
+    var list = el('ul', 'queue ev-question-list');
     model.questions.forEach(function (q) {
       var b = el('button', 'queue-item');
       b.type = 'button';
@@ -1170,7 +1183,7 @@
     add(nav, list);
     return nav;
   }
-  function questionPanel(q) {
+  function questionPanel(q, model) {
     var sec = el('section', 'ev-question');
     if (!q) {
       add(sec, el('p', 'meta', 'Select an approved question to see its observations and gaps.'));
@@ -1182,8 +1195,31 @@
       ['Observations', q.observationIds === null ? 'Not recorded for this run' : plural(q.observationIds.length, 'observation')],
       ['Sources', q.sourceNoteIds === null ? 'Not recorded for this run' : plural(q.sourceNoteIds.length, 'source')]
     ]));
-    var linked = (q.observationIds && q.observationIds.length) || (q.sourceNoteIds && q.sourceNoteIds.length);
-    if (!linked) add(sec, el('p', 'ev-gap', 'Gap: no observation or source is linked to this question. This records what is missing, not a judgement about the question.'));
+    if (q.observationIds === null || q.sourceNoteIds === null) {
+      add(sec, el('p', 'ev-gap', 'Question-level evidence links are not projected for this run. Coverage and counterevidence cannot be inferred from source titles or lead counts.'));
+    } else if (!q.observationIds.length && !q.sourceNoteIds.length) {
+      add(sec, el('p', 'ev-gap', 'No observation or source link is recorded for this question. This is not a judgement about whether evidence exists.'));
+    } else {
+      var records = el('div', 'ev-linked-records');
+      add(records, el('h4', null, 'Recorded evidence links'));
+      q.observationIds.forEach(function (id) {
+        var source = model.explorer.find(function (e) {
+          return e.row.review && e.row.review.observations.some(function (o) { return o.observationId === id; });
+        });
+        var observation = source && source.row.review.observations.find(function (o) { return o.observationId === id; });
+        if (!observation) {
+          add(records, el('p', 'meta', id + ': observation content is not projected.'));
+          return;
+        }
+        add(records, el('p', null, observation.text));
+        if (observation.quote) add(records, el('blockquote', 'quote', observation.quote));
+        add(records, C.linkButton('Inspect source: ' + source.entry.title, function () {
+          state.evidenceView = 'explorer'; state.sourceFilter = 'all'; state.sourceQuery = ''; state.selectedSource = source.entry.rowId; C.render(true);
+        }));
+      });
+      q.sourceNoteIds.forEach(function (id) { add(records, el('p', 'meta', 'Source note: ' + id)); });
+      add(sec, records, C.linkButton('Inspect evidence records', function () { state.evidenceView = 'explorer'; C.render(true); }));
+    }
     return sec;
   }
   function exceptionLabel(kind) {
@@ -1194,7 +1230,7 @@
     sec.setAttribute('aria-label', 'Exceptions');
     add(sec, el('h3', 'ev-col-head', 'Exceptions'), el('p', 'meta', plural(model.exceptions.open, 'open exception')));
     if (!model.exceptions.items.length) {
-      add(sec, el('p', 'ev-empty', 'No exceptions need you.'));
+      add(sec, el('p', 'ev-empty', model.pipeline.blocker ? 'No human decision is requested. Source acquisition remains blocked.' : 'No exceptions are recorded.'));
       return sec;
     }
     var list = el('ul', 'queue');
@@ -1203,7 +1239,7 @@
       add(li, el('span', 'q-title', exceptionLabel(item.kind)), el('span', 'q-meta', item.status || ''));
       if (item.relPath) add(li, C.artifactLink(item.relPath, 'Open record'));
       var hit = model.explorer.filter(function (e) { return e.entry.rowId === item.id; })[0];
-      if (hit) add(li, C.linkButton('Open source', function () { state.sourceFilter = 'all'; state.sourceQuery = ''; state.selectedSource = item.id; C.render(true); }));
+      if (hit) add(li, C.linkButton('Open source', function () { state.evidenceView = 'explorer'; state.sourceFilter = 'all'; state.sourceQuery = ''; state.selectedSource = item.id; C.render(true); }));
       list.appendChild(li);
     });
     add(sec, list);
@@ -1226,9 +1262,24 @@
 
     add(frag, analysisTabs('sources', j), evidenceStrip(model));
 
-    var grid = el('div', 'ev-workspace');
-    add(grid, questionNav(model, state.evidenceQuestion), add(el('section', 'ev-main'), questionPanel(question)), exceptionsPanel(model));
-    frag.appendChild(grid);
+    var views = el('div', 'filters ev-views');
+    views.setAttribute('role', 'group');
+    views.setAttribute('aria-label', 'Evidence view');
+    [['coverage', 'Question coverage'], ['explorer', 'Source explorer']].forEach(function (view) {
+      var button = el('button', 'chip-btn', view[1]);
+      button.type = 'button';
+      button.setAttribute('aria-pressed', (state.evidenceView || 'coverage') === view[0] ? 'true' : 'false');
+      button.addEventListener('click', function () { state.evidenceView = view[0]; C.render(true); });
+      views.appendChild(button);
+    });
+    add(frag, views);
+    if (state.evidenceView !== 'explorer') {
+      var grid = el('div', 'ev-workspace');
+      add(grid, questionNav(model, state.evidenceQuestion), add(el('section', 'ev-main'), questionPanel(question, model)), exceptionsPanel(model));
+      frag.appendChild(grid);
+      C.replace(host, frag);
+      return;
+    }
 
     var sec = el('section', 'ev-explorer');
     sec.id = 'focus-sources';
@@ -1243,7 +1294,7 @@
       state.sourceQuery = search.value;
       C.render(true);
       var again = $('source-search');
-      if (again) { again.focus(); again.setSelectionRange(again.value.length, again.value.length); }
+      if (again) again.focus();
     });
     add(sec, search);
     var seg = el('div', 'filters');
@@ -1261,11 +1312,11 @@
     add(sec, seg);
     var entries = filterExplorer(model.explorer, state.sourceFilter, state.sourceQuery);
     var selectedEntry = model.explorer.filter(function (e) { return e.row.id === state.selectedSource; })[0];
-    if (!selectedEntry || (entries.length && entries.indexOf(selectedEntry) < 0)) selectedEntry = entries[0] || null;
+    if (!selectedEntry || entries.indexOf(selectedEntry) < 0) selectedEntry = entries[0] || null;
     state.selectedSource = selectedEntry ? selectedEntry.row.id : '';
     var inbox = el('div', 'inbox');
     var listCol = el('div');
-    if (!model.explorer.length) add(listCol, el('p', 'meta', 'No evidence sources are ready yet. Seerist leads remain pending until the RSS-connected source list is available.'));
+    if (!model.explorer.length) add(listCol, el('p', 'meta', model.pipeline.blocker ? 'No source records are available. Acquisition is blocked.' : 'No source records are available for this run.'));
     else if (!entries.length) add(listCol, el('p', 'meta', 'No sources match this search and filter.'));
     var list = el('ul', 'queue');
     entries.forEach(function (e) { list.appendChild(sourceRow(e.row)); });
@@ -1274,7 +1325,6 @@
     add(inbox, listCol, selectedEntry ? sourceDetail(selectedEntry.row) : el('div'));
     add(sec, inbox);
     frag.appendChild(sec);
-    frag.appendChild(leadsSection(j));
     C.replace(host, frag);
   };
 

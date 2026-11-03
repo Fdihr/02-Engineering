@@ -141,6 +141,13 @@ C.panes.settings();
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_evidence_workspace_frontend(self):
+        result = subprocess.run(
+            ["node", str(Path(__file__).parent / "test_evidence_workspace.cjs")],
+            capture_output=True, text=True, timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_artifacts_are_confined_and_server_rejects_writes(self):
         with urlopen(self.base + "/api/artifact?" + urlencode({"path": "note.json"})) as response:
             self.assertEqual(json.loads(response.read()), {"safe": True})

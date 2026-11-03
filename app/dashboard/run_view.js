@@ -18,6 +18,7 @@
     sourceFilter: '',
     sourceQuery: '',
     evidenceQuestion: '',
+    evidenceView: 'coverage',
     homeFilter: 'all',
     homeSel: '',
     leadFilter: 'pending',
@@ -562,7 +563,9 @@
     var now = el('span', 'now');
     var mine = j.queue.filter(function (q) { return q.actor === 'you'; })[0];
     var next = mine || j.queue[0];
-    if (!next) {
+    if (!next && j.pendingRssLeadCount) {
+      add(now, el('span', 'mark attention', 'Source acquisition blocked'));
+    } else if (!next) {
       add(now, el('span', 'mark done', 'Nothing is waiting'));
     } else if (next.actor === 'you') {
       add(now, el('span', 'mark attention', 'Waiting for you'), next.title);

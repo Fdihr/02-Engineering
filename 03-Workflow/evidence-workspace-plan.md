@@ -1,6 +1,24 @@
 # Evidence Workspace and Source-Volume Plan
 
-Status: Proposed implementation plan; not an activated admission or collection policy.
+Status: Phase 1 implemented as a read-only workspace. Phases 2-6 remain planned;
+no admission or collection policy has been activated.
+
+## Delivered first slice
+
+The Evidence route now opens approved-question coverage, with an explicit
+unassessed state when persisted artifacts do not establish coverage. A separate
+Source explorer retains searchable source drilldowns and compatibility actions.
+Pipeline counts have explicit bases, overlapping stages are not a funnel, and
+provisional review is separate from completed review. Acquisition blockers and
+persisted exceptions are visible without implying an autonomous worker is running.
+
+The additive `journey.evidenceWorkspace` projection is derived from existing
+artifacts only. Missing question-level links mean "not projected", not absence
+of evidence. Linked observation text is shown only when its persisted identifier
+resolves in the source review. No supporting/contradicting relation is inferred.
+The current 184-lead run remains blocked on the RSS-connected source list, with
+zero admitted evidence; source selection, automated acquisition/admission,
+resumable processing and governed stopping remain later phases.
 
 ## Outcome
 
@@ -41,7 +59,7 @@ generic agent framework, unobserved endpoint or mandatory cyber-specific logic.
 ![Proposed question-led Evidence workspace, with the current blocked state shown separately below](../01-Architecture/evidence-workspace-wireframe.svg)
 
 [Open the full-size wireframe](../01-Architecture/evidence-workspace-wireframe.svg).
-This is a planning illustration, not implemented UI. All target-state counts,
+This is the target-state illustration, not a screenshot. All target-state counts,
 observations and assessment text are fictional. The lower panel shows how the
 current 184-lead acquisition blocker should appear without inventing evidence.
 
