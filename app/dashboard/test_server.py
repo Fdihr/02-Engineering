@@ -535,6 +535,23 @@ C.panes.settings();
             {"ok": True, "command": "a", "exitCode": 0, "stderr": "", "stdout": "Output: runs/run-a/note.json"},
             {"ok": True, "command": "m", "exitCode": 0, "stderr": "", "stdout": "Output: runs/run-a/metrics.json"},
         ]
+        for field in ("accessRationale", "trackRecordRationale", "alignment", "dependencyRationale", "upstreamSources"):
+            with self.subTest(missing_field=field), patch("dashboard.server._run_npm_script") as runner:
+                status, result = _handle_analyst_action(runs_root, stage, {
+                    **base, "assessment": {**base["assessment"], field: " \n "}
+                })
+                self.assertEqual(status, 400)
+                self.assertIn("Complete the source assessment:", result["error"])
+                self.assertNotIn("INVALID_ASSESSMENT", result["error"])
+                runner.assert_not_called()
+                self.assertEqual(list((stage / "review").glob("review-response-*.json")), [])
+        with patch("dashboard.server._run_npm_script", side_effect=outputs):
+            status, result = _handle_analyst_action(runs_root, stage, {
+                **base, "assessment": {**base["assessment"], "dependencyKind": "original", "upstreamSources": "", "limitations": ""}
+            })
+            self.assertEqual(status, 200, result)
+        for response_file in (stage / "review").glob("review-response-*.json"):
+            response_file.unlink()
         with patch("dashboard.server._run_npm_script", side_effect=outputs) as runner:
             self.assertEqual(_handle_analyst_action(runs_root, stage, {**base, "mode": "guess"})[0], 400)
             status, result = _handle_analyst_action(runs_root, stage, base)

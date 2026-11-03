@@ -834,19 +834,36 @@
     var dep = C.selectInput([['', 'Choose…'], ['original', 'Original reporting'], ['relayed', 'Relayed'], ['mixed', 'Mixed'], ['unknown', 'Unknown']], key + 'dep');
     var upstream = C.textInput(key + 'up', '', 'e.g. NCSC-NL study, Modat');
     var grid = el('div', 'form-grid');
-    add(grid, C.field('Access to the events', access), C.field('Why', accessWhy), C.field('Track record', track), C.field('Why', trackWhy), C.field('Dependency', dep), C.field('Upstream sources (comma-separated)', upstream));
+    add(grid, C.field('Access to the events (required)', access), C.field('Access explanation (required)', accessWhy), C.field('Track record (required)', track), C.field('Track-record explanation (required)', trackWhy), C.field('Dependency (required)', dep), C.field('Upstream sources (comma-separated; required unless original)', upstream));
     parts.push(grid);
     var depWhy = C.textInput(key + 'depw', '', '', true);
     var alignment = C.textInput(key + 'al', '', 'e.g. consistent with NCSC-NL findings; not independently corroborated', true);
     var limits = C.textInput(key + 'lim', '', 'one per line', true);
-    parts.push(C.field('Dependency rationale', depWhy, true), C.field('Alignment with other reporting', alignment, true), C.field('Limitations', limits, true));
+    [accessWhy, trackWhy, depWhy, alignment].forEach(function (input) { input.maxLength = 1000; });
+    parts.push(C.field('Dependency rationale (required)', depWhy, true), C.field('Alignment with other reporting (required)', alignment, true), C.field('Limitations (optional; one per line)', limits, true));
     var problem = el('span', 'meta fail');
+    problem.setAttribute('role', 'alert');
+    problem.id = 'review-assessment-problem';
     var submit = C.actButton('Record review', 'btn-primary', function () {
       var missing = verdicts.filter(function (v) { return !v.verdict.value || (v.verdict.value === 'duplicate' && !v.duplicateOf.value); }).length;
       var missingIr = irs.filter(function (r) { return r.disposition.value !== 'covered' && !r.note.value.trim(); }).length;
-      var incomplete = !access.value || !track.value || !dep.value;
-      if (missing || missingIr || incomplete) {
-        problem.textContent = (missing ? missing + ' observation(s) need a verdict. ' : '') + (missingIr ? missingIr + ' requirement(s) need a note. ' : '') + (incomplete ? 'Complete the source assessment.' : '');
+      var assessmentFields = [
+        [access, 'access to the events'], [accessWhy, 'access explanation'],
+        [track, 'track record'], [trackWhy, 'track-record explanation'],
+        [dep, 'dependency'], [depWhy, 'dependency rationale'],
+        [alignment, 'alignment with other reporting']
+      ];
+      if (dep.value !== 'original') assessmentFields.push([upstream, 'upstream sources for non-original reporting']);
+      upstream.removeAttribute('aria-invalid');
+      var incomplete = assessmentFields.filter(function (entry) {
+        var empty = !entry[0].value.trim() || (entry[0] === upstream && !upstream.value.split(',').some(function (s) { return s.trim(); }));
+        entry[0].setAttribute('aria-invalid', empty ? 'true' : 'false');
+        entry[0].setAttribute('aria-describedby', problem.id);
+        return empty;
+      });
+      if (missing || missingIr || incomplete.length) {
+        problem.textContent = (missing ? missing + ' observation(s) need a verdict. ' : '') + (missingIr ? missingIr + ' requirement(s) need a note. ' : '') + (incomplete.length ? 'Complete the source assessment: ' + incomplete.map(function (entry) { return entry[1]; }).join('; ') + '.' : '');
+        if (incomplete.length) incomplete[0][0].focus();
         return;
       }
       problem.textContent = '';

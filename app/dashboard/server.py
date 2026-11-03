@@ -387,6 +387,34 @@ def _handle_assurance_review(runs_root: Path, payload: dict[str, Any]) -> tuple[
     now = datetime.now(timezone.utc)
     reviewed_at = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
     response = _review_response(payload, package_sha, reviewer_id, reviewed_at)
+    if payload["mode"] == "performed":
+        assessment = response["assessment"]
+        reliability = assessment["reliability"]
+        dependency = assessment["dependency"]
+        missing = [
+            label for label, value in (
+                ("access explanation", reliability["accessRationale"]),
+                ("track-record explanation", reliability["trackRecordRationale"]),
+                ("alignment with other reporting", reliability["alignment"]),
+                ("dependency rationale", dependency["rationale"]),
+            ) if not value
+        ]
+        if reliability["access"] not in ("direct", "indirect", "unknown"):
+            missing.append("access to the events")
+        if reliability["trackRecord"] not in ("established", "limited", "unknown"):
+            missing.append("track record")
+        if dependency["kind"] not in ("original", "relayed", "mixed", "unknown"):
+            missing.append("dependency")
+        if dependency["kind"] != "original" and not dependency["upstreamSources"]:
+            missing.append("upstream sources for non-original reporting")
+        if missing:
+            return 400, {
+                "ok": False,
+                "error": "Complete the source assessment: " + "; ".join(missing) + ". Your review has not been recorded.",
+                "fields": missing,
+            }
+        if len(dependency["upstreamSources"]) > 24 or len(assessment["limitations"]) > 24:
+            return 400, {"ok": False, "error": "Use at most 24 upstream sources and 24 limitations. Your review has not been recorded."}
     response_name = f"review-response-{int(now.timestamp() * 1000)}.json"
     _write_json(review_dir / response_name, response)
 

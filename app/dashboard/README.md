@@ -29,6 +29,15 @@ for one v2 call and zero fetches, preserves all original history, and admits
 only exact `relevant`. It does not promote diagnostic calibrations or approve
 source support. See [the authorization contract](../../02-Contracts/local-article-retrieval.md#explicit-production-reassessment).
 
+Performed source support review requires explanations for access, track
+record, alignment with other reporting and reporting dependency, as well as
+the three assessment selections. Upstream sources are required unless the
+reporting is original; limitations are optional. The form names missing fields
+and focuses the first incomplete assessment field. The action endpoint also
+rejects an incomplete assessment before writing a response or running the
+recorder. Existing failed responses are preserved, not repaired or approved
+automatically.
+
 **Evidence → Collect a bounded batch** selects one of the two observed feeds,
 records a real permission-review reference, and explicitly approves a one-shot
 RSS batch policy under the operator's analyst ID. Choose 1-5 sources/relevance
