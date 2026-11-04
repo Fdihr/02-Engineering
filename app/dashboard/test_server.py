@@ -658,6 +658,7 @@ C.panes.settings();
             status, result = _handle_analyst_action(runs_root, run_dir, base)
             self.assertEqual(status, 200, result)
             self.assertEqual(runner.call_args.args[0], "prepare:key-judgements")
+            self.assertEqual(runner.call_args.kwargs["runs_root"], runs_root)
             self.assertEqual(_handle_analyst_action(runs_root, run_dir, base)[0], 409)
         out = run_dir / "synthesis" / "adjudication" / "synthesis-challenge-record-abc"
         adjudication = json.loads((out / "performed-adjudication.json").read_text(encoding="utf-8"))
@@ -666,6 +667,49 @@ C.panes.settings();
         self.assertEqual(adjudication["adjudicationStatus"], "performed")
         decision = json.loads((out / "adjudication-decision.json").read_text(encoding="utf-8"))
         self.assertEqual(decision["reviewerId"], "FDIHR")
+
+    def test_isolated_adjudication_preserves_local_bindings_and_selection_root(self):
+        from dashboard.server import APP_DIR
+        import os
+        for kind in ("absolute", "app-relative", "outside"):
+            with self.subTest(kind=kind):
+                runs_root = self.run_dir / kind
+                run_dir = runs_root / "run-isolated"
+                build = run_dir / "synthesis" / "records" / "b1" / "synthesis-build-record.json"
+                build.parent.mkdir(parents=True)
+                build.write_text(json.dumps({"synthesis": {"claims": [{"id": "c1"}]}}), encoding="utf-8")
+                target = self.run_dir / "outside-build.json" if kind == "outside" else build
+                target.write_text(build.read_text(encoding="utf-8"), encoding="utf-8")
+                reference = os.path.relpath(target, APP_DIR).replace("\\", "/") if kind == "app-relative" else str(target)
+                challenge_rel = "synthesis/challenge/records/ch1/challenge-record.json"
+                challenge = run_dir / challenge_rel
+                challenge.parent.mkdir(parents=True)
+                challenge.write_text(json.dumps({
+                    "reviewStatus": "reviewed", "limitedEvidence": True,
+                    "buildRecord": {"artifactRef": reference, "artifactSha256": "a" * 64},
+                    "results": [],
+                }), encoding="utf-8")
+                payload = {"action": "record-adjudication", "runId": run_dir.name, "reviewerId": "TESTER",
+                           "challengeRecordPath": challenge_rel, "challenges": [], "claims": []}
+                with patch("dashboard.server._run_npm_script", return_value={"ok": True, "stdout": "", "stderr": ""}) as runner:
+                    status, result = _handle_analyst_action(runs_root, run_dir, payload)
+                    if kind == "outside":
+                        self.assertEqual(status, 400, result)
+                        runner.assert_not_called()
+                        self.assertFalse((run_dir / "synthesis" / "adjudication").exists())
+                        continue
+                    self.assertEqual(status, 200, result)
+                    self.assertEqual(runner.call_args.kwargs["runs_root"], runs_root)
+                    self.assertEqual(runner.call_args.args[1][0], reference)
+                    status, result = _handle_analyst_action(runs_root, run_dir, {
+                        "action": "prepare-key-judgements", "runId": run_dir.name, "challengeRecordPath": challenge_rel,
+                    })
+                    self.assertEqual(status, 200, result)
+                    self.assertEqual(runner.call_args.kwargs["runs_root"], runs_root)
+                recorded = json.loads((run_dir / "synthesis" / "adjudication" / "ch1" / "performed-adjudication.json").read_text(encoding="utf-8"))
+                self.assertEqual(recorded["buildRecord"]["artifactRef"], reference)
+                self.assertEqual(recorded["challengeRecord"]["artifactRef"], os.path.relpath(challenge, APP_DIR).replace("\\", "/"))
+                self.assertEqual(recorded["claims"][0]["status"], "accepted")
 
     def test_prepare_actions_require_records_inside_the_run(self):
         runs_root = self.run_dir / "runs-root"

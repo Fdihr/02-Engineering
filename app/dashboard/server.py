@@ -673,14 +673,19 @@ def _scope_matches(approved: dict[str, Any], proposal: dict[str, Any]) -> bool:
     )
 
 
-def _command_output_in_run(run_dir: Path, step: dict[str, Any]) -> Path | None:
-    reference = _stdout_field(step, "Output")
+def _artifact_in_run(run_dir: Path, reference: str) -> Path | None:
+    if not reference or "\0" in reference:
+        return None
     prefix = f"runs/{run_dir.name}/"
     output = ((run_dir / reference[len(prefix):]) if reference.startswith(prefix) else (APP_DIR / reference)).resolve()
     try:
         return resolve_inside_run(run_dir, output.relative_to(run_dir.resolve()).as_posix())
     except ValueError:
         return None
+
+
+def _command_output_in_run(run_dir: Path, step: dict[str, Any]) -> Path | None:
+    return _artifact_in_run(run_dir, _stdout_field(step, "Output"))
 
 
 def _research_plan_operation(action: str, value: Any) -> Any:
@@ -927,7 +932,7 @@ def _handle_prepare_stage(runs_root: Path, payload: dict[str, Any]) -> tuple[int
             return 400, {"ok": False, "error": "An adjudicated challenge record in this run is required."}
         record = json.loads(Path(_fs_path(run_dir / rel_path)).read_text(encoding="utf-8"))
         build_ref = str(record.get("buildRecord", {}).get("artifactRef", ""))
-        steps = [_run_npm_script("prepare:key-judgements", [build_ref, f"runs/{run_id}/{rel_path}", f"runs/{run_id}/{adjudication_rel}", MEMO_STANDARD_V1])]
+        steps = [_run_npm_script("prepare:key-judgements", [build_ref, f"runs/{run_id}/{rel_path}", f"runs/{run_id}/{adjudication_rel}", MEMO_STANDARD_V1], runs_root=runs_root)]
     else:
         rel_path = str(payload.get("keyJudgementRecordPath") or "")
         if not (run_dir and KJ_RECORD_REL.match(rel_path) and Path(_fs_path(run_dir / rel_path)).is_file()):
@@ -954,7 +959,7 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
     record_bytes = record_file.read_bytes()
     record = json.loads(record_bytes.decode("utf-8"))
     build_ref = str(record.get("buildRecord", {}).get("artifactRef", ""))
-    build_file = resolve_inside_run(run_dir, build_ref[len(f"runs/{run_id}/"):]) if build_ref.startswith(f"runs/{run_id}/") else None
+    build_file = _artifact_in_run(run_dir, build_ref)
     if build_file is None or not Path(_fs_path(build_file)).is_file():
         return 400, {"ok": False, "error": "The challenge record does not reference a build record in this run."}
     build = json.loads(Path(_fs_path(build_file)).read_text(encoding="utf-8"))
@@ -976,6 +981,11 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
         claims.append({"claimId": claim_id, "status": status, "openChallengeIds": upheld})
 
     now = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    challenge_path = (run_dir / rel_path).resolve()
+    try:
+        challenge_ref = Path(os.path.relpath(challenge_path, APP_DIR.resolve())).as_posix()
+    except ValueError:
+        challenge_ref = challenge_path.as_posix()
     adjudication = {
         "schemaVersion": "synthesis-adjudication-v1",
         "id": f"adjudication-{match.group(1).removeprefix('synthesis-challenge-record-')}",
@@ -985,7 +995,7 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
         "reviewStatus": record.get("reviewStatus"),
         "limitedEvidence": record.get("limitedEvidence"),
         "buildRecord": record.get("buildRecord"),
-        "challengeRecord": {"artifactRef": f"runs/{run_id}/{rel_path}", "artifactSha256": hashlib.sha256(record_bytes).hexdigest()},
+        "challengeRecord": {"artifactRef": challenge_ref, "artifactSha256": hashlib.sha256(record_bytes).hexdigest()},
         "claims": claims,
     }
     _write_json(out_dir / "performed-adjudication.json", adjudication)
@@ -1014,7 +1024,7 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
         "ok": True, "command": "adjudication:record", "exitCode": 0, "stderr": "",
         "stdout": f"Accepted: {counts['accepted']}\nContested: {counts['contested']}\nRejected: {counts['rejected']}\nReviewer: {reviewer_id}\nOutput: {adjudication_ref}",
     }]
-    steps.append(_run_npm_script("prepare:key-judgements", [build_ref, f"runs/{run_id}/{rel_path}", adjudication_ref, MEMO_STANDARD_V1]))
+    steps.append(_run_npm_script("prepare:key-judgements", [build_ref, f"runs/{run_id}/{rel_path}", adjudication_ref, MEMO_STANDARD_V1], runs_root=runs_root))
     succeeded = all(step["ok"] for step in steps)
     return (200 if succeeded else 400), {"ok": succeeded, "runId": run_id, "steps": steps, "error": "" if succeeded else steps[-1]["stderr"]}
 

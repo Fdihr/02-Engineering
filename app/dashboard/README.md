@@ -58,6 +58,12 @@ Unlinked claims and evidence gaps remain explicit. Supporting observations and
 round records are inspectable without advancing approvals. UI interactions do
 not create new execution authority.
 
+Adjudication and explicit key-judgement preparation also retain the active run
+root. Build references may be canonical `runs/...`, absolute, or app-relative,
+but must resolve inside that run. Existing lineage is not rewritten; new
+adjudications bind the Challenge using the recorder's app-relative reference
+convention so checksum-bound selection can reopen it consistently.
+
 **Evidence → Collect a bounded batch** selects one of the two observed feeds,
 records a real permission-review reference, and explicitly approves a one-shot
 RSS batch policy under the operator's analyst ID. Choose 1-5 sources/relevance
