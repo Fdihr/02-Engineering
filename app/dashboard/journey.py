@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from .evidence_workspace import build_evidence_workspace
+from .workflow_projection import project_workflow
 PHASES = (
     ("frame", "Frame"),
     ("collect", "Collect"),
@@ -259,10 +260,17 @@ def _rounds(run_id: str, full: dict[str, Any], adjudications: list[dict[str, Any
 
         challenge_rel, challenge = challenges.get(ref, ("", {}))
         adjudication = adjudication_by_record.get(challenge_rel)
+        challenge_status = "failed"
         if challenge_rel:
-            raised = _num(_rec(challenge.get("metrics")).get("challengesRaised"))
-            steps.append(_step("challenge", "Challenge", "done", f"{raised} challenges raised"))
+            raised_value = _rec(challenge.get("metrics")).get("challengesRaised")
+            if isinstance(raised_value, (int, float)) and not isinstance(raised_value, bool):
+                challenge_status = "checked"
+                steps.append(_step("challenge", "Challenge", "done", f"{raised_value} challenges raised"))
+            else:
+                challenge_status = "unavailable"
+                steps.append(_step("challenge", "Challenge", "failed", "Challenge record metrics are unavailable"))
         elif "challenge" in waiting:
+            challenge_status = "pending"
             steps.append(_step("challenge", "Challenge", "ai", "Waiting for the AI Challenge", {"kind": "ai-stage", "item": waiting["challenge"]}))
         else:
             steps.append(_step("challenge", "Challenge", "failed", "Challenge request was not prepared"))
@@ -328,6 +336,7 @@ def _rounds(run_id: str, full: dict[str, Any], adjudications: list[dict[str, Any
             "gaps": [str(g) for g in _arr(synthesis.get("intelligenceGaps"))],
             "claims": claims,
             "challengeRecordPath": challenge_rel,
+            "challengeStatus": challenge_status,
             "adjudicationStatus": (adjudication or {}).get("status", ""),
             "adjudicationPath": (adjudication or {}).get("adjudicationPath", ""),
             "keyJudgements": {
@@ -764,6 +773,9 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> d
     in_build = set((current_round or {}).get("noteIds", []))
     ready_notes = [n for n in notes.values() if n["noteId"] not in in_build and (n["reviewStatus"] == "reviewed" or not any(
         m["snapshotId"] == n["snapshotId"] and m["reviewStatus"] == "reviewed" for m in notes.values()))]
+    current_round_complete = not current_round or all(
+        step["state"] == "done" for step in current_round["steps"]
+    )
     latest_notes = {}
     for note in notes.values():
         if note["snapshotId"] not in latest_notes or note["reviewStatus"] == "reviewed":
@@ -775,7 +787,8 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> d
         "provisionalNotes": sum(1 for n in latest_notes.values() if n["reviewStatus"] == "provisional"),
         "inFlight": [{"id": r["id"], "title": r["title"], "step": r["current"]["label"]} for r in in_flight],
         "pendingBuild": bool(next_build),
-        "canBuild": bool(latest_notes) and not next_build,
+        "currentRoundComplete": current_round_complete,
+        "canBuild": bool(latest_notes) and not next_build and current_round_complete,
     }
 
     queue: list[dict[str, Any]] = []
@@ -815,12 +828,12 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> d
                 queue.append(_queue_item(phase, "you", label, f"Synthesis round {current_round['index']}", {"tab": "synthesis", "round": current_round["index"]}))
     if next_build:
         queue.append(_queue_item("synthesise", "ai", "Run the AI synthesis Build", f"Round {next_build['index']} · {readiness['noteCount']} source notes", {"tab": "synthesis", "round": next_build["index"]}))
-    elif ready_notes and not any(item["phase"] in ("synthesise", "memo") for item in queue):
+    elif ready_notes and current_round_complete and not any(item["phase"] in ("synthesise", "memo") for item in queue):
         label = "Build a new synthesis round" if rounds else "Build the first synthesis"
         queue.append(_queue_item("synthesise", "you", label, f"{len(ready_notes)} source note(s) are not in the current synthesis yet.", {"tab": "synthesis", "focus": "gate"}, weight=-2))
     open_exceptions = [e for e in parts["exceptions"] if e["status"] == "open"]
     if open_exceptions:
-        queue.append(_queue_item("evidence", "you", f"Resolve {len(open_exceptions)} open exception(s)", "A bounded step failed and needs a decision.", {"tab": "audit"}, weight=5))
+        queue.append(_queue_item("evidence", "you", f"Resolve {len(open_exceptions)} open exception(s)", "A bounded step failed and needs a decision.", {"tab": "audit"}, weight=-5))
     if memo and not memo["isCurrent"] and current_round and not any(i["phase"] == "memo" for i in queue):
         queue.append(_queue_item("memo", "you", "Memo is behind the latest synthesis", f"The memo was written from round {memo['roundIndex'] or '?'}; round {current_round['index']} is newer.", {"tab": "synthesis", "round": current_round["index"]}, weight=-3))
     queue.sort(key=lambda item: (-item["weight"], -PHASE_RANK[item["phase"]], 0 if item["actor"] == "you" else 1))
@@ -883,9 +896,161 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> d
             summary = (f"Draft from round {memo['roundIndex']} · " + ("blocked from publication" if memo["blockers"] else "publishable")) if memo else ""
         phases.append({"key": key, "label": label, "state": state, "summary": summary, "waiting": counts})
 
+    work_by_id: dict[str, dict[str, Any]] = {}
+    source_paths: dict[str, set[str]] = {}
+
+    def with_run_prefix(path: str) -> set[str]:
+        normalized = path.replace("\\", "/").lstrip("/")
+        return {normalized, f"runs/{run_id}/{normalized}"}
+
+    for row in rows:
+        source_paths[f"source:{row['id']}"] = {
+            path
+            for artifact in row.get("artifacts", [])
+            for path in with_run_prefix(_txt(artifact.get("relPath")))
+            if _txt(artifact.get("relPath"))
+        }
+    for index, item in enumerate(queue):
+        target = item["target"]
+        paths: set[str] = set()
+        if target.get("row") is not None:
+            row = next((candidate for candidate in rows if candidate["id"] == target["row"]), None)
+            if row:
+                paths.update(source_paths.get(f"source:{row['id']}", set()))
+        if target.get("round") is not None:
+            round_data = next((candidate for candidate in rounds if candidate["index"] == target["round"]), None)
+            if round_data:
+                for path in [round_data["buildPath"], round_data["challengeRecordPath"],
+                             round_data["adjudicationPath"], *round_data["memoPaths"]]:
+                    if path:
+                        paths.update(with_run_prefix(path))
+                for step_data in round_data["steps"]:
+                    action_data = step_data.get("action") or {}
+                    request_path = _txt(_rec(action_data.get("item")).get("requestPath"))
+                    if request_path:
+                        paths.update(with_run_prefix(request_path))
+        work_id = f"queue:{index}"
+        phase = "intent" if item["phase"] == "frame" else item["phase"]
+        work_by_id[work_id] = {
+            "id": work_id,
+            "stage": phase,
+            "actor": "machine" if item["actor"] == "ai" else "human",
+            "kind": "work" if item["actor"] == "ai" else "decision",
+            "surface": "workflow",
+            "title": item["title"],
+            "detail": item["detail"],
+            "paths": sorted(paths),
+            "priority": item["weight"] * 100 + PHASE_RANK[item["phase"]],
+            "target": item["target"],
+            "queueIndex": index,
+        }
+    blockers = []
+    for exception in open_exceptions:
+        refs = set(exception.get("refs", []))
+        affected = [
+            work_id for work_id, work in work_by_id.items()
+            if refs.intersection(work["paths"])
+        ]
+        affected.extend(
+            source_id for source_id, paths in source_paths.items()
+            if refs.intersection(paths)
+        )
+        affected = sorted(set(affected))
+        exception_path = _txt(exception.get("relPath"))
+        blockers.append({
+            "id": exception["id"],
+            "kind": "exception",
+            "scope": "work" if affected else "unknown",
+            "paths": [exception_path, *sorted(refs)],
+            "affectedWorkIds": affected,
+            "uncertain": not bool(affected),
+            "title": "Scoped source exception" if affected else "Exception scope is not established",
+            "detail": "Only work bound to the referenced artifact is blocked." if affected else
+                      "Artifact references do not identify affected work; the run is conservatively paused.",
+        })
+        work_id = f"exception:{exception_path}"
+        work_by_id[work_id] = {
+            "id": work_id,
+            "stage": "evidence",
+            "actor": "human",
+            "kind": "decision",
+            "surface": "exceptions",
+            "title": "Resolve an open exception",
+            "detail": exception["kind"],
+            "paths": [exception_path, *sorted(refs)],
+            "priority": -400,
+            "target": {"tab": "audit"},
+        }
+
+    if memo:
+        publication_path = f"memo/{memo['id']}/publication-gate.json"
+        for blocker in memo["blockers"]:
+            blockers.append({
+                "id": blocker["code"],
+                "kind": "publication",
+                "scope": "publication",
+                "paths": [publication_path],
+                "affectedWorkIds": [],
+                "uncertain": False,
+                "title": blocker["label"],
+                "detail": blocker["explanation"],
+            })
+
+    projection_input = {
+        "runId": run_id,
+        "intentApproved": framed,
+        "evidenceAvailable": bool(readiness["noteCount"] or rounds),
+        "committedOutcomes": [
+            {"stage": "intent" if phase["key"] == "frame" else phase["key"], "paths": []}
+            for phase in phases if phase["state"] == "done"
+        ],
+        "readyWork": list(work_by_id.values()),
+        "humanDecisions": [
+            {"id": work["id"], "stage": work["stage"], "paths": work["paths"]}
+            for work in work_by_id.values() if work["actor"] == "human"
+        ],
+        "interimCheckpoints": [
+            {"id": work["id"], "stage": work["stage"], "paths": work["paths"]}
+            for work in work_by_id.values() if work["actor"] == "machine"
+        ],
+        "blockers": blockers,
+    }
+    if memo:
+        gate_path = f"memo/{memo['id']}/publication-gate.json"
+        gate_exists = any(path == gate_path for path in full)
+        if gate_exists:
+            projection_input["publication"] = {
+                "path": gate_path,
+                "approvalAvailable": memo["gate"]["humanApprovalAvailable"],
+            }
+    workflow = project_workflow(projection_input)
+    queue_index_by_id = {
+        work_id: work["queueIndex"]
+        for work_id, work in work_by_id.items() if "queueIndex" in work
+    }
+    projected_queue_order = [
+        queue_index_by_id[work["id"]]
+        for work in workflow["readyWork"]
+        if work["id"] in queue_index_by_id
+    ]
+    unresolved_scope = any(blocker["scope"] == "unknown" for blocker in blockers)
+    if open_exceptions:
+        for item in queue:
+            if item["title"].startswith("Resolve ") and "exception" in item["title"]:
+                item["detail"] = (
+                    "Exception scope is uncertain; the run is conservatively paused until affected work is established."
+                    if unresolved_scope else
+                    "Exceptions are scoped to referenced work; unrelated sources and draft analysis can continue."
+                )
+    ordered_indexes = projected_queue_order + [
+        index for index in range(len(queue)) if index not in projected_queue_order
+    ]
+    queue = [queue[index] for index in ordered_indexes]
+
     result = {
         "phases": phases,
         "queue": queue,
+        "workflow": workflow,
         "suggestions": suggestions,
         "funnel": funnel,
         "brief": {
