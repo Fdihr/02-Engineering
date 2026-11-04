@@ -1,5 +1,6 @@
 import { appendFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { reserveManualMemo } from "./memo-execution-io.js";
 import { validateApprovedResearchQuestion } from "../modules/research/research-question.js";
 import { validateChallengeRecord } from "../modules/synthesis/challenge.js";
 import {
@@ -30,6 +31,7 @@ const describe = (value: unknown): string =>
 const main = async (): Promise<void> => {
   const preparedAt = new Date().toISOString();
   const runRoot = assuranceRunRoot();
+  let release: (() => Promise<void>) | undefined;
   try {
     const [
       buildPath,
@@ -54,6 +56,7 @@ const main = async (): Promise<void> => {
     const buildArtifact = await loadRunArtifact(runRoot, buildPath, "Build record");
     const build = validateSynthesisBuildRecord(buildArtifact.value);
     if (!build.ok) throw new Error(`Build record rejected: ${build.error}`);
+    release = await reserveManualMemo(runRoot, build.value.runId);
     const challengeArtifact = await loadRunArtifact(runRoot, challengePath, "Challenge record");
     const challenge = validateChallengeRecord(challengeArtifact.value);
     if (!challenge.ok) throw new Error(`Challenge record rejected: ${challenge.error}`);
@@ -163,6 +166,8 @@ const main = async (): Promise<void> => {
   } catch (error) {
     console.error(`Memo writer preparation failed: ${commandError(error)}`);
     process.exitCode = 1;
+  } finally {
+    await release?.();
   }
 };
 

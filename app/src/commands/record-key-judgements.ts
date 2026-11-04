@@ -1,5 +1,6 @@
 import { appendFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { reserveManualMemo } from "./memo-execution-io.js";
 import {
   keyJudgementPolicyFromStandard,
   validateMemoStandardV1
@@ -34,6 +35,7 @@ const describe = (value: unknown): string =>
 const main = async (): Promise<void> => {
   const recordedAt = new Date().toISOString();
   const runRoot = assuranceRunRoot();
+  let release: (() => Promise<void>) | undefined;
   let runId: string | undefined;
   let responseArtifactRef: string | undefined;
   try {
@@ -51,6 +53,7 @@ const main = async (): Promise<void> => {
       throw new Error(`Request rejected: ${describe(request.error)}`);
     }
     runId = request.value.runId;
+    release = await reserveManualMemo(runRoot, runId);
     const buildArtifact = requireChecksum(
       await loadRunArtifact(
         runRoot,
@@ -222,6 +225,8 @@ const main = async (): Promise<void> => {
     }
     console.error(`Key-judgement recording failed: ${message}`);
     process.exitCode = 1;
+  } finally {
+    await release?.();
   }
 };
 

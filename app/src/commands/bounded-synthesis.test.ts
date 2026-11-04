@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { approveMemoScope } from "../modules/research/memo-scope.js";
@@ -22,6 +22,8 @@ import { validateSynthesisSourceNote } from "../modules/synthesis/source-note.js
 import { validateSynthesisBuildRequest } from "../modules/synthesis/request.js";
 import { validateChallengeRequest, type ChallengeRequest } from "../modules/synthesis/challenge.js";
 import type { SynthesisBuildRequest } from "../modules/synthesis/types.js";
+import { inspectBoundedMemo, runBoundedMemo, type MemoEffects } from "./bounded-memo.js";
+import { validateMemoAuthorization } from "../workflow/bounded-memo.js";
 
 const now = () => new Date().toISOString();
 const json = async (path: string, value: unknown): Promise<ArtifactBinding> => {
@@ -175,6 +177,338 @@ const fakeRunner = (input: Fixture, override?: (stage: "build" | "challenge", re
   };
   return { calls, runModel };
 };
+
+const memoFixture = async (contested = false) => {
+  const f = await fixture();
+  const synthesisRunner = fakeRunner(f, async (stage, request) => {
+    if (stage === "build" && request.stage === "build") return {
+      claims: [{ statement: "The ministry announced a formal review.", kind: "reported-fact",
+        supportAliases: [request.observations[0]!.alias], confidence: { level: "low", rationale: "One unassessed source." } }]
+    };
+    const challenge = request as ChallengeRequest;
+    return { claims: challenge.claims.map(claim => ({ claim: claim.claimAlias,
+      checks: challenge.checklist.map((check, index) => contested && index === 0
+        ? { item: check.check, result: "challenge", rationale: "Alternative remains plausible.", aliases: [claim.citedObservations[0]!.alias] }
+        : { item: check.check, result: "none" }) })) };
+  });
+  const built = await runBoundedSynthesis(f.root, f.runId, "start", "TESTER", synthesisRunner);
+  assert.equal(built.status, "human-waiting", JSON.stringify(built));
+  const synthesis = await inspectBoundedSynthesis(f.root, f.runId);
+  const challengeBinding = synthesis.stages.challenge.record!;
+  const challenge = await read(challengeBinding.artifactRef);
+  const build = await read(challenge.buildRecord.artifactRef);
+  const adjudicationPath = resolve(f.run, "synthesis", "adjudication", challenge.id, "performed-adjudication.json");
+  await json(adjudicationPath, {
+    schemaVersion: "synthesis-adjudication-v1", id: "adjudication-fixture", createdAt: now(),
+    runId: f.runId, adjudicationStatus: "performed", reviewStatus: build.reviewStatus,
+    limitedEvidence: build.limitedEvidence, buildRecord: challenge.buildRecord, challengeRecord: challengeBinding,
+    claims: build.synthesis.claims.map((claim: { id: string }) => ({
+      claimId: claim.id, status: contested ? "contested" : "accepted",
+      openChallengeIds: challenge.results.filter((result: { claimId: string; verdict: string }) =>
+        result.claimId === claim.id && result.verdict === "challenge").map((result: { id: string }) => result.id)
+    }))
+  });
+  await json(resolve(f.root, ".copilot-settings.json"), {
+    model: "unused-default", stages: {
+      "key-judgements": { provider: "github-copilot-sdk", model: "selection-test" },
+      "memo-writer": { provider: "github-copilot-sdk", model: "writer-test" }
+    }
+  });
+  return { ...f, adjudicationPath, memoDirectory: resolve(f.run, "memo", "execution") };
+};
+type MemoFixture = Awaited<ReturnType<typeof memoFixture>>;
+const memoRunner = (f: MemoFixture, override?: (stage: string) => unknown) => {
+  const calls: string[] = [];
+  const runModel: MemoEffects["runModel"] = async input => {
+    assert.ok(typeof input === "object" && input !== null && "action" in input);
+    if (input.action === "models") return { models: [{ id: "selection-test" }, { id: "writer-test" }] };
+    assert.ok("model" in input && "prompt" in input);
+    const stage = input.model === "selection-test" ? "key-judgements" : "writer";
+    calls.push(stage);
+    const name = stage === "writer" ? "writer-request.json" : "key-judgement-request.json";
+    const requests = await Promise.all((await allFiles(f.run)).filter(path => basename(path) === name).map(read));
+    const request = requests.find(value => JSON.stringify(value.prompt) === JSON.stringify(input.prompt));
+    assert.ok(request, "Model sees only the persisted request");
+    const proposal = override ? override(stage) : stage === "writer" ? { statements: [] } : {
+      selections: Object.entries(request.eligibility.eligibleAliasesByRequirement)
+        .filter(([, aliases]) => Array.isArray(aliases) && aliases.length).map(([requirementId, aliases]) => ({
+          requirementId, claim: (aliases as string[])[0], judgementText: "The ministry review is reported by one source."
+        })), omissions: []
+    };
+    return { invocationId: `fake-${stage}`, provider: "github-copilot-sdk", model: input.model,
+      startedAt: now(), completedAt: now(), freshSession: true, content: JSON.stringify(proposal) };
+  };
+  return { calls, runModel };
+};
+
+test("bounded memo freezes authority, invokes each stage once and stops at blocked memo review", async () => {
+  const f = await memoFixture();
+  try {
+    const adjudication = await read(f.adjudicationPath);
+    const existingRequest = command("prepare-key-judgements", [
+      adjudication.buildRecord.artifactRef, adjudication.challengeRecord.artifactRef,
+      f.adjudicationPath, resolve("src/modules/memo/standards/memo-standard-v1.json")
+    ], f.root);
+    const before = spawnSync(process.execPath, ["--import", "tsx", "src/commands/run-next.ts", f.runId], {
+      encoding: "utf8", env: { ...process.env, SOURCE_ASSURANCE_RUN_DIR: f.root }
+    });
+    assert.equal(before.status, 0, before.stderr);
+    assert.match(before.stdout, /explicitly authorize bounded selection and writing/);
+    const runner = memoRunner(f);
+    const result = await runBoundedMemo(f.root, f.runId, "start", "TESTER", f.adjudicationPath, runner);
+    assert.equal(result.status, "memo-review", JSON.stringify(result));
+    assert.deepEqual(runner.calls, ["key-judgements", "writer"]);
+    const execution = await inspectBoundedMemo(f.root, f.runId);
+    assert.equal(resolve(execution.stages["key-judgements"].request!.artifactRef), existingRequest);
+    assert.equal(execution.remainingCalls, 0);
+    assert.equal(validateMemoAuthorization(execution.authority).ok, true);
+    assert.equal(validateMemoAuthorization({ ...execution.authority, maxCalls: 9 }).ok, false);
+    const record = await read(execution.stages.writer.record!.artifactRef);
+    assert.ok(record.memo.gaps.length);
+    assert.equal(record.verification.contentVerdict, "pass");
+    assert.equal(record.verification.publicationVerdict, "block");
+    const gate = await read(resolve(dirname(execution.stages.writer.record!.artifactRef), "publication-gate.json"));
+    assert.equal(gate.status, "blocked");
+    assert.equal(gate.humanApprovalAvailable, false);
+    await json(resolve(f.root, ".copilot-settings.json"), { model: "different-later-model" });
+    await Promise.all([runBoundedMemo(f.root, f.runId, "start", "LATER", undefined, runner),
+      runBoundedMemo(f.root, f.runId, "resume", undefined, undefined, runner)]);
+    assert.deepEqual(runner.calls, ["key-judgements", "writer"]);
+    assert.equal((await inspectBoundedMemo(f.root, f.runId)).authority.approvedBy, "TESTER");
+    const cli = spawnSync(process.execPath, ["--import", "tsx", "src/commands/run-next.ts", f.runId], {
+      encoding: "utf8", env: { ...process.env, SOURCE_ASSURANCE_RUN_DIR: f.root }
+    });
+    assert.equal(cli.status, 0, cli.stderr);
+    assert.match(cli.stdout, /Bounded memo: memo-review/);
+    const guarded = spawnSync(process.execPath, ["--import", "tsx", "src/commands/record-key-judgements.ts",
+      execution.stages["key-judgements"].request!.artifactRef, resolve(f.memoDirectory, "key-judgements", "copilot-response.json")], {
+      encoding: "utf8", env: { ...process.env, SOURCE_ASSURANCE_RUN_DIR: f.root }
+    });
+    assert.equal(guarded.status, 1);
+    assert.match(guarded.stderr, /bounded memo authority/);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("bounded memo preserves contested claims and publication blockers", async () => {
+  const f = await memoFixture(true);
+  try {
+    const runner = memoRunner(f);
+    const result = await runBoundedMemo(f.root, f.runId, "start", "TESTER", f.adjudicationPath, runner);
+    assert.equal(result.status, "memo-review", JSON.stringify(result));
+    const execution = await inspectBoundedMemo(f.root, f.runId);
+    const record = await read(execution.stages.writer.record!.artifactRef);
+    assert.equal(record.memo.keyJudgments[0].statement.status, "contested");
+    assert.ok(record.memo.keyJudgments[0].statement.openChallengeIds.length);
+    assert.ok(record.memo.publicationBlockers.includes("OPEN_KEY_JUDGEMENT_CONTEST"));
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("bounded memo resumes killed workers from saved responses and complete outputs, never reserved calls", async () => {
+  for (const stage of ["key-judgements", "writer"]) {
+    for (const phase of ["reserved", "response-saved", "recorded"]) {
+      const f = await memoFixture();
+      try {
+        const code = `
+          import { appendFile } from "node:fs/promises";
+          import { runBoundedMemo } from ${JSON.stringify(pathToFileURL(resolve("src/commands/bounded-memo.ts")).href)};
+          await runBoundedMemo(${JSON.stringify(f.root)},${JSON.stringify(f.runId)},"start","TESTER",${JSON.stringify(f.adjudicationPath)},{
+            afterReceipt:async (phase,stage)=>{if(phase===${JSON.stringify(phase)}&&stage===${JSON.stringify(stage)})process.exit(19);},
+            runModel:async input=>{
+              if(input.action==="models")return {models:[{id:"selection-test"},{id:"writer-test"}]};
+              await appendFile(${JSON.stringify(resolve(f.run, "fake-calls.jsonl"))},JSON.stringify(input.model)+"\\n");
+              return {invocationId:"subprocess-"+input.model,provider:"github-copilot-sdk",model:input.model,
+                startedAt:new Date().toISOString(),completedAt:new Date().toISOString(),freshSession:true,
+                content:JSON.stringify(input.model==="selection-test"?{selections:[{requirementId:"ir-01",claim:"c01",judgementText:"A review is reported."}],omissions:[]}:{statements:[]})};
+            }
+          });`;
+        const killed = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", code], { encoding: "utf8" });
+        assert.equal(killed.status, 19, killed.stderr);
+        const runner = memoRunner(f);
+        const result = await runBoundedMemo(f.root, f.runId, "resume", undefined, undefined, runner);
+        assert.equal(result.status, phase === "reserved" ? "indeterminate" : "memo-review", `${stage}/${phase}: ${JSON.stringify(result)}`);
+        assert.deepEqual(runner.calls, phase === "reserved" || stage === "writer" ? [] : ["writer"]);
+        const state = await inspectBoundedMemo(f.root, f.runId);
+        assert.equal(state.stages[stage as "writer" | "key-judgements"].remainingCalls, 0);
+        await runBoundedMemo(f.root, f.runId, "start", "ANOTHER", undefined, runner);
+        assert.deepEqual(runner.calls, phase === "reserved" || stage === "writer" ? [] : ["writer"]);
+      } finally { await rm(f.root, { recursive: true, force: true }); }
+    }
+  }
+});
+
+test("bounded memo cannot refill transport or invalid-output failures and does not advance later stages", async () => {
+  for (const scenario of ["transport", "bad-selection", "bad-writer", "changed-adjudication", "changed-model-identity", "unavailable-model"]) {
+    const f = await memoFixture();
+    try {
+      const runner = memoRunner(f, stage => scenario === "bad-writer" && stage === "writer" ||
+        scenario === "bad-selection" && stage === "key-judgements" ? { notAllowed: true }
+        : stage === "writer" ? { statements: [] }
+          : { selections: [{ requirementId: "ir-01", claim: "c01", judgementText: "A review is reported." }], omissions: [] });
+      const runModel: MemoEffects["runModel"] = async input => {
+        assert.ok(typeof input === "object" && input !== null && "action" in input);
+        if (input.action === "models" && scenario === "unavailable-model") return { models: [] };
+        if (input.action === "generate" && scenario === "transport") { runner.calls.push("key-judgements"); throw new Error("Synthetic transport interrupted"); }
+        const result = await runner.runModel(input);
+        if (input.action === "generate" && scenario === "changed-model-identity") return { ...(result as object), model: "substituted-model" };
+        if (input.action === "models" && scenario === "changed-adjudication") {
+          const value = await read(f.adjudicationPath);
+          await json(f.adjudicationPath, { ...value, id: "changed-after-authorization" });
+        }
+        return result;
+      };
+      const result = await runBoundedMemo(f.root, f.runId, "start", "TESTER", f.adjudicationPath, { runModel });
+      assert.equal(result.status, "blocked", `${scenario}: ${JSON.stringify(result)}`);
+      const count = runner.calls.length;
+      const again = await runBoundedMemo(f.root, f.runId, "start", "TESTER", f.adjudicationPath, { runModel });
+      assert.equal(again.status, "blocked", JSON.stringify(again));
+      assert.equal(runner.calls.length, count);
+      assert.equal((await allFiles(f.run)).filter(path => basename(path) === "memo.json").length, 0);
+      if (scenario === "changed-adjudication" || scenario === "unavailable-model") assert.equal(count, 0);
+      if (scenario === "bad-writer") assert.equal(count, 2);
+      else if (scenario !== "changed-adjudication" && scenario !== "unavailable-model") assert.equal(count, 1);
+    } finally { await rm(f.root, { recursive: true, force: true }); }
+  }
+});
+
+test("bounded memo refuses proposed adjudication and consumed existing requests before granting authority", async () => {
+  for (const scenario of ["proposed", "consumed", "ambiguous", "scope"]) {
+    const f = await memoFixture();
+    try {
+      if (scenario === "proposed") {
+        const adjudication = await read(f.adjudicationPath);
+        await json(f.adjudicationPath, { ...adjudication, adjudicationStatus: "proposed" });
+      } else if (scenario === "scope") {
+        const question = await read(f.questionPath);
+        const scope = await read(question.scopeApproval.artifactRef);
+        await json(question.scopeApproval.artifactRef, { ...scope, status: "proposed" });
+      } else {
+        const adjudication = await read(f.adjudicationPath);
+        const request = command("prepare-key-judgements", [
+          adjudication.buildRecord.artifactRef, adjudication.challengeRecord.artifactRef,
+          f.adjudicationPath, resolve("src/modules/memo/standards/memo-standard-v1.json")
+        ], f.root);
+        if (scenario === "consumed") await json(resolve(dirname(request), "generation-attempt.json"), { earlierAttempt: true });
+        else command("prepare-key-judgements", [
+          adjudication.buildRecord.artifactRef, adjudication.challengeRecord.artifactRef,
+          f.adjudicationPath, resolve("src/modules/memo/standards/memo-standard-v1.json")
+        ], f.root);
+      }
+      const runner = memoRunner(f);
+      const result = await runBoundedMemo(f.root, f.runId, "start", "TESTER", f.adjudicationPath, runner);
+      assert.equal(result.status, "blocked", `${scenario}: ${JSON.stringify(result)}`);
+      assert.deepEqual(runner.calls, []);
+      assert.equal((await allFiles(f.memoDirectory)).some(path => basename(path) === "authorization.json"), false);
+    } finally { await rm(f.root, { recursive: true, force: true }); }
+  }
+});
+
+test("bounded memo reuses existing selection and writer records with zero new calls", async () => {
+  const f = await memoFixture();
+  try {
+    const adjudication = await read(f.adjudicationPath);
+    const request = command("prepare-key-judgements", [
+      adjudication.buildRecord.artifactRef, adjudication.challengeRecord.artifactRef,
+      f.adjudicationPath, resolve("src/modules/memo/standards/memo-standard-v1.json")
+    ], f.root);
+    const value = await read(request);
+    const response = resolve(dirname(request), "copilot-response.json");
+    await json(response, { schemaVersion: "key-judgement-copilot-response-v1", requestId: value.id,
+      invocationId: "previous-selection", provider: "github-copilot-sdk", model: "selection-test",
+      startedAt: now(), completedAt: now(), freshSession: true, capturedBy: "TESTER",
+      proposal: { selections: [{ requirementId: "ir-01", claim: "c01", judgementText: "A review is reported." }], omissions: [] } });
+    const selection = command("record-key-judgements", [request, response], f.root);
+    const writer = command("prepare-memo-writer", [adjudication.buildRecord.artifactRef, adjudication.challengeRecord.artifactRef,
+      f.adjudicationPath, selection, f.questionPath, resolve("src/modules/memo/standards/memo-standard-v1.json")], f.root);
+    const writerValue = await read(writer);
+    const writerResponse = resolve(dirname(writer), "copilot-response.json");
+    await json(writerResponse, { schemaVersion: "memo-writer-copilot-response-v1", requestId: writerValue.id,
+      invocationId: "previous-writer", provider: "github-copilot-sdk", model: "writer-test",
+      startedAt: now(), completedAt: now(), freshSession: true, capturedBy: "TESTER", proposal: { statements: [] } });
+    command("record-memo-writer", [writer, writerResponse], f.root);
+    const runner = memoRunner(f);
+    const result = await runBoundedMemo(f.root, f.runId, "start", "TESTER", f.adjudicationPath, runner);
+    assert.equal(result.status, "memo-review", JSON.stringify(result));
+    assert.deepEqual(runner.calls, []);
+    assert.equal((await inspectBoundedMemo(f.root, f.runId)).maxCalls, 0);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("bounded memo concurrent starts cannot change frozen Settings or include later source notes", async () => {
+  const f = await memoFixture();
+  try {
+    const runner = memoRunner(f);
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>(resolve => { release = resolve; });
+    const ready = new Promise<void>(resolve => { entered = resolve; });
+    const active = runBoundedMemo(f.root, f.runId, "start", "TESTER", f.adjudicationPath, {
+      runModel: async input => {
+        if (typeof input === "object" && input !== null && "action" in input && input.action === "generate" &&
+            "model" in input && input.model === "selection-test") { entered(); await waiting; }
+        return runner.runModel(input);
+      }
+    });
+    await ready;
+    try {
+      assert.equal((await runBoundedMemo(f.root, f.runId, "start", "ANOTHER", undefined, runner)).status, "running");
+      await json(resolve(f.root, ".copilot-settings.json"), { model: "later-model" });
+      await json(resolve(f.run, "assurance", "later-source", "source-note-reviewed.json"), { later: true });
+    } finally { release(); }
+    const result = await active;
+    assert.equal(result.status, "memo-review", JSON.stringify(result));
+    assert.deepEqual(runner.calls, ["key-judgements", "writer"]);
+    const execution = await inspectBoundedMemo(f.root, f.runId);
+    assert.equal(execution.authority.stages.writer.model, "writer-test");
+    assert.equal(execution.authority.lineage.some(binding => binding.artifactRef.includes("later-source")), false);
+    const markdown = resolve(dirname(execution.stages.writer.record!.artifactRef), "memo.md");
+    await writeFile(markdown, "Changed handoff");
+    await assert.rejects(inspectBoundedMemo(f.root, f.runId), /rendering changed/);
+    assert.equal((await runBoundedMemo(f.root, f.runId, "resume", undefined, undefined, runner)).status, "blocked");
+    assert.deepEqual(runner.calls, ["key-judgements", "writer"]);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("bounded memo excludes rejected claims while allowing a gap-only draft", async () => {
+  const f = await memoFixture();
+  try {
+    const adjudication = await read(f.adjudicationPath);
+    adjudication.claims.forEach((claim: { status: string }) => { claim.status = "rejected"; });
+    await json(f.adjudicationPath, adjudication);
+    const runner = memoRunner(f);
+    const result = await runBoundedMemo(f.root, f.runId, "start", "TESTER", f.adjudicationPath, runner);
+    assert.equal(result.status, "memo-review", JSON.stringify(result));
+    const execution = await inspectBoundedMemo(f.root, f.runId);
+    const writer = await read(execution.stages.writer.record!.artifactRef);
+    assert.equal(writer.memo.keyJudgments.length, 0);
+    assert.ok(writer.memo.gaps.length);
+    assert.equal(writer.verification.publicationVerdict, "block");
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("bounded memo pauses related and unknown exceptions without blocking a provably unrelated source", async () => {
+  for (const scope of ["related", "unknown", "unrelated", "mixed"]) {
+    const f = await memoFixture();
+    try {
+      const refs: ArtifactBinding[] = [];
+      if (scope === "related") refs.push((await loadJsonArtifact(f.notePath)).binding);
+      if (scope === "unknown" || scope === "mixed") refs.push(await json(resolve(f.run, "unknown.json"), { unknown: true }));
+      if (scope === "unrelated" || scope === "mixed") {
+        const document = createSourceDocument({ runId: f.runId, sourceItemId: "unrelated-source",
+          sourceKind: "retrieved-publisher", contentFormat: "markdown", body: "An unrelated captured source.",
+          sourceArtifactRef: artifactRef(resolve(f.run, "unrelated-raw.json")), sourceArtifactSha256: "d".repeat(64), lineageArtifactRefs: [] });
+        assert.ok(document.ok);
+        refs.push(await json(resolve(f.run, "sources", "unrelated-source", "source-document.json"), document.value));
+      }
+      const exception = createOpenExceptionItem({ runId: f.runId, kind: "bounded-failure", refs, raisedAt: now() });
+      assert.ok(exception.ok);
+      await json(resolve(f.run, "exceptions", exception.value.id, "exception-item.json"), exception.value);
+      const runner = memoRunner(f);
+      const result = await runBoundedMemo(f.root, f.runId, "start", "TESTER", f.adjudicationPath, runner);
+      assert.equal(result.status, scope === "unrelated" ? "memo-review" : "blocked", `${scope}: ${JSON.stringify(result)}`);
+      assert.equal(runner.calls.length, scope === "unrelated" ? 2 : 0);
+    } finally { await rm(f.root, { recursive: true, force: true }); }
+  }
+});
 
 test("one start runs Build then zero-yield Challenge, concurrent/repeated starts and refresh do not call again", async () => {
   const f = await fixture();

@@ -64,6 +64,16 @@ but must resolve inside that run. Existing lineage is not rewritten; new
 adjudications bind the Challenge using the recorder's app-relative reference
 convention so checksum-bound selection can reopen it consistently.
 
+After performed adjudication, Findings offers **Start selection and writing**.
+This explicitly freezes the round, evidence lineage, memo standard and Settings
+models, allowing at most one missing selection call and one writer call. Saved
+responses can finish on resume; ambiguous or failed calls are never retried.
+Status, frozen model identities and recovery errors remain visible, and manual
+model/paste-back controls cannot add authority. Complete output stops at
+**Review memo draft**, with deterministic verification and a blocked publication
+gate. Publication is not authorized by this action. See
+[`bounded-memo-execution.md`](../../02-Contracts/bounded-memo-execution.md).
+
 **Evidence → Collect a bounded batch** selects one of the two observed feeds,
 records a real permission-review reference, and explicitly approves a one-shot
 RSS batch policy under the operator's analyst ID. Choose 1-5 sources/relevance

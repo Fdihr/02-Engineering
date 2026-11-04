@@ -4,14 +4,14 @@ const path = require('node:path');
 const { test } = require('node:test');
 const { JSDOM } = require('jsdom');
 
-function harness(journey, pane, execution = null, drafts = {}) {
+function harness(journey, pane, execution = null, drafts = {}, memoExecution = null) {
   const dom = new JSDOM('<main><div id="pane-synthesis"></div><div id="pane-sources"></div></main>', { runScripts: 'outside-only' });
   const { document, Event } = dom.window;
   const actions = [];
   let sequence = 0;
   const C = {
     state: {
-      runId: 'fixture', view: { boundedSynthesis: execution }, drafts, expanded: {}, openRounds: {},
+      runId: 'fixture', view: { boundedSynthesis: execution, boundedMemo: memoExecution }, drafts, expanded: {}, openRounds: {},
       evidenceView: 'explorer', sourceFilter: 'all', sourceQuery: ''
     },
     panes: {}, journey: () => journey,
@@ -70,7 +70,7 @@ function harness(journey, pane, execution = null, drafts = {}) {
     },
     textInput: (key, fallback, placeholder, multiline) => C.bindDraft(C.el(multiline ? 'textarea' : 'input'), key, fallback),
     postAction: payload => { actions.push(payload); return Promise.resolve({ ok: false }); },
-    dropDrafts() {}, go() {},
+    dropDrafts() {}, go() {}, navigate: route => actions.push({ route }),
     replace: (host, child) => host.replaceChildren(child),
     render: () => C.panes[pane]()
   };
@@ -122,6 +122,39 @@ function findingJourney() {
     readiness: { noteCount: 1, newNotes: [], inFlight: [], provisionalNotes: 0, canBuild: false, currentRoundComplete: false }
   };
 }
+
+test('adjudicated Findings explicitly starts bounded memo work with the selected round', () => {
+  const journey = findingJourney();
+  journey.rounds[0].adjudicationStatus = 'adjudicated';
+  journey.rounds[0].adjudicationPath = 'synthesis/adjudication/c1/performed-adjudication.json';
+  journey.rounds[0].steps = [{ key: 'key-judgements', state: 'ready', label: 'Key judgements', action: {} }];
+  const h = harness(journey, 'synthesis');
+  assert.match(h.document.body.textContent, /Publication is not authorized/);
+  h.button('Start selection and writing').click();
+  assert.deepEqual(JSON.parse(JSON.stringify(h.actions[0])), {
+    action: 'start-bounded-memo', runId: 'fixture', reviewerId: 'TESTER',
+    adjudicationPath: journey.rounds[0].adjudicationPath
+  });
+});
+
+test('bounded memo exposes resume and recovery without competing model controls', () => {
+  const journey = findingJourney();
+  journey.rounds[0].adjudicationStatus = 'adjudicated';
+  journey.rounds[0].steps = [{ key: 'memo', state: 'ai', label: 'Memo', action: {} }];
+  const h = harness(journey, 'synthesis', null, {}, { authorized: true, status: 'response-saved', remainingCalls: 1 });
+  h.button('Resume bounded memo work').click();
+  assert.equal(h.actions[0].action, 'resume-bounded-memo');
+  assert.doesNotMatch(h.document.body.textContent, /Run the AI memo writer|Manual compatibility controls/);
+  const stopped = harness(journey, 'synthesis', null, {}, { authorized: true, status: 'indeterminate', remainingCalls: 0 });
+  assert.equal(stopped.button('Start selection and writing'), undefined);
+  assert.equal(stopped.button('Resume bounded memo work'), undefined);
+  assert.match(stopped.document.body.textContent, /cannot grant more calls/);
+  const complete = harness(journey, 'synthesis', null, {}, { authorized: true, status: 'memo-review', remainingCalls: 0 });
+  assert.ok(complete.button('Review memo draft'));
+  complete.button('Review memo draft').click();
+  assert.equal(complete.actions[0].route, 'review');
+  assert.equal(complete.button('Resume bounded memo work'), undefined);
+});
 
 test('review compares labelled statements and quotes, and never pre-approves verdicts', () => {
   const h = harness(reviewJourney(), 'sources');

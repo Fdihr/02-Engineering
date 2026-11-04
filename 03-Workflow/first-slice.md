@@ -59,6 +59,25 @@ this slice. CLI `run:next` reports bounded status/resume instead of advancing
 later work. No live model/provider run is implied by implementation or tests.
 See [authorization, receipts and recovery limits](../02-Contracts/bounded-synthesis-execution.md).
 
+## Implemented bounded selection and writing (2026-11-04)
+
+After performed human adjudication, Findings has a separate explicit bounded
+start for key-judgement selection and writer v2. It freezes the adjudicated
+round, approved question/scope and source lineage, policy/standard and Settings
+models, reuses validated existing work, and grants at most one generation per
+missing stage. Saved outputs can finish deterministic recording after restart;
+reserved but unsaved invocations cannot replay. Failed attempts never receive
+replacement allowance from refresh, start or resume.
+
+Existing eligibility and writer recorders preserve rejected/contested status,
+confidence ceilings, key-judgement wording, omissions, evidence gaps and caveats.
+The complete draft, Markdown, deterministic verification and blocked publication
+gate lead to human memo review. Publication remains a separate human decision;
+the provisional standard and any unresolved contests still block it. This slice
+has synthetic coverage only and does not execute or change the live analysis.
+CLI `run:next` reports memo status/resume before the earlier synthesis handoff.
+See [the active contract](../02-Contracts/bounded-memo-execution.md).
+
 ## Product boundary
 
 **Current implementation update (2026-11-02):** Firecrawl source retrieval and its Settings key
