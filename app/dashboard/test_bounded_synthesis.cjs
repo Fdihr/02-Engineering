@@ -35,6 +35,7 @@ function render(execution, noteCount = 1) {
     el: (tag, cls, text) => new Element(tag, text),
     add: (parent, ...children) => { children.filter(Boolean).forEach(child => parent.appendChild(child)); return parent; },
     analyst: () => 'TESTER', sectionHead: title => new Element('h2', title),
+    linkButton: title => new Element('button', title),
     actButton: (title, cls, callback, ignored, disabled) => {
       const button = new Element('button', title);
       button.disabled = Boolean(disabled);

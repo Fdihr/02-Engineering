@@ -282,7 +282,8 @@ def _rounds(run_id: str, full: dict[str, Any], adjudications: list[dict[str, Any
             steps.append(_step("adjudicate", "Adjudicate", "done", detail))
         elif adjudication:
             raised = sum(len(c["challenges"]) for c in adjudication["claims"])
-            steps.append(_step("adjudicate", "Adjudicate", "you", f"{raised} challenges need your decision", {"kind": "adjudicate", "challengeRecordPath": challenge_rel}))
+            detail = f"{raised} challenges need your decision" if raised else f"Review {len(adjudication['claims'])} claims · no challenges raised"
+            steps.append(_step("adjudicate", "Adjudicate", "you", detail, {"kind": "adjudicate", "challengeRecordPath": challenge_rel}))
         else:
             steps.append(_step("adjudicate", "Adjudicate", "todo"))
 

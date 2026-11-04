@@ -33,6 +33,12 @@ The source support form uses `reviewPolicyVersion: "support-review-v2"`:
 statements sit beside their quotes, every statement needs an explicit verdict,
 and question coverage starts from the model proposal. Explanations are required
 only for unsupported/page-chrome verdicts, changed links, or contradictions.
+A live checked/exception count keeps progress visible. The explicit bulk action
+marks only unchecked statements supported; it never replaces existing concerns
+or duplicate choices. Source details, optional concerns and the provisional
+skip path are progressively disclosed. Review has a wider reading column and
+stacks statement/quote comparisons on small screens. Review recording, source-note
+assembly and metrics use the active server's run root, including isolated runs.
 A duplicate needs an earlier statement as its target. The optional source
 concern follows the note as a caveat. The mandatory reliability questionnaire
 is gone; skipped source assessment is explicitly `not-assessed`, not a positive
@@ -41,6 +47,16 @@ not an omission pass or publication approval. The endpoint rejects missing
 verdicts and explanations before writing a response. Unversioned submissions
 retain the historical full-assessment rules. Existing failed responses are
 preserved, not repaired or approved automatically.
+
+Findings puts the current round, fixed evidence inputs, Build/Challenge status,
+limitations and the next decision above claim browsing. Current adjudication is
+expanded, including a checked Challenge with zero findings; previous rounds and
+manual stage controls remain available separately. Before key-judgement selection,
+question grouping uses only persisted observation links shared by a claim and
+the recorded coverage, never a shared source identity or inferred relevance.
+Unlinked claims and evidence gaps remain explicit. Supporting observations and
+round records are inspectable without advancing approvals. UI interactions do
+not create new execution authority.
 
 **Evidence → Collect a bounded batch** selects one of the two observed feeds,
 records a real permission-review reference, and explicitly approves a one-shot

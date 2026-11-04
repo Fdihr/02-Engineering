@@ -557,6 +557,7 @@ C.panes.settings();
             status, result = _handle_analyst_action(runs_root, stage, base)
         self.assertEqual(status, 200, result)
         self.assertEqual([c.args[0] for c in runner.call_args_list], ["record:assurance-review", "assemble:assurance", "measure:assurance"])
+        self.assertTrue(all(c.kwargs["runs_root"] == runs_root for c in runner.call_args_list))
         self.assertEqual(runner.call_args_list[1].args[1][0], "runs/d1/approved-evidence-snapshot.json")
         response = json.loads(next((stage / "review").glob("review-response-*.json")).read_text(encoding="utf-8"))
         self.assertEqual(response["supportPass"], "performed")
