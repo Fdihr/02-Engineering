@@ -455,7 +455,7 @@ def _handle_assurance_review(runs_root: Path, payload: dict[str, Any]) -> tuple[
     _write_json(review_dir / response_name, response)
 
     stage_ref = f"runs/{run_id}/assurance/{snapshot_id}"
-    steps = [_run_npm_script("record:assurance-review", [f"{stage_ref}/review/review-package.json", f"{stage_ref}/review/{response_name}"])]
+    steps = [_run_npm_script("record:assurance-review", [f"{stage_ref}/review/review-package.json", f"{stage_ref}/review/{response_name}"], runs_root=runs_root)]
     record_ref = _stdout_field(steps[0], "Output")
     snapshot_ref = ""
     for request_file in sorted(Path(_fs_path(stage_dir / "extract")).glob("attempt-*/extract-request.json")):
@@ -466,10 +466,10 @@ def _handle_assurance_review(runs_root: Path, payload: dict[str, Any]) -> tuple[
         assemble_args = [snapshot_ref, f"{stage_ref}/extract/extract-commit.json", record_ref]
         if payload.get("mode") == "performed" and Path(_fs_path(stage_dir / "source-note-provisional.json")).is_file():
             assemble_args.append(f"{stage_ref}/source-note-provisional.json")
-        steps.append(_run_npm_script("assemble:assurance", assemble_args))
+        steps.append(_run_npm_script("assemble:assurance", assemble_args, runs_root=runs_root))
         note_ref = _stdout_field(steps[-1], "Output")
         if steps[-1]["ok"] and note_ref:
-            steps.append(_run_npm_script("measure:assurance", [note_ref, f"{stage_ref}/extract", record_ref]))
+            steps.append(_run_npm_script("measure:assurance", [note_ref, f"{stage_ref}/extract", record_ref], runs_root=runs_root))
     succeeded = all(step["ok"] for step in steps)
     return (200 if succeeded else 400), {"ok": succeeded, "runId": run_id, "steps": steps, "error": "" if succeeded else steps[-1]["stderr"]}
 

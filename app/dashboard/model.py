@@ -5,6 +5,7 @@ import json
 import math
 import re
 from collections import defaultdict
+from os.path import abspath
 from pathlib import PurePath
 from typing import Any
 
@@ -794,9 +795,10 @@ def _canonical_run_bindings(value: Any, run_id: str, run_directory: str, availab
         return value
     result = {}
     for key, item in value.items():
-        if key == "artifactRef" and isinstance(item, str) and PurePath(item).is_absolute():
+        if key == "artifactRef" and isinstance(item, str):
+            candidate = PurePath(abspath(PurePath(__file__).parent.parent / item))
             try:
-                local = PurePath(item).relative_to(PurePath(run_directory))
+                local = candidate.relative_to(PurePath(abspath(run_directory)))
             except ValueError:
                 local = None
             if local is not None and ".." not in local.parts and local.as_posix() in available:

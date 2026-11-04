@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import threading
 import unittest
@@ -188,6 +189,35 @@ class BoundedSynthesisTests(unittest.TestCase):
         self.assertEqual(next(step for step in rounds[0]["steps"] if step["key"] == "adjudicate")["state"], "you")
         outside = {"artifactRef": str(self.root / "elsewhere" / request)}
         self.assertEqual(_canonical_run_bindings(outside, self.run.name, str(self.run), set(documents)), outside)
+
+    def test_app_relative_bindings_connect_only_known_artifacts_in_the_active_run(self):
+        app = Path(__file__).resolve().parent.parent
+        build = "synthesis/records/build-1/synthesis-build-record.json"
+        request = "synthesis/requests/build-1/build-request.json"
+        challenge = "synthesis/challenge/records/challenge-1/challenge-record.json"
+        ref = lambda path: os.path.relpath(path, app).replace("\\", "/")
+        documents = {
+            request: {"preparedAt": "2026-01-01T00:00:00Z"},
+            build: {"recordedAt": "2026-01-01T00:00:01Z",
+                    "request": {"artifactRef": ref(self.run / request)},
+                    "synthesis": {"claims": [{"id": "claim-1", "statement": "A review was announced."}]}},
+            challenge: {"recordedAt": "2026-01-01T00:00:02Z",
+                        "buildRecord": {"artifactRef": ref(self.run / build)},
+                        "results": [], "metrics": {"challengesRaised": 0}},
+        }
+        original = json.dumps(documents)
+        normalized = _canonical_run_bindings(documents, self.run.name, str(self.run), set(documents))
+        self.assertEqual(json.dumps(documents), original)
+        self.assertEqual(_build_ai_queue(self.run.name, normalized)[0]["status"], "recorded")
+        adjudications = _build_adjudications(self.run.name, normalized)
+        self.assertEqual(len(adjudications[0]["claims"]), 1)
+        rounds, _ = _rounds(self.run.name, normalized, adjudications, _build_ai_queue(self.run.name, normalized))
+        self.assertEqual(rounds[0]["challengeStatus"], "checked")
+        self.assertEqual(next(step for step in rounds[0]["steps"] if step["key"] == "adjudicate")["state"], "you")
+        for path in [self.root / "elsewhere" / build, self.run / "missing.json"]:
+            with self.subTest(path=path):
+                binding = {"artifactRef": ref(path)}
+                self.assertEqual(_canonical_run_bindings(binding, self.run.name, str(self.run), set(documents)), binding)
 
 
 if __name__ == "__main__":

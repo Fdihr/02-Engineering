@@ -790,20 +790,33 @@
     parts.push(el('p', 'meta prose', review.status === 'provisional'
       ? 'This source was recorded without the support pass. Its note is provisional and blocks publication. Complete the review to replace it.'
       : 'Check the statements against their quotes. Confirm those that hold up and flag only what needs correcting. This checks support, not whether the source is true.'));
-    parts.push(el('h3', null, 'Do the quotes support the statements?'));
-    var bulk = el('button', 'btn-secondary', 'I checked the quotes — mark all supported');
+    var reviewHead = el('div', 'review-toolbar');
+    var progress = el('p', 'meta');
+    progress.setAttribute('role', 'status');
+    progress.setAttribute('aria-live', 'polite');
+    var bulk = el('button', 'btn-secondary', 'I checked the remaining quotes — mark supported');
     bulk.type = 'button';
     bulk.addEventListener('click', function () {
-      review.observations.forEach(function (o, idx) { state.drafts[key + 'v' + idx] = 'supported'; });
+      review.observations.forEach(function (o, idx) {
+        if (!state.drafts[key + 'v' + idx]) state.drafts[key + 'v' + idx] = 'supported';
+      });
       C.render(true);
     });
-    parts.push(add(el('div', 'btn-row'), bulk));
+    parts.push(add(reviewHead, progress, bulk));
     var obsList = el('ol', 'review-obs');
     var verdicts = [];
+    var updateProgress = function () {
+      var checked = verdicts.filter(function (v) { return Boolean(v.verdict.value); }).length;
+      var flagged = verdicts.filter(function (v) { return v.verdict.value && v.verdict.value !== 'supported'; }).length;
+      progress.textContent = checked + ' of ' + review.observations.length + ' statements checked' + (flagged ? ' · ' + plural(flagged, 'exception') : '');
+      bulk.disabled = state.busy || checked === review.observations.length;
+    };
     review.observations.forEach(function (obs, idx) {
-      var li = el('li');
-      add(li, add(el('div', 'review-comparison'), el('div', 'review-statement', obs.text), el('blockquote', 'quote', obs.quote)),
-        el('div', 'meta', capital(humanise(obs.claimKind)) + ' · ' + humanise(obs.attribution) + (obs.attributedTo ? ' (' + obs.attributedTo + ')' : '') + ' · ' + (obs.irIds.length ? obs.irIds.join(', ') : 'no requirement')));
+      var li = el('li', 'review-observation');
+      var statement = add(el('div'), el('div', 'comparison-label', 'Statement ' + (idx + 1)), el('p', 'review-statement', obs.text));
+      var quote = add(el('div'), el('div', 'comparison-label', 'Source quote'), el('blockquote', 'quote', obs.quote));
+      add(li, add(el('div', 'review-comparison'), statement, quote),
+        el('div', 'meta review-attribution', capital(humanise(obs.claimKind)) + ' · ' + humanise(obs.attribution) + (obs.attributedTo ? ' (' + obs.attributedTo + ')' : '') + ' · ' + (obs.irIds.length ? obs.irIds.join(', ') : 'no question link')));
       var verdict = C.selectInput([['', 'Choose…'], ['supported', 'Supported'], ['unsupported', 'Unsupported'], ['duplicate', 'Duplicate of an earlier one'], ['chrome', 'Page chrome']], key + 'v' + idx);
       var dup = C.selectInput([['', 'Duplicate of…']].concat(review.observations.slice(0, idx).map(function (o, k) { return [o.observationId, (k + 1) + '. ' + o.text.slice(0, 60)]; })), key + 'd' + idx);
       var dupField = C.field('Duplicate of', dup);
@@ -814,14 +827,17 @@
       var noteField = C.field('Explain the concern', note);
       var updateVerdict = function () {
         noteField.hidden = !['unsupported', 'chrome'].includes(verdict.value) && !note.value.trim();
+        li.setAttribute('data-verdict', verdict.value);
+        updateProgress();
       };
       verdict.addEventListener('change', updateVerdict);
-      updateVerdict();
       add(li, add(el('div', 'review-row'), C.field('Quote support', verdict), dupField, noteField));
       if (obs.attribution === 'relayed') add(li, el('p', 'meta', 'Relayed reporting: keep the named upstream attribution; this quote is not independent corroboration.'));
       verdicts.push({ observationId: obs.observationId, verdict: verdict, duplicateOf: dup, note: note });
+      updateVerdict();
       obsList.appendChild(li);
     });
+    updateProgress();
     parts.push(obsList);
     var coverage = el('details', 'review-coverage');
     coverage.open = Boolean(state.expanded[key + 'coverage']);
@@ -847,12 +863,15 @@
       coverage.appendChild(box);
     });
     parts.push(coverage);
-    parts.push(el('h3', null, 'Any source concern?'));
-    parts.push(el('p', 'meta prose', 'Optional. Flag a material problem, such as unclear attribution or misleading context. Skipping this leaves source reliability and reporting dependency unassessed — it does not mark them as good.'));
+    var sourceConcern = el('details', 'review-coverage');
+    sourceConcern.open = Boolean(state.drafts[key + 'concern']);
+    add(sourceConcern, el('summary', null, 'Source concern (optional)'),
+      el('p', 'meta prose', 'Flag unclear attribution, misleading context or another material concern. Source reliability and reporting dependency otherwise remain unassessed, not approved.'));
     var concern = C.textInput(key + 'concern', '', 'Describe a concern only if there is one', true);
     concern.maxLength = 2000;
-    parts.push(C.field('Source concern (optional)', concern, true));
-    parts.push(el('p', 'meta prose', 'Confirming records your support verdicts and the question links above. It does not record a full-source omission pass or approve publication.'));
+    sourceConcern.appendChild(C.field('Describe the concern', concern, true));
+    parts.push(sourceConcern);
+    parts.push(el('p', 'meta prose', 'Record the checked statements and question links. Source credibility remains unassessed. This is not a full-source omission pass or publication approval.'));
     var problem = el('span', 'meta fail');
     problem.setAttribute('role', 'alert');
     problem.id = 'support-review-problem';
@@ -893,14 +912,18 @@
     }, true);
     var btns = el('div', 'btn-row');
     add(btns, submit);
-    if (review.status !== 'provisional') {
-      add(btns, C.actButton('Skip the support pass (provisional)', 'btn-secondary', function () {
-        C.postAction({ action: 'record-assurance-review', runId: state.runId, snapshotId: snap, reviewerId: C.analyst(), mode: 'provisional' }, 'Provisional review: ' + row.title);
-      }, true));
-    }
     add(btns, C.analyst() ? el('span', 'meta', 'Reviewing as ' + C.analyst()) : el('span', 'meta', 'Enter your analyst ID in the top bar first.'), problem);
     parts.push(btns);
-    return step(review.status === 'provisional' ? 'Complete the skipped support pass' : 'Check quote support', parts);
+    if (review.status !== 'provisional') {
+      var skip = el('details', 'trace review-skip');
+      add(skip, el('summary', null, 'Continue without a support review'),
+        el('p', 'meta prose', 'The source note will stay provisional and block publication. No statements will be marked as checked.'),
+        C.actButton('Skip the support pass (provisional)', 'btn-secondary', function () {
+          C.postAction({ action: 'record-assurance-review', runId: state.runId, snapshotId: snap, reviewerId: C.analyst(), mode: 'provisional' }, 'Provisional review: ' + row.title);
+        }, true));
+      parts.push(skip);
+    }
+    return step(review.status === 'provisional' ? 'Complete the skipped support pass' : 'Review statement support', parts);
   }
   function actionPanel(row) {
     var action = row.action;
@@ -977,14 +1000,21 @@
       if (!pair[1]) return;
       add(top, el('dt', null, pair[0]), add(el('dd'), pair[1]));
     });
-    add(d, top);
-    add(d, add(el('div', 'section-head'), el('h3', null, 'Next step')), actionPanel(row));
+    var reviewing = row.action && row.action.kind === 'review';
+    if (reviewing) {
+      var context = el('details', 'trace source-context');
+      add(context, el('summary', null, 'Source details'), top);
+      d.appendChild(context);
+    } else add(d, top);
+    add(d, actionPanel(row));
     var quotes = [];
-    if (row.review && row.review.observations) {
+    if (!reviewing && row.review && row.review.observations) {
       row.review.observations.forEach(function (o) { if (o && o.quote) quotes.push({ quote: o.quote, note: o.attribution || '' }); });
     }
     if (quotes.length) add(d, add(el('div', 'section-head'), el('h3', null, 'Quotes recorded in source review')), quoteList(quotes));
-    add(d, add(el('div', 'section-head'), el('h3', null, 'More about this source')), sourceFacts(row));
+    var facts = el('details', 'trace');
+    add(facts, el('summary', null, 'Source history and records'), sourceFacts(row));
+    d.appendChild(facts);
     return d;
   }
   function runNextButton() {
@@ -1412,7 +1442,8 @@
     var selectedEntry = model.explorer.filter(function (e) { return e.row.id === state.selectedSource; })[0];
     if (!selectedEntry || entries.indexOf(selectedEntry) < 0) selectedEntry = entries[0] || null;
     state.selectedSource = selectedEntry ? selectedEntry.row.id : '';
-    var inbox = el('div', 'inbox');
+    var reviewing = selectedEntry && selectedEntry.row.action && selectedEntry.row.action.kind === 'review';
+    var inbox = el('div', reviewing ? 'inbox review-workspace' : 'inbox');
     var listCol = el('div');
     if (!model.explorer.length) add(listCol, el('p', 'meta', model.pipeline.blocker ? 'No source records are available. Acquisition is blocked.' : 'No source records are available for this run.'));
     else if (!entries.length) add(listCol, el('p', 'meta', 'No sources match this search and filter.'));
@@ -1429,13 +1460,32 @@
   /* ================= Synthesis ================= */
   function adjudicationPanel(round) {
     var key = 'adj:' + round.index + ':';
-    var parts = [el('p', 'meta prose', 'The AI Challenge questioned the claims below. Uphold a challenge to keep it open (the claim stays contested and the memo says so), or dismiss it. You can also reject a claim outright.')];
+    var raised = round.claims.reduce(function (n, claim) { return n + claim.challenges.length; }, 0);
+    var parts = [el('p', 'prose', raised
+      ? plural(raised, 'challenge') + ' need your decision. Uphold to keep a claim contested, or dismiss with your reasoning. You can also reject a claim.'
+      : 'Challenge checked this round and raised no findings. Review the claims before recording your decision; no findings does not mean approval.')];
+    parts.push(el('p', 'meta', 'This decision advances the round to key-judgement selection, not publication.'));
     var challengeInputs = [];
     var rejectInputs = [];
     var list = el('ol', 'claim-list');
     round.claims.forEach(function (claim) {
       var li = el('li', 'claim');
       add(li, el('div', 'claim-text', claim.statement), el('div', 'meta', [claim.alias, capital(humanise(claim.kind)), (claim.confidence || 'unknown') + ' confidence', claim.singleSource ? 'single source' : ''].filter(Boolean).join(' · ')));
+      if (claim.confidenceRationale) add(li, el('p', 'meta prose', claim.confidenceRationale));
+      var evidence = el('details', 'trace');
+      add(evidence, el('summary', null, 'Supporting source observations'));
+      var notes = C.journey().notes;
+      claim.noteIds.forEach(function (id) {
+        var note = notes[id];
+        if (!note) return;
+        add(evidence, el('p', 'meta', note.title));
+        claim.observationIds.forEach(function (observationId) {
+          var observation = note.observations && note.observations[observationId];
+          if (observation) add(evidence, el('p', 'meta', observation.text), el('blockquote', 'quote', observation.quote));
+        });
+        add(evidence, C.artifactLink(note.relPath, 'Source note'));
+      });
+      li.appendChild(evidence);
       if (!claim.challenges.length) add(li, el('div', 'meta',
         round.challengeStatus === 'checked' ? 'No challenges raised.' :
         round.challengeStatus === 'pending' ? 'Challenge pending.' :
@@ -1461,9 +1511,14 @@
     });
     parts.push(list);
     var problem = el('span', 'meta fail');
+    problem.setAttribute('role', 'alert');
     var submit = C.actButton('Record adjudication', 'btn-primary', function () {
       var open = challengeInputs.filter(function (c) { return !c.decision.value; }).length;
-      if (open) { problem.textContent = open + ' challenge(s) still need a decision.'; return; }
+      if (open) {
+        problem.textContent = open + ' challenge(s) still need a decision.';
+        challengeInputs.filter(function (c) { return !c.decision.value; })[0].decision.focus();
+        return;
+      }
       problem.textContent = '';
       C.postAction({
         action: 'record-adjudication', runId: state.runId, challengeRecordPath: round.challengeRecordPath, reviewerId: C.analyst(),
@@ -1472,7 +1527,7 @@
       }, 'Adjudication of round ' + round.index).then(function (data) { if (data && data.ok) C.dropDrafts(key); });
     }, true);
     parts.push(add(el('div', 'btn-row'), submit, C.analyst() ? el('span', 'meta', 'Adjudicating as ' + C.analyst()) : el('span', 'meta', 'Enter your analyst ID in the top bar first.'), problem));
-    return step('Adjudicate the challenged claims', parts);
+    return step('Review claims and record adjudication', parts);
   }
   function claimsList(round, notes) {
     var list = el('ol', 'claim-list');
@@ -1500,7 +1555,9 @@
     var showingAdjudication = false;
     if (active) {
       var aiTitles = { challenge: 'Run the AI Challenge', 'key-judgements': 'Run the AI key-judgement selection', memo: 'Run the AI memo writer' };
-      if (active.state === 'ai') body.appendChild(step(aiTitles[active.key] || 'Run the AI step', [C.aiTask('stage', active.action.item)]));
+      var execution = state.view.boundedSynthesis;
+      var boundedChallenge = active.key === 'challenge' && execution && (execution.authorized === true || execution.authorizationId);
+      if (active.state === 'ai' && !boundedChallenge) body.appendChild(step(aiTitles[active.key] || 'Run the AI step', [C.aiTask('stage', active.action.item)]));
       else if (active.key === 'adjudicate') { body.appendChild(adjudicationPanel(round)); showingAdjudication = true; }
       else if (active.state === 'ready') {
         var payload = active.key === 'key-judgements'
@@ -1514,8 +1571,13 @@
     }
     if (!showingAdjudication) {
       var claims = el('section');
-      add(claims, C.sectionHead('Claims (' + round.claims.length + ')', 'h3'), claimsList(round, j.notes));
+      if (round.current) add(claims, claimGroups(j, round));
+      else add(claims, C.sectionHead('Claims (' + round.claims.length + ')', 'h3'), claimsList(round, j.notes));
       body.appendChild(claims);
+    } else {
+      var links = el('details', 'trace');
+      add(links, el('summary', null, 'Question links and coverage'), claimGroups(j, round));
+      body.appendChild(links);
     }
     if (round.keyJudgements) {
       var kj = el('section');
@@ -1535,7 +1597,7 @@
       kj.appendChild(list);
       body.appendChild(kj);
     }
-    if (round.coverage.length) {
+    if (!round.current && round.coverage.length) {
       var cov = el('section');
       add(cov, C.sectionHead('Requirement coverage', 'h3'));
       var cl = el('ul', 'rows');
@@ -1547,8 +1609,8 @@
       cov.appendChild(cl);
       body.appendChild(cov);
     }
-    var recs = el('div');
-    add(recs, el('div', 'form-label', 'Records'), C.artifactLink(round.buildPath, 'Build record'));
+    var recs = el('details', 'trace');
+    add(recs, el('summary', null, 'Round records'), C.artifactLink(round.buildPath, 'Build record'));
     if (round.challengeRecordPath) recs.appendChild(C.artifactLink(round.challengeRecordPath, 'Challenge record'));
     if (round.adjudicationPath) recs.appendChild(C.artifactLink(round.adjudicationPath, 'Adjudication'));
     if (round.keyJudgements) recs.appendChild(C.artifactLink(round.keyJudgements.path, 'Key-judgement record'));
@@ -1575,34 +1637,43 @@
     li.appendChild(marks);
     return li;
   }
-  function claimGroups(j) {
-    var round = j.rounds[j.rounds.length - 1];
+  function claimGroups(j, round) {
+    round = round || j.rounds[j.rounds.length - 1];
     if (!round || !round.claims.length) return null;
     var byId = {};
     round.claims.forEach(function (c) { byId[c.claimId] = c; });
     var selections = round.keyJudgements ? round.keyJudgements.selections : [];
     var coverage = {};
-    round.coverage.forEach(function (c) { coverage[c.irId] = c.disposition; });
+    round.coverage.forEach(function (c) { coverage[c.irId] = c; });
     var placed = {};
     var sec = el('section', 'finding-section');
-    add(sec, el('p', 'meta', 'Round ' + round.index + ' · ' + when(round.recordedAt)));
-    var n = 0;
+    add(sec, C.sectionHead(round.keyJudgements ? 'Selected findings by question' : 'Claims by evidence link', 'h3'));
+    if (!round.keyJudgements) add(sec, el('p', 'meta prose', 'Links below come from the recorded supporting observations. They are not selected key judgements or a claim that the question is fully answered.'));
     j.brief.requirements.forEach(function (req) {
-      var claims = selections.filter(function (s) { return s.requirementId === req.irId && byId[s.claimId]; }).map(function (s) { placed[s.claimId] = true; return byId[s.claimId]; });
+      var entry = coverage[req.irId];
+      var claims = round.keyJudgements
+        ? selections.filter(function (s) { return s.requirementId === req.irId && byId[s.claimId]; }).map(function (s) { return byId[s.claimId]; })
+        : round.claims.filter(function (c) {
+          return entry && (entry.observationIds || []).some(function (id) { return c.observationIds.indexOf(id) >= 0; });
+        });
+      claims.forEach(function (c) { placed[c.claimId] = true; });
       if (!claims.length && !coverage[req.irId]) return;
-      n += 1;
       var group = el('div', 'finding-group');
-      add(group, C.sectionHead('Research question ' + n, 'h3', el('span', 'meta', req.text)));
+      add(group, C.sectionHead(req.text, 'h4', coverageDot(entry && entry.disposition)));
       var list = el('ul', 'rows');
       claims.forEach(function (c) { list.appendChild(claimRow(c, round.challengeStatus)); });
-      if (!claims.length) add(list, add(el('li'), el('span', 'meta', 'No claim selected for this question.')));
+      if (!claims.length) add(list, add(el('li'), el('span', 'meta', round.keyJudgements
+        ? 'No key judgement selected for this question.'
+        : entry && ['silent', 'gap'].indexOf(entry.disposition) >= 0
+          ? 'No evidence recorded for this question in this round.'
+          : 'No claim has a recorded observation link to this question.')));
       group.appendChild(list);
       sec.appendChild(group);
     });
     var rest = round.claims.filter(function (c) { return !placed[c.claimId]; });
     if (rest.length) {
       var other = el('div', 'finding-group');
-      add(other, C.sectionHead(selections.length || round.coverage.length ? 'Other claims' : 'Claims in this round', 'h3', el('span', 'meta', String(rest.length))));
+      add(other, C.sectionHead(round.keyJudgements ? 'Claims not selected as key judgements' : 'Claims without a recorded question link', 'h4', el('span', 'meta', String(rest.length))));
       var ol = el('ul', 'rows');
       rest.forEach(function (c) { ol.appendChild(claimRow(c, round.challengeStatus)); });
       other.appendChild(ol);
@@ -1615,26 +1686,29 @@
     var host = $('pane-synthesis');
     if (!j) return;
     var frag = document.createDocumentFragment();
-    add(frag, analysisTabs('synthesis', j), claimGroups(j));
+    add(frag, analysisTabs('synthesis', j));
     var r = j.readiness;
+    var current = j.rounds[j.rounds.length - 1];
     var gate = el('section', 'gate');
     gate.id = 'focus-gate';
-    add(gate, C.sectionHead('Synthesis inputs', 'h2'));
-    add(gate, el('p', 'prose', plural(r.noteCount, 'assured source note') + (j.rounds.length ? ' · ' + (r.newNotes.length ? plural(r.newNotes.length, 'new note') + ' not in round ' + j.rounds[j.rounds.length - 1].index : 'all included in round ' + j.rounds[j.rounds.length - 1].index) : '') + '.'));
-    if (r.newNotes.length) add(gate, bullets(r.newNotes.map(function (n) { return n.title + (n.reviewStatus === 'provisional' ? ' (provisional)' : ''); })));
-    if (r.inFlight.length) {
-      add(gate, el('p', 'meta prose', 'Still in progress and not included if you build now:'), bullets(r.inFlight.map(function (s) { return s.title + ' — at ' + s.step.toLowerCase(); })));
+    add(gate, C.sectionHead(current ? 'Round ' + current.index : 'Build your first findings', 'h2',
+      current ? el('span', 'meta', when(current.recordedAt)) : null));
+    if (current) {
+      add(gate, el('p', 'prose', plural(current.claims.length, 'claim') + ' from ' + plural(current.noteIds.length, 'source note') + '.'),
+        C.lifecycle(current.steps));
+      if (current.limitedEvidence || current.reviewStatus === 'provisional') add(gate, el('p', 'round-caveat',
+        current.reviewStatus === 'provisional' ? 'Provisional evidence. This round cannot support publication until its review gaps are resolved.'
+          : 'Limited evidence. Keep the recorded source and confidence caveats with these claims.'));
     }
-    if (r.provisionalNotes) add(gate, el('p', 'meta', plural(r.provisionalNotes, 'note is', 'notes are') + ' provisional. A memo built on them cannot be published.'));
     var execution = state.view.boundedSynthesis;
     var authorizationExists = execution && (execution.authorized === true || Boolean(execution.authorizationId));
-    var waitingHuman = execution && execution.status === 'human-waiting';
+    var waitingHuman = Boolean(execution && execution.status === 'human-waiting') || Boolean(current && current.challengeStatus === 'checked');
     var stopped = execution && ['failed', 'blocked', 'indeterminate'].indexOf(execution.status) >= 0 && authorizationExists;
     var executing = execution && (execution.workerActive || execution.status === 'starting' || execution.status === 'running');
     var canStart = authorizationExists || r.noteCount > 0 || j.nextBuild || j.rounds.length > 0;
-    add(gate, el('p', 'meta prose', 'Bounded execution freezes this round and its source notes. One call per needed Build or Challenge stage, no automatic retries, then your adjudication. It does not collect, review sources, write or publish.'));
+    if (!current || !waitingHuman) add(gate, el('p', 'meta prose', 'One call per needed Build or Challenge stage, no automatic retries, then your adjudication. Inputs and model choices are frozen at start. This does not collect, review sources, write or publish.'));
     if (execution) {
-      var progress = el('div');
+      var progress = el('div', 'execution-status');
       progress.setAttribute('role', 'status');
       progress.setAttribute('aria-live', 'polite');
       add(progress, el('p', execution.error ? 'meta fail' : 'meta',
@@ -1654,30 +1728,53 @@
           'btn-primary', function () {
             C.postAction({ action: authorizationExists ? 'resume-bounded-synthesis' : 'start-bounded-synthesis',
               runId: state.runId, reviewerId: C.analyst() });
-          }, false, !canStart || Boolean(executing) || Boolean(stopped)),
+          }, true, !canStart || Boolean(executing) || Boolean(stopped)),
         stopped ? el('span', 'meta', 'Recovery requires inspection of the saved attempt; starting again will not grant more calls.') : null));
     } else {
-      add(gate, el('p', 'meta prose', 'Challenge is committed. Adjudicate this round below, including when it raised no findings.'));
+      add(gate, el('p', 'meta prose', current && current.adjudicationStatus === 'adjudicated'
+        ? 'Build and Challenge are complete. Your recorded adjudication is preserved; continue with the next step below.'
+        : 'Challenge is committed. Your adjudication is required below, including when it raised no findings.'));
     }
-    if (j.nextBuild) {
-      gate.appendChild(step('Round ' + j.nextBuild.index + ': run the AI synthesis Build', [C.aiTask('stage', j.nextBuild.item)]));
-    } else {
-      var label = j.rounds.length ? 'Build round ' + (j.rounds.length + 1) + ' from ' + plural(r.noteCount, 'note') : 'Build the first synthesis from ' + plural(r.noteCount, 'note');
-      var primary = !j.rounds.length || r.newNotes.length > 0;
-      var build = C.actButton(label, primary ? 'btn-primary' : 'btn-secondary', function () { C.postAction({ action: 'prepare-synthesis', runId: state.runId }); }, false, !r.canBuild || Boolean(authorizationExists));
-      var buildHint = !r.canBuild
-        ? r.noteCount === 0 ? 'Admit and review at least one source first.' :
-          !r.currentRoundComplete ? 'Complete the current synthesis round before starting another.' :
-          'A synthesis Build is already pending.'
-        : !primary ? 'No new notes since the last round; a rebuild uses the same inputs.' : null;
-      add(gate, add(el('div', 'btn-row'), build, buildHint ? el('span', 'meta', buildHint) : null));
+    var inputs = el('details', 'trace synthesis-inputs');
+    add(inputs, el('summary', null, 'Evidence inputs · ' + plural(r.noteCount, 'available note') + (r.newNotes.length ? ' · ' + plural(r.newNotes.length, 'not in this round') : '')));
+    if (current) {
+      add(inputs, el('p', 'meta', 'This round uses a fixed evidence snapshot. Later sources do not change its claims.'));
+      add(inputs, bullets(current.noteIds.map(function (id) { return (j.notes[id] && j.notes[id].title) || id; })));
+    }
+    if (r.newNotes.length) add(inputs, el('p', 'meta', 'Not in this round:'), bullets(r.newNotes.map(function (n) { return n.title + (n.reviewStatus === 'provisional' ? ' (provisional)' : ''); })));
+    if (r.inFlight.length) add(inputs, el('p', 'meta', 'Still in progress; not included:'), bullets(r.inFlight.map(function (s) { return s.title + ' — ' + s.step; })));
+    if (r.provisionalNotes) add(inputs, el('p', 'meta', plural(r.provisionalNotes, 'provisional note') + '. Provisional evidence blocks publication.'));
+    if (!r.noteCount) add(inputs, el('p', 'meta', 'Admit and review at least one source first.'));
+    add(inputs, C.linkButton('Open evidence workspace', function () { C.go({ tab: 'sources' }); }));
+    gate.appendChild(inputs);
+    if (!authorizationExists) {
+      var manual = el('details', 'trace');
+      add(manual, el('summary', null, 'Manual stage controls'));
+      if (j.nextBuild) {
+        manual.appendChild(step('Round ' + j.nextBuild.index + ': run the AI synthesis Build', [C.aiTask('stage', j.nextBuild.item)]));
+      } else {
+        var label = j.rounds.length ? 'Build round ' + (j.rounds.length + 1) + ' from ' + plural(r.noteCount, 'note') : 'Build the first synthesis from ' + plural(r.noteCount, 'note');
+        var primary = !j.rounds.length || r.newNotes.length > 0;
+        var build = C.actButton(label, 'btn-secondary', function () { C.postAction({ action: 'prepare-synthesis', runId: state.runId }); }, false, !r.canBuild);
+        var buildHint = !r.canBuild
+          ? r.noteCount === 0 ? 'Admit and review at least one source first.' :
+            !r.currentRoundComplete ? 'Complete the current synthesis round before starting another.' :
+            'A synthesis Build is already pending.'
+          : !primary ? 'No new notes since the last round; a rebuild uses the same inputs.' : null;
+        add(manual, add(el('div', 'btn-row'), build, buildHint ? el('span', 'meta', buildHint) : null));
+      }
+      gate.appendChild(manual);
+    } else if (current && r.newNotes.length) {
+      add(gate, el('p', 'meta', 'New evidence needs a new authorized round. This saved authorization cannot be refilled.'));
     }
     frag.appendChild(gate);
-
-    if (!j.rounds.length) {
-      add(frag, el('p', 'meta', 'No synthesis round yet.'));
+    if (current) {
+      var currentBody = roundBody(current, j);
+      currentBody.className = 'current-round';
+      currentBody.id = 'round-' + current.index;
+      frag.appendChild(currentBody);
     }
-    j.rounds.slice().reverse().forEach(function (round) {
+    j.rounds.slice(0, -1).reverse().forEach(function (round) {
       var det = el('details', 'round');
       det.id = 'round-' + round.index;
       det.open = round.current ? state.openRounds[round.index] !== false : Boolean(state.openRounds[round.index]);
