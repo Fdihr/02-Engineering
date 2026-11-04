@@ -1436,7 +1436,10 @@
     round.claims.forEach(function (claim) {
       var li = el('li', 'claim');
       add(li, el('div', 'claim-text', claim.statement), el('div', 'meta', [claim.alias, capital(humanise(claim.kind)), (claim.confidence || 'unknown') + ' confidence', claim.singleSource ? 'single source' : ''].filter(Boolean).join(' · ')));
-      if (!claim.challenges.length) add(li, el('div', 'meta', 'No challenges raised.'));
+      if (!claim.challenges.length) add(li, el('div', 'meta',
+        round.challengeStatus === 'checked' ? 'No challenges raised.' :
+        round.challengeStatus === 'pending' ? 'Challenge pending.' :
+        round.challengeStatus === 'unavailable' ? 'Challenge findings unavailable.' : 'Challenge not recorded.'));
       claim.challenges.forEach(function (ch) {
         var box = el('div', 'challenge');
         add(box, el('div', null, capital(humanise(ch.check))), el('div', 'meta', ch.rationale));
@@ -1558,11 +1561,16 @@
     var entry = map[disposition] || ['unclear', 'Not assessed yet'];
     return el('span', 'mark ' + entry[0], entry[1]);
   }
-  function claimRow(claim) {
+  function claimRow(claim, challengeStatus) {
     var li = el('li');
     add(li, el('p', 'finding-text', claim.statement));
     var marks = el('div', 'finding-marks');
-    var parts = [capital(claim.confidence || 'unknown') + ' confidence', plural(claim.noteIds.length, 'source'), claim.challenges.length ? plural(claim.challenges.length, 'challenge') + ' raised' : 'No challenges raised'];
+    var challengeState = claim.challenges.length
+      ? plural(claim.challenges.length, 'challenge') + ' raised'
+      : challengeStatus === 'checked' ? 'No challenges raised' :
+        challengeStatus === 'pending' ? 'Challenge pending' :
+        challengeStatus === 'unavailable' ? 'Challenge findings unavailable' : 'Challenge not recorded';
+    var parts = [capital(claim.confidence || 'unknown') + ' confidence', plural(claim.noteIds.length, 'source'), challengeState];
     add(marks, claimStatusMark(claim.status), el('span', 'meta', parts.join(' · ')));
     li.appendChild(marks);
     return li;
@@ -1586,7 +1594,7 @@
       var group = el('div', 'finding-group');
       add(group, C.sectionHead('Research question ' + n, 'h3', el('span', 'meta', req.text)));
       var list = el('ul', 'rows');
-      claims.forEach(function (c) { list.appendChild(claimRow(c)); });
+      claims.forEach(function (c) { list.appendChild(claimRow(c, round.challengeStatus)); });
       if (!claims.length) add(list, add(el('li'), el('span', 'meta', 'No claim selected for this question.')));
       group.appendChild(list);
       sec.appendChild(group);
@@ -1596,7 +1604,7 @@
       var other = el('div', 'finding-group');
       add(other, C.sectionHead(selections.length || round.coverage.length ? 'Other claims' : 'Claims in this round', 'h3', el('span', 'meta', String(rest.length))));
       var ol = el('ul', 'rows');
-      rest.forEach(function (c) { ol.appendChild(claimRow(c)); });
+      rest.forEach(function (c) { ol.appendChild(claimRow(c, round.challengeStatus)); });
       other.appendChild(ol);
       sec.appendChild(other);
     }
@@ -1624,7 +1632,12 @@
       var label = j.rounds.length ? 'Build round ' + (j.rounds.length + 1) + ' from ' + plural(r.noteCount, 'note') : 'Build the first synthesis from ' + plural(r.noteCount, 'note');
       var primary = !j.rounds.length || r.newNotes.length > 0;
       var build = C.actButton(label, primary ? 'btn-primary' : 'btn-secondary', function () { C.postAction({ action: 'prepare-synthesis', runId: state.runId }); }, false, !r.canBuild);
-      add(gate, add(el('div', 'btn-row'), build, !r.canBuild ? el('span', 'meta', 'Admit and review at least one source first.') : !primary ? el('span', 'meta', 'No new notes since the last round; a rebuild uses the same inputs.') : null));
+      var buildHint = !r.canBuild
+        ? r.noteCount === 0 ? 'Admit and review at least one source first.' :
+          !r.currentRoundComplete ? 'Complete the current synthesis round before starting another.' :
+          'A synthesis Build is already pending.'
+        : !primary ? 'No new notes since the last round; a rebuild uses the same inputs.' : null;
+      add(gate, add(el('div', 'btn-row'), build, buildHint ? el('span', 'meta', buildHint) : null));
     }
     frag.appendChild(gate);
 
@@ -1910,7 +1923,10 @@
       if (roundClaim && roundClaim.challenges.length) {
         roundClaim.challenges.forEach(function (ch) { add(box, add(el('div', 'challenge'), el('div', 'meta', capital(humanise(ch.check)) + ': ' + ch.rationale))); });
         if (round.adjudicationPath) box.appendChild(C.artifactLink(round.adjudicationPath, 'Adjudication record'));
-      } else if (roundClaim) add(box, el('div', 'meta', 'No challenges raised.'));
+      } else if (roundClaim) add(box, el('div', 'meta',
+        round.challengeStatus === 'checked' ? 'No challenges raised.' :
+        round.challengeStatus === 'pending' ? 'Challenge pending.' :
+        round.challengeStatus === 'unavailable' ? 'Challenge findings unavailable.' : 'Challenge status not recorded.'));
       sec.appendChild(box);
     });
     return sec;
