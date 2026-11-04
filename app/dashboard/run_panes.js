@@ -1549,17 +1549,65 @@
     });
     return list;
   }
+  function boundedMemoPanel(round) {
+    var execution = state.view.boundedMemo;
+    var authorized = execution && (execution.authorized === true || execution.authority);
+    var running = execution && (execution.workerActive || execution.status === 'starting' || execution.status === 'running');
+    var finished = execution && execution.status === 'memo-review';
+    var terminal = execution && (execution.status === 'blocked' || execution.status === 'indeterminate') && authorized;
+    var parts = [
+      el('p', 'meta prose', (finished ? 'Selection and writing completed for the frozen adjudicated round. ' :
+        authorized ? 'This authorization covers only selection and writing for the frozen adjudicated round. ' :
+          'Authorize only key-judgement selection and memo writing for this adjudicated round. ') +
+        'Inputs and Settings models are frozen; each needed stage gets one call. Gaps and contested claims remain visible. Publication is not authorized.')
+    ];
+    if (execution) {
+      parts.push(el('p', 'meta', 'Memo execution: ' + humanise(execution.status) +
+        (typeof execution.remainingCalls === 'number' ? ' · ' + execution.remainingCalls + ' unused authorized calls' : '')));
+      if (execution.error || execution.launcherError) {
+        var error = el('p', 'meta fail', execution.error || execution.launcherError);
+        error.setAttribute('role', 'alert');
+        parts.push(error);
+      }
+      if (execution.authority) {
+        parts.push(el('p', 'meta', 'Frozen models: selection ' + execution.authority.stages['key-judgements'].model +
+          ' · writer ' + execution.authority.stages.writer.model));
+      }
+    }
+    if (finished) {
+      parts.push(add(el('div', 'btn-row'), C.linkButton('Review memo draft', function () { C.navigate('review'); })));
+    } else if (terminal) {
+      parts.push(el('p', 'meta prose', 'Inspect the saved memo execution receipts before recovery. Starting again cannot grant more calls or replay an uncertain invocation.'));
+    } else {
+      var label = running ? 'Memo work is running' : authorized ? 'Resume bounded memo work' : 'Start selection and writing';
+      parts.push(add(el('div', 'btn-row'), C.actButton(label, 'btn-primary', function () {
+        C.postAction({ action: authorized ? 'resume-bounded-memo' : 'start-bounded-memo',
+          runId: state.runId, reviewerId: C.analyst(), adjudicationPath: round.adjudicationPath });
+      }, true, Boolean(running) || !C.analyst())));
+    }
+    return step(finished ? 'Memo draft ready for review' : 'Bounded selection and writing', parts);
+  }
   function roundBody(round, j) {
     var body = el('div');
     var active = round.current ? round.steps.filter(function (s) { return s.state === 'you' || s.state === 'ai' || s.state === 'ready'; })[0] : null;
     var showingAdjudication = false;
+    var memoReady = round.current && round.adjudicationStatus === 'adjudicated';
+    var memoAuthority = state.view.boundedMemo && (state.view.boundedMemo.authorized === true || state.view.boundedMemo.authority);
+    if (memoReady) body.appendChild(boundedMemoPanel(round));
     if (active) {
       var aiTitles = { challenge: 'Run the AI Challenge', 'key-judgements': 'Run the AI key-judgement selection', memo: 'Run the AI memo writer' };
       var execution = state.view.boundedSynthesis;
       var boundedChallenge = active.key === 'challenge' && execution && (execution.authorized === true || execution.authorizationId);
-      if (active.state === 'ai' && !boundedChallenge) body.appendChild(step(aiTitles[active.key] || 'Run the AI step', [C.aiTask('stage', active.action.item)]));
+      if (active.state === 'ai' && !boundedChallenge && !(memoReady && memoAuthority)) {
+        var task = step(aiTitles[active.key] || 'Run the AI step', [C.aiTask('stage', active.action.item)]);
+        if (memoReady) {
+          var manual = el('details', 'trace');
+          add(manual, el('summary', null, 'Manual compatibility controls'), task);
+          body.appendChild(manual);
+        } else body.appendChild(task);
+      }
       else if (active.key === 'adjudicate') { body.appendChild(adjudicationPanel(round)); showingAdjudication = true; }
-      else if (active.state === 'ready') {
+      else if (active.state === 'ready' && !memoReady) {
         var payload = active.key === 'key-judgements'
           ? { action: 'prepare-key-judgements', runId: state.runId, challengeRecordPath: active.action.challengeRecordPath }
           : { action: 'prepare-memo-writer', runId: state.runId, keyJudgementRecordPath: active.action.keyJudgementRecordPath };

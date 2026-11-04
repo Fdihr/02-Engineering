@@ -24,9 +24,9 @@ def _execution_result(step: dict[str, Any]) -> dict[str, Any]:
     return value
 
 
-def status(runs_root: Path, run_id: str, command: Callable[..., dict[str, Any]]) -> dict[str, Any] | None:
-    directory = runs_root / run_id / "synthesis" / "execution"
-    active_key = (runs_root / run_id).resolve()
+def status(runs_root: Path, run_id: str, command: Callable[..., dict[str, Any]], *, pipeline: str = "synthesis") -> dict[str, Any] | None:
+    directory = runs_root / run_id / pipeline / "execution"
+    active_key = directory.resolve() if pipeline == "memo" else (runs_root / run_id).resolve()
     if not (directory / "authorization.json").is_file():
         if active_key in ACTIVE:
             return {"status": "starting", "workerActive": True, "error": "", "runId": run_id}
@@ -37,7 +37,7 @@ def status(runs_root: Path, run_id: str, command: Callable[..., dict[str, Any]])
         value = json.loads(failures[-1].read_text(encoding="utf-8"))
         return {"status": "blocked", "error": value["error"], "runId": run_id, "authorized": False}
     try:
-        value = _execution_result(command("run:synthesis", ["status", run_id], runs_root=runs_root))
+        value = _execution_result(command("run:memo" if pipeline == "memo" else "run:synthesis", ["status", run_id], runs_root=runs_root))
     except (OSError, ValueError, RuntimeError) as error:
         value = {"status": "blocked", "runId": run_id, "error": f"Execution status unavailable: {error}"}
     failures = sorted(directory.glob("launcher-failure-*.json"), key=lambda path: path.stat().st_mtime)
@@ -50,7 +50,7 @@ def status(runs_root: Path, run_id: str, command: Callable[..., dict[str, Any]])
 
 def start(
     runs_root: Path, payload: dict[str, Any], command: Callable[..., dict[str, Any]],
-    model_lock: threading.Lock,
+    model_lock: threading.Lock, *, pipeline: str = "synthesis",
 ) -> tuple[int, dict[str, Any]]:
     from .scan import resolve_inside_run
 
@@ -60,20 +60,28 @@ def start(
     run_dir = resolve_inside_run(runs_root, run_id)
     if run_dir is None or not run_dir.is_dir():
         return 404, {"ok": False, "error": "Analysis run not found."}
-    mode = "resume" if payload["action"] == "resume-bounded-synthesis" else "start"
-    if mode == "resume" and not (run_dir / "synthesis" / "execution" / "authorization.json").is_file():
+    mode = "resume" if payload["action"].startswith("resume-") else "start"
+    if mode == "resume" and not (run_dir / pipeline / "execution" / "authorization.json").is_file():
         return 409, {"ok": False, "error": "Use the explicit bounded start action before resuming."}
+    adjudication = None
+    if pipeline == "memo" and mode == "start":
+        reference = payload.get("adjudicationPath")
+        adjudication = resolve_inside_run(run_dir, reference) if isinstance(reference, str) else None
+        if adjudication is None or adjudication.name != "performed-adjudication.json" or not adjudication.is_file():
+            return 400, {"ok": False, "error": "Choose a performed adjudication in this run before authorizing memo work."}
     if not model_lock.acquire(blocking=False):
         return 409, {"ok": False, "error": "A Copilot stage is already running; no new allowance or call was created."}
-    active_key = run_dir.resolve()
+    active_key = (run_dir / pipeline / "execution").resolve() if pipeline == "memo" else run_dir.resolve()
     ACTIVE.add(active_key)
 
     def work() -> None:
         try:
             args = [mode, run_id, analyst] if mode == "start" else [mode, run_id]
-            _execution_result(command("run:synthesis", args, timeout_sec=900, runs_root=runs_root))
+            if adjudication is not None:
+                args.append(str(adjudication))
+            _execution_result(command("run:memo" if pipeline == "memo" else "run:synthesis", args, timeout_sec=900, runs_root=runs_root))
         except (OSError, ValueError, RuntimeError) as error:
-            directory = run_dir / "synthesis" / "execution"
+            directory = run_dir / pipeline / "execution"
             directory.mkdir(parents=True, exist_ok=True)
             with (directory / f"launcher-failure-{uuid.uuid4().hex}.json").open("x", encoding="utf-8") as file:
                 json.dump({"status": "failed", "error": str(error), "phase": "dashboard-launcher"}, file)
@@ -84,14 +92,15 @@ def start(
             model_lock.release()
 
     try:
-        threading.Thread(target=work, name=f"bounded-synthesis-{run_id}", daemon=True).start()
+        threading.Thread(target=work, name=f"bounded-{pipeline}-{run_id}", daemon=True).start()
     except RuntimeError as error:
         ACTIVE.discard(active_key)
         model_lock.release()
-        return 503, {"ok": False, "error": f"Could not start the bounded synthesis worker: {error}"}
+        return 503, {"ok": False, "error": f"Could not start the bounded {pipeline} worker: {error}"}
     return 202, {
         "ok": True, "runId": run_id, "status": "starting",
-        "message": "Bounded synthesis started. It uses at most one Build and one Challenge call, then stops for your adjudication.",
+        "message": ("Bounded memo started. It uses at most one selection and one writer call, then stops at memo review. Publication is not authorized."
+                    if pipeline == "memo" else "Bounded synthesis started. It uses at most one Build and one Challenge call, then stops for your adjudication."),
     }
 
 
@@ -103,10 +112,11 @@ def compose_workflow(base: dict[str, Any], execution: dict[str, Any] | None) -> 
     if not isinstance(bounded, dict):
         return {**base, "blockers": [*base["blockers"], {
             "id": "bounded:integrity", "kind": "integrity", "scope": "unknown", "paths": [],
-            "affectedWorkIds": [], "uncertain": True, "title": "Bounded synthesis status requires recovery",
+            "affectedWorkIds": [], "uncertain": True, "title": "Bounded execution status requires recovery",
             "detail": execution.get("error") or "Execution facts are unavailable; inspect the saved authority.",
         }]}
-    replaced = {work["id"] for work in base["readyWork"] if work["stage"] == "synthesise"}
+    stages = ("synthesise", "memo") if execution.get("pipeline") == "memo" else ("synthesise",)
+    replaced = {work["id"] for work in base["readyWork"] if work["stage"] in stages}
     blockers = {blocker["id"]: blocker for blocker in base["blockers"]}
     for blocker in bounded["blockers"]:
         prior = blockers.get(blocker["id"], {})

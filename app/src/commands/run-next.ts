@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, relative, resolve } from "node:path";
+import { isDeepStrictEqual } from "node:util";
+import { validatePerformedAdjudication } from "../modules/synthesis/key-judgement-stage.js";
 import { validateExceptionItem } from "../modules/exceptions/exception-item.js";
 import {
   chooseRunNextAction,
@@ -10,6 +12,7 @@ import {
 import type { WorkflowStage } from "../workflow/workflow-projection.js";
 import { assuranceRunRoot, commandError, longPath } from "./assurance-io.js";
 import { inspectBoundedSynthesis } from "./bounded-synthesis.js";
+import { inspectBoundedMemo } from "./bounded-memo.js";
 
 const usage = "Usage: npm run run:next -- <run-id>";
 
@@ -187,6 +190,17 @@ const main = async (): Promise<void> => {
     if (!runId || extra.length > 0 || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(runId)) {
       throw new Error(usage);
     }
+    let boundedMemo = false;
+    try { boundedMemo = (await stat(longPath(resolve(assuranceRunRoot(), runId, "memo", "execution", "authorization.json")))).isFile(); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    if (boundedMemo) {
+      const execution = await inspectBoundedMemo(assuranceRunRoot(), runId);
+      console.log(`Bounded memo: ${execution.status}\nUnused authorized calls: ${execution.remainingCalls}`);
+      if (execution.error) console.log(`Stopped: ${execution.error}`);
+      else if (execution.status === "memo-review") console.log("Recommended human action: review the memo; publication is not approved.");
+      else console.log(`Resume: npm run run:memo -- resume ${runId}`);
+      return;
+    }
     let bounded = false;
     try { bounded = (await stat(longPath(resolve(assuranceRunRoot(), runId, "synthesis", "execution", "authorization.json")))).isFile(); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
@@ -194,7 +208,17 @@ const main = async (): Promise<void> => {
       const execution = await inspectBoundedSynthesis(assuranceRunRoot(), runId);
       console.log(`Bounded synthesis: ${execution.status}\nUnused authorized calls: ${execution.remainingCalls}`);
       if (execution.error) console.log(`Stopped: ${execution.error}`);
-      else if (execution.status === "human-waiting") console.log("Recommended human action: adjudicate");
+      else if (execution.status === "human-waiting") {
+        const performed = [];
+        for (const path of (await listFiles(resolve(assuranceRunRoot(), runId))).filter(path => basename(path) === "performed-adjudication.json")) {
+          const parsed = validatePerformedAdjudication(await readJson(path));
+          if (parsed.ok && isDeepStrictEqual(parsed.value.challengeRecord, execution.stages.challenge.record)) performed.push(path);
+        }
+        if (performed.length) {
+          console.log("Recommended human action: explicitly authorize bounded selection and writing.");
+          performed.forEach(path => console.log(`Start: npm run run:memo -- start ${runId} <analyst-id> ${artifactRef(path)}`));
+        } else console.log("Recommended human action: adjudicate");
+      }
       else console.log(`Resume: npm run run:synthesis -- resume ${runId}`);
       return;
     }

@@ -582,6 +582,8 @@ def _handle_ai_stage(runs_root: Path, payload: dict[str, Any], invocation: dict[
     if payload.get("freshSession") is not True:
         return 400, {"ok": False, "error": "Confirm the answer came from a fresh Copilot chat."}
     run_dir = runs_root / run_id
+    if stage in ("key-judgements", "memo-writer") and (run_dir / "memo" / "execution" / "authorization.json").is_file():
+        return 409, {"ok": False, "error": "Bounded memo authority exists. Use its saved work and resume control; manual answers cannot replace it."}
     request_file = resolve_inside_run(run_dir, rel_path)
     text = read_artifact_text(request_file, MAX_ARTIFACT_BYTES) if request_file else None
     if text is None:
@@ -673,14 +675,19 @@ def _scope_matches(approved: dict[str, Any], proposal: dict[str, Any]) -> bool:
     )
 
 
-def _command_output_in_run(run_dir: Path, step: dict[str, Any]) -> Path | None:
-    reference = _stdout_field(step, "Output")
+def _artifact_in_run(run_dir: Path, reference: str) -> Path | None:
+    if not reference or "\0" in reference:
+        return None
     prefix = f"runs/{run_dir.name}/"
     output = ((run_dir / reference[len(prefix):]) if reference.startswith(prefix) else (APP_DIR / reference)).resolve()
     try:
         return resolve_inside_run(run_dir, output.relative_to(run_dir.resolve()).as_posix())
     except ValueError:
         return None
+
+
+def _command_output_in_run(run_dir: Path, step: dict[str, Any]) -> Path | None:
+    return _artifact_in_run(run_dir, _stdout_field(step, "Output"))
 
 
 def _research_plan_operation(action: str, value: Any) -> Any:
@@ -800,6 +807,8 @@ def _handle_run_ai(runs_root: Path, payload: dict[str, Any]) -> tuple[int, dict[
     run_dir = runs_root / run_id
     relevance = bool(RELEVANCE_REQUEST_PATH.fullmatch(rel_path))
     stage = ai_stage_for(rel_path)
+    if stage in ("key-judgements", "memo-writer") and (run_dir / "memo" / "execution" / "authorization.json").is_file():
+        return 409, {"ok": False, "error": "Bounded memo authority exists. Manual execution cannot add call authority; use memo status/resume."}
     if stage in ("build", "challenge") and (run_dir / "synthesis" / "execution" / "authorization.json").is_file():
         return 409, {"ok": False, "error": "This run has a bounded synthesis authorization. Use its start/status/resume controls; manual model execution cannot add call authority."}
     request_file = resolve_inside_run(run_dir, rel_path) if relevance or stage else None
@@ -919,6 +928,8 @@ KJ_RECORD_REL = re.compile(r"^synthesis/key-judgements/records/[A-Za-z0-9._-]+/k
 def _handle_prepare_stage(runs_root: Path, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     run_id = _valid_id(payload.get("runId"))
     run_dir = runs_root / run_id if run_id else None
+    if run_dir and (run_dir / "memo" / "execution" / "authorization.json").is_file():
+        return 409, {"ok": False, "error": "Bounded memo authority exists. Use memo status/resume, not a new request."}
     if payload.get("action") == "prepare-key-judgements":
         rel_path = str(payload.get("challengeRecordPath") or "")
         match = CHALLENGE_RECORD_REL.match(rel_path)
@@ -927,7 +938,7 @@ def _handle_prepare_stage(runs_root: Path, payload: dict[str, Any]) -> tuple[int
             return 400, {"ok": False, "error": "An adjudicated challenge record in this run is required."}
         record = json.loads(Path(_fs_path(run_dir / rel_path)).read_text(encoding="utf-8"))
         build_ref = str(record.get("buildRecord", {}).get("artifactRef", ""))
-        steps = [_run_npm_script("prepare:key-judgements", [build_ref, f"runs/{run_id}/{rel_path}", f"runs/{run_id}/{adjudication_rel}", MEMO_STANDARD_V1])]
+        steps = [_run_npm_script("prepare:key-judgements", [build_ref, f"runs/{run_id}/{rel_path}", f"runs/{run_id}/{adjudication_rel}", MEMO_STANDARD_V1], runs_root=runs_root)]
     else:
         rel_path = str(payload.get("keyJudgementRecordPath") or "")
         if not (run_dir and KJ_RECORD_REL.match(rel_path) and Path(_fs_path(run_dir / rel_path)).is_file()):
@@ -954,7 +965,7 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
     record_bytes = record_file.read_bytes()
     record = json.loads(record_bytes.decode("utf-8"))
     build_ref = str(record.get("buildRecord", {}).get("artifactRef", ""))
-    build_file = resolve_inside_run(run_dir, build_ref[len(f"runs/{run_id}/"):]) if build_ref.startswith(f"runs/{run_id}/") else None
+    build_file = _artifact_in_run(run_dir, build_ref)
     if build_file is None or not Path(_fs_path(build_file)).is_file():
         return 400, {"ok": False, "error": "The challenge record does not reference a build record in this run."}
     build = json.loads(Path(_fs_path(build_file)).read_text(encoding="utf-8"))
@@ -976,6 +987,11 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
         claims.append({"claimId": claim_id, "status": status, "openChallengeIds": upheld})
 
     now = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    challenge_path = (run_dir / rel_path).resolve()
+    try:
+        challenge_ref = Path(os.path.relpath(challenge_path, APP_DIR.resolve())).as_posix()
+    except ValueError:
+        challenge_ref = challenge_path.as_posix()
     adjudication = {
         "schemaVersion": "synthesis-adjudication-v1",
         "id": f"adjudication-{match.group(1).removeprefix('synthesis-challenge-record-')}",
@@ -985,7 +1001,7 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
         "reviewStatus": record.get("reviewStatus"),
         "limitedEvidence": record.get("limitedEvidence"),
         "buildRecord": record.get("buildRecord"),
-        "challengeRecord": {"artifactRef": f"runs/{run_id}/{rel_path}", "artifactSha256": hashlib.sha256(record_bytes).hexdigest()},
+        "challengeRecord": {"artifactRef": challenge_ref, "artifactSha256": hashlib.sha256(record_bytes).hexdigest()},
         "claims": claims,
     }
     _write_json(out_dir / "performed-adjudication.json", adjudication)
@@ -1014,7 +1030,7 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
         "ok": True, "command": "adjudication:record", "exitCode": 0, "stderr": "",
         "stdout": f"Accepted: {counts['accepted']}\nContested: {counts['contested']}\nRejected: {counts['rejected']}\nReviewer: {reviewer_id}\nOutput: {adjudication_ref}",
     }]
-    steps.append(_run_npm_script("prepare:key-judgements", [build_ref, f"runs/{run_id}/{rel_path}", adjudication_ref, MEMO_STANDARD_V1]))
+    steps.append(_run_npm_script("prepare:key-judgements", [build_ref, f"runs/{run_id}/{rel_path}", adjudication_ref, MEMO_STANDARD_V1], runs_root=runs_root))
     succeeded = all(step["ok"] for step in steps)
     return (200 if succeeded else 400), {"ok": succeeded, "runId": run_id, "steps": steps, "error": "" if succeeded else steps[-1]["stderr"]}
 
@@ -1023,6 +1039,8 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
     action = payload.get("action")
     if action in ("start-bounded-synthesis", "resume-bounded-synthesis"):
         return bounded_synthesis.start(runs_root, payload, _run_npm_script, COPILOT_LOCK)
+    if action in ("start-bounded-memo", "resume-bounded-memo"):
+        return bounded_synthesis.start(runs_root, payload, _run_npm_script, COPILOT_LOCK, pipeline="memo")
     if action == "collect-rss-batch":
         return rss.start_batch(runs_root, payload, _run_npm_script, _handle_run_ai, COPILOT_LOCK)
     if action == "save-copilot-settings":
@@ -1376,11 +1394,14 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
                 scan = scan_run_directory(target_dir, run_id=target_id)
                 scanned_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
                 execution = bounded_synthesis.status(runs_root, target_id, _run_npm_script)
-                view = build_run_view(target_id, scan["files"], scan["jsons"], scan["events"], scanned_at, execution, str(target_dir))
+                memo_execution = bounded_synthesis.status(runs_root, target_id, _run_npm_script, pipeline="memo")
+                projected_execution = memo_execution if memo_execution and memo_execution.get("authorized") else execution
+                view = build_run_view(target_id, scan["files"], scan["jsons"], scan["events"], scanned_at, projected_execution, str(target_dir))
                 view["truncated"] = scan["truncated"]
                 view["availableRuns"] = list_available_runs(runs_root)
                 view["rss"]["feeds"] = rss.feeds()
                 view["boundedSynthesis"] = execution
+                view["boundedMemo"] = memo_execution
                 for batch in view["rss"]["batches"]:
                     if batch["status"] == "running" and batch["id"] not in rss.ACTIVE:
                         batch["status"] = "interrupted"

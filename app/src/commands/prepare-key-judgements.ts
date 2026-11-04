@@ -1,5 +1,6 @@
 import { appendFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { reserveManualMemo } from "./memo-execution-io.js";
 import {
   keyJudgementPolicyFromStandard,
   validateMemoStandardV1
@@ -31,6 +32,7 @@ const describe = (value: unknown): string =>
 const main = async (): Promise<void> => {
   const preparedAt = new Date().toISOString();
   const runRoot = assuranceRunRoot();
+  let release: (() => Promise<void>) | undefined;
   try {
     const [buildPath, challengePath, adjudicationPath, standardPath, ...extra] =
       process.argv.slice(2);
@@ -50,6 +52,7 @@ const main = async (): Promise<void> => {
     );
     const build = validateSynthesisBuildRecord(buildArtifact.value);
     if (!build.ok) throw new Error(`Build record rejected: ${build.error}`);
+    release = await reserveManualMemo(runRoot, build.value.runId);
     const challengeArtifact = await loadRunArtifact(
       runRoot,
       challengePath,
@@ -150,6 +153,8 @@ const main = async (): Promise<void> => {
   } catch (error) {
     console.error(`Key-judgement preparation failed: ${commandError(error)}`);
     process.exitCode = 1;
+  } finally {
+    await release?.();
   }
 };
 

@@ -64,6 +64,63 @@ class BoundedSynthesisTests(unittest.TestCase):
                 self.assertIn(_handle_analyst_action(self.root, self.run, payload)[0], (400, 409))
                 thread.assert_not_called()
 
+    def test_bounded_memo_requires_performed_round_and_uses_active_root(self):
+        relative = "synthesis/adjudication/challenge-1/performed-adjudication.json"
+        adjudication = self.run / relative
+        adjudication.parent.mkdir(parents=True)
+        adjudication.write_text("{}", encoding="utf-8")
+        tasks = []
+        with patch("dashboard.bounded_synthesis.threading.Thread") as thread, \
+                patch("dashboard.server._run_npm_script", return_value={
+                    "ok": True, "stdout": 'Execution: {"status":"memo-review","pipeline":"memo"}', "stderr": "",
+                }) as command:
+            thread.side_effect = lambda **kwargs: tasks.append(kwargs["target"]) or type("Worker", (), {"start": lambda _: None})()
+            payload = {"action": "start-bounded-memo", "runId": self.run.name, "reviewerId": "TESTER", "adjudicationPath": relative}
+            self.assertEqual(_handle_analyst_action(self.root, self.run, {**payload, "adjudicationPath": "../outside.json"})[0], 400)
+            self.assertEqual(_handle_analyst_action(self.root, self.run, payload)[0], 202)
+            self.assertEqual(bounded_synthesis.status(self.root, self.run.name, command, pipeline="memo")["status"], "starting")
+            tasks.pop()()
+            self.assertEqual(command.call_args.args, ("run:memo", ["start", self.run.name, "TESTER", str(adjudication.resolve())]))
+            self.assertEqual(command.call_args.kwargs["runs_root"], self.root)
+            directory = self.run / "memo" / "execution"
+            directory.mkdir(parents=True)
+            (directory / "authorization.json").write_text("{}", encoding="utf-8")
+            self.assertEqual(_handle_analyst_action(self.root, self.run, {**payload, "action": "resume-bounded-memo"})[0], 202)
+            tasks.pop()()
+            self.assertEqual(command.call_args.args, ("run:memo", ["resume", self.run.name]))
+            result = bounded_synthesis.status(self.root, self.run.name, command, pipeline="memo")
+            self.assertEqual(result["status"], "memo-review")
+            self.assertTrue(result["authorized"])
+
+    def test_manual_memo_calls_recording_and_preparation_cannot_add_authority(self):
+        directory = self.run / "memo" / "execution"
+        directory.mkdir(parents=True)
+        (directory / "authorization.json").write_text("{}", encoding="utf-8")
+        for request in ("synthesis/key-judgements/requests/k1/key-judgement-request.json",
+                        "memo/requests/w1/writer-request.json"):
+            payload = {"runId": self.run.name, "reviewerId": "TESTER", "requestPath": request, "freshSession": True}
+            with patch("dashboard.server.generate") as generate, patch("dashboard.server._run_npm_script") as command:
+                self.assertEqual(_handle_run_ai(self.root, payload)[0], 409)
+                self.assertEqual(_handle_ai_stage(self.root, payload)[0], 409)
+                self.assertEqual(_handle_analyst_action(self.root, self.run, {
+                    "action": "prepare-key-judgements", "runId": self.run.name,
+                })[0], 409)
+                generate.assert_not_called()
+                command.assert_not_called()
+
+    def test_memo_projection_replaces_completed_synthesis_handoff_but_keeps_source_work(self):
+        def work(identifier, stage):
+            return {"id": identifier, "stage": stage, "actor": "machine", "kind": "work",
+                    "title": identifier, "detail": "", "paths": [], "priority": 1}
+        base = {"runId": self.run.name, "intentApproved": True, "evidenceAvailable": True,
+                "readyWork": [work("source:a", "assure"), work("manual:selection", "synthesise"), work("manual:writer", "memo")],
+                "committedOutcomes": [], "humanDecisions": [], "interimCheckpoints": [], "blockers": []}
+        execution = {"authorized": True, "pipeline": "memo", "workflowInput": {
+            **base, "readyWork": [{**work("bounded:memo", "memo"), "actor": "human", "kind": "checkpoint"}],
+        }}
+        result = project_workflow(bounded_synthesis.compose_workflow(base, execution))
+        self.assertEqual({work["id"] for work in result["readyWork"]}, {"source:a", "bounded:memo"})
+
     def test_read_only_status_uses_typescript_projection_even_on_blocked_exit(self):
         directory = self.run / "synthesis" / "execution"
         directory.mkdir(parents=True)
