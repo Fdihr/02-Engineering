@@ -37,7 +37,15 @@ result remains pending.
 The recommendation is advisory workflow state, not permission to expand scope
 or execute a model call. `run:next` may run only its existing deterministic
 recorders when a validated response artifact is already present. Prepared
-model requests remain manual interim checkpoints. The projection does not
+model requests remain manual interim checkpoints unless covered by the
+explicit [bounded synthesis authorization](bounded-synthesis-execution.md).
+That runner supplies its frozen stage facts to the same selector; the dashboard
+combines them with unrelated ready work rather than replacing the run queue.
+Its read-only `workflowInput` is a projection payload, not persisted status.
+Invocation lifecycle (including running and indeterminate) is exposed separately
+from workflow readiness; a running stage recommends waiting, not human approval.
+When bounded authority exists, `run:next` reports its status/resume handoff
+instead of independently recording its saved responses. The projection does not
 perform collection, admission, source review, adjudication, exception
 resolution, publication approval, or artifact mutation.
 

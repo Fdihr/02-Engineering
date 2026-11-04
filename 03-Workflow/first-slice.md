@@ -7,6 +7,8 @@ pending; neither adapter automatically resolves them. Panel 2 exercised
 provisional review and then completed a human rows-only support pass. Panel 3
 has a bounded key-judgement selection contract and writer v2 path; the reviewed
 Build request still needs a fresh response, Challenge, and performed adjudication.
+The bounded execution path below is implemented and synthetically verified;
+it has not been run against that existing analysis.
 
 The local adapter uses Node HTTPS, Readability and a non-executing jsdom
 document. It needs no scraping service, MCP or key. Its one-source approval,
@@ -27,11 +29,35 @@ workflow state. Exact artifact references can scope a source exception to its
 dependent work; unknown scope remains an explicit conservative run blocker.
 Publication blockers do not stop unrelated draft work.
 
-This slice does not automate model calls or collection, remove compatibility
+The projection itself does not automate model calls or collection, remove compatibility
 admission/support/adjudication checks, or grant publication authority.
 Prepared model requests remain inspectable manual checkpoints, and
 `run:next` executes only existing deterministic recorders with saved
 responses. See [the active contract](../02-Contracts/workflow-projection.md).
+
+## Implemented bounded Build and Challenge execution (2026-11-04)
+
+One explicit analyst start in Findings now authorizes a frozen source-note
+set and target round, then runs only needed Build and Challenge calls using
+the saved Settings models. Existing valid records and prepared requests are
+reused. Each needed stage has one generation allowance, no automatic retry,
+and exclusive durable request/stage reservations. Refresh/start/resume cannot
+grant more calls or include later-arriving notes.
+
+Saved responses can finish deterministic recording after restart; complete
+Build records continue to unused Challenge work. Ambiguous interrupted calls
+stop for recovery without replay. Precise transport, validation, recording
+and handoff failures preserve successful earlier artifacts and stop explicitly.
+Scope/question/requirements approval, source-note lineage, policy, model
+availability and scoped exceptions are checked before generation. Unrelated
+safely scoped source work remains eligible through the shared projection.
+
+Challenge always stops at the existing human adjudication checkpoint, even
+when no findings are raised. Source support review, adjudication and publication
+remain human-owned; key-judgement selection and writer execution are outside
+this slice. CLI `run:next` reports bounded status/resume instead of advancing
+later work. No live model/provider run is implied by implementation or tests.
+See [authorization, receipts and recovery limits](../02-Contracts/bounded-synthesis-execution.md).
 
 ## Product boundary
 

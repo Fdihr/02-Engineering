@@ -9,6 +9,7 @@ import {
 } from "../workflow/run-next.js";
 import type { WorkflowStage } from "../workflow/workflow-projection.js";
 import { assuranceRunRoot, commandError, longPath } from "./assurance-io.js";
+import { inspectBoundedSynthesis } from "./bounded-synthesis.js";
 
 const usage = "Usage: npm run run:next -- <run-id>";
 
@@ -185,6 +186,17 @@ const main = async (): Promise<void> => {
     const [runId, ...extra] = process.argv.slice(2);
     if (!runId || extra.length > 0 || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(runId)) {
       throw new Error(usage);
+    }
+    let bounded = false;
+    try { bounded = (await stat(longPath(resolve(assuranceRunRoot(), runId, "synthesis", "execution", "authorization.json")))).isFile(); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    if (bounded) {
+      const execution = await inspectBoundedSynthesis(assuranceRunRoot(), runId);
+      console.log(`Bounded synthesis: ${execution.status}\nUnused authorized calls: ${execution.remainingCalls}`);
+      if (execution.error) console.log(`Stopped: ${execution.error}`);
+      else if (execution.status === "human-waiting") console.log("Recommended human action: adjudicate");
+      else console.log(`Resume: npm run run:synthesis -- resume ${runId}`);
+      return;
     }
     const action = chooseRunNextAction(await inspectRun(assuranceRunRoot(), runId));
     if (action.kind === "human-wait") {
