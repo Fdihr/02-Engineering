@@ -20,6 +20,7 @@ Use this file as the index of active contracts. Historical retrieval contracts a
 14. [Bounded Build and Challenge execution](bounded-synthesis-execution.md)
 15. [Bounded post-adjudication selection and writing](bounded-memo-execution.md)
 16. [Version-bound memo review and publication decisions](memo-review-and-publication-decision.md)
+17. [Bounded editorial memo revision](bounded-memo-revision.md)
 
 ## Retired acquisition contracts
 

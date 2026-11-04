@@ -572,6 +572,11 @@ def _chain_after_stage(runs_root: Path, run_id: str, stage: str, recorded: dict[
     return []
 
 
+def _memo_authority_exists(run_dir: Path) -> bool:
+    return ((run_dir / "memo" / "execution" / "authorization.json").is_file() or
+            any((run_dir / "memo" / "revisions").glob("*/authorization.json")))
+
+
 def _handle_ai_stage(runs_root: Path, payload: dict[str, Any], invocation: dict[str, Any] | None = None) -> tuple[int, dict[str, Any]]:
     run_id = _valid_id(payload.get("runId"))
     captured_by = _valid_id(payload.get("reviewerId"))
@@ -582,7 +587,7 @@ def _handle_ai_stage(runs_root: Path, payload: dict[str, Any], invocation: dict[
     if payload.get("freshSession") is not True:
         return 400, {"ok": False, "error": "Confirm the answer came from a fresh Copilot chat."}
     run_dir = runs_root / run_id
-    if stage in ("key-judgements", "memo-writer") and (run_dir / "memo" / "execution" / "authorization.json").is_file():
+    if stage in ("key-judgements", "memo-writer") and _memo_authority_exists(run_dir):
         return 409, {"ok": False, "error": "Bounded memo authority exists. Use its saved work and resume control; manual answers cannot replace it."}
     request_file = resolve_inside_run(run_dir, rel_path)
     text = read_artifact_text(request_file, MAX_ARTIFACT_BYTES) if request_file else None
@@ -807,7 +812,7 @@ def _handle_run_ai(runs_root: Path, payload: dict[str, Any]) -> tuple[int, dict[
     run_dir = runs_root / run_id
     relevance = bool(RELEVANCE_REQUEST_PATH.fullmatch(rel_path))
     stage = ai_stage_for(rel_path)
-    if stage in ("key-judgements", "memo-writer") and (run_dir / "memo" / "execution" / "authorization.json").is_file():
+    if stage in ("key-judgements", "memo-writer") and _memo_authority_exists(run_dir):
         return 409, {"ok": False, "error": "Bounded memo authority exists. Manual execution cannot add call authority; use memo status/resume."}
     if stage in ("build", "challenge") and (run_dir / "synthesis" / "execution" / "authorization.json").is_file():
         return 409, {"ok": False, "error": "This run has a bounded synthesis authorization. Use its start/status/resume controls; manual model execution cannot add call authority."}
@@ -928,7 +933,7 @@ KJ_RECORD_REL = re.compile(r"^synthesis/key-judgements/records/[A-Za-z0-9._-]+/k
 def _handle_prepare_stage(runs_root: Path, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     run_id = _valid_id(payload.get("runId"))
     run_dir = runs_root / run_id if run_id else None
-    if run_dir and (run_dir / "memo" / "execution" / "authorization.json").is_file():
+    if run_dir and _memo_authority_exists(run_dir):
         return 409, {"ok": False, "error": "Bounded memo authority exists. Use memo status/resume, not a new request."}
     if payload.get("action") == "prepare-key-judgements":
         rel_path = str(payload.get("challengeRecordPath") or "")
@@ -1039,6 +1044,8 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
     action = payload.get("action")
     if action == "record-memo-review":
         return memo_review.record(runs_root, payload, _run_npm_script)
+    if action in ("start-memo-revision", "resume-memo-revision"):
+        return bounded_synthesis.start(runs_root, payload, _run_npm_script, COPILOT_LOCK, pipeline="revision")
     if action in ("start-bounded-synthesis", "resume-bounded-synthesis"):
         return bounded_synthesis.start(runs_root, payload, _run_npm_script, COPILOT_LOCK)
     if action in ("start-bounded-memo", "resume-bounded-memo"):
@@ -1397,13 +1404,16 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
                 scanned_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
                 execution = bounded_synthesis.status(runs_root, target_id, _run_npm_script)
                 memo_execution = bounded_synthesis.status(runs_root, target_id, _run_npm_script, pipeline="memo")
-                projected_execution = memo_execution if memo_execution and memo_execution.get("authorized") else execution
+                revision_execution = bounded_synthesis.status(runs_root, target_id, _run_npm_script, pipeline="revision")
+                projected_execution = (revision_execution if revision_execution and revision_execution.get("authorized") else
+                                       memo_execution if memo_execution and memo_execution.get("authorized") else execution)
                 view = build_run_view(target_id, scan["files"], scan["jsons"], scan["events"], scanned_at, projected_execution, str(target_dir))
                 view["truncated"] = scan["truncated"]
                 view["availableRuns"] = list_available_runs(runs_root)
                 view["rss"]["feeds"] = rss.feeds()
                 view["boundedSynthesis"] = execution
                 view["boundedMemo"] = memo_execution
+                view["memoRevision"] = revision_execution
                 memo = view["journey"].get("memo")
                 view["memoReview"] = memo_review.status(runs_root, target_id, memo["id"], _run_npm_script) if memo else None
                 for batch in view["rss"]["batches"]:

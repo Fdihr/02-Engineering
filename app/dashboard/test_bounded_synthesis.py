@@ -93,7 +93,7 @@ class BoundedSynthesisTests(unittest.TestCase):
             self.assertTrue(result["authorized"])
 
     def test_manual_memo_calls_recording_and_preparation_cannot_add_authority(self):
-        directory = self.run / "memo" / "execution"
+        directory = self.run / "memo" / "revisions" / "memo-1"
         directory.mkdir(parents=True)
         (directory / "authorization.json").write_text("{}", encoding="utf-8")
         for request in ("synthesis/key-judgements/requests/k1/key-judgement-request.json",
@@ -107,6 +107,34 @@ class BoundedSynthesisTests(unittest.TestCase):
                 })[0], 409)
                 generate.assert_not_called()
                 command.assert_not_called()
+
+    def test_revision_requires_parent_and_explicit_start_and_preserves_receipt_projection(self):
+        tasks = []
+        payload = {"action": "start-memo-revision", "runId": self.run.name,
+                   "memoId": "memo-1", "reviewerId": "EDITOR"}
+        with patch("dashboard.bounded_synthesis.threading.Thread") as thread, \
+                patch("dashboard.server._run_npm_script", return_value={
+                    "ok": True, "stdout": 'Revision: {"status":"memo-review","pipeline":"memo","memoId":"memo-2"}',
+                }) as command:
+            thread.side_effect = lambda **kwargs: tasks.append(kwargs["target"]) or type("Worker", (), {"start": lambda _: None})()
+            self.assertEqual(_handle_analyst_action(self.root, self.run, {**payload, "memoId": "../escape"})[0], 400)
+            self.assertEqual(_handle_analyst_action(self.root, self.run, {**payload, "action": "resume-memo-revision"})[0], 409)
+            self.assertEqual(_handle_analyst_action(self.root, self.run, payload)[0], 202)
+            starting = bounded_synthesis.status(self.root, self.run.name, command, pipeline="revision")
+            self.assertEqual(starting["parentMemoId"], "memo-1")
+            self.assertEqual(starting["status"], "starting")
+            tasks.pop()()
+            self.assertEqual(command.call_args.args, ("revise:memo", ["start", self.run.name, "memo-1", "EDITOR"]))
+            self.assertEqual(command.call_args.kwargs["runs_root"], self.root)
+            authority = self.run / "memo" / "revisions" / "memo-1" / "authorization.json"
+            authority.write_text("{}", encoding="utf-8")
+            self.assertEqual(_handle_analyst_action(self.root, self.run, {**payload, "action": "resume-memo-revision"})[0], 202)
+            tasks.pop()()
+            self.assertEqual(command.call_args.args, ("revise:memo", ["resume", self.run.name, "memo-1"]))
+            result = bounded_synthesis.status(self.root, self.run.name, command, pipeline="revision")
+            self.assertTrue(result["authorized"])
+            self.assertEqual(result["memoId"], "memo-2")
+            self.assertEqual(result["parentMemoId"], "memo-1")
 
     def test_memo_projection_replaces_completed_synthesis_handoff_but_keeps_source_work(self):
         def work(identifier, stage):
@@ -136,6 +164,31 @@ class BoundedSynthesisTests(unittest.TestCase):
         self.assertEqual(result["error"], projection["error"])
         self.assertTrue(result["authorized"])
         self.assertEqual(command.call_args.args, ("run:synthesis", ["status", self.run.name]))
+
+    def test_matching_adjudication_replaces_stale_bounded_handoff_without_ignoring_blockers(self):
+        writing = {"id": "writing", "stage": "memo", "actor": "human", "kind": "decision",
+                   "title": "Authorize selection and writing", "detail": "", "paths": [], "priority": 1}
+        base = {"runId": self.run.name, "intentApproved": True, "evidenceAvailable": True,
+                "readyWork": [writing], "committedOutcomes": [], "humanDecisions": [],
+                "interimCheckpoints": [], "blockers": []}
+        stale = {**writing, "id": "bounded:adjudication", "stage": "synthesise", "title": "Adjudicate"}
+        path = "synthesis/challenge/records/challenge-1/challenge-record.json"
+        execution = {"authorized": True, "status": "human-waiting",
+                     "stages": {"challenge": {"record": {"artifactRef": str(self.run / path)}}},
+                     "workflowInput": {**base, "readyWork": [stale]}}
+        observed = {"adjudicationStatus": "adjudicated", "challengeRecordPath": path}
+        result = bounded_synthesis.compose_workflow(base, execution, observed)
+        self.assertEqual(result["readyWork"], [writing])
+        self.assertEqual(project_workflow(result)["recommendedNextAction"]["work"]["title"], writing["title"])
+        for update in ({"adjudicationStatus": "pending"}, {"challengeRecordPath": "different.json"}):
+            result = bounded_synthesis.compose_workflow(base, execution, {**observed, **update})
+            self.assertIn(stale, result["readyWork"])
+        blocker = {"id": "integrity", "scope": "unknown", "kind": "integrity", "paths": [],
+                   "affectedWorkIds": [], "uncertain": True, "title": "Inspect", "detail": "Changed source"}
+        execution["workflowInput"]["blockers"] = [blocker]
+        self.assertIn(blocker, bounded_synthesis.compose_workflow(base, execution, observed)["blockers"])
+        execution["status"] = "blocked"
+        self.assertIn(stale, bounded_synthesis.compose_workflow(base, execution, observed)["readyWork"])
 
     def test_launcher_failure_is_preserved_and_displayed_without_a_success_fallback(self):
         with patch("dashboard.bounded_synthesis.threading.Thread") as thread:

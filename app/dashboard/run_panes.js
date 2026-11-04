@@ -2052,7 +2052,7 @@
   function memoSubtitle(m, j) {
     var scope = j.brief.scope || {};
     var published = m.gate.status === 'published';
-    return [scope.audience || 'Vestas leadership', 'memo v' + m.versions, published ? 'published' : 'draft, not published', 'round ' + m.roundIndex, 'written ' + when(m.createdAt), humanise(m.reviewStatus) + ' sources', m.limitedEvidence ? 'limited evidence' : ''].filter(Boolean).join(' · ');
+    return [scope.audience || 'Vestas leadership', 'memo v' + (m.version || m.versions), published ? 'published' : 'draft, not published', 'round ' + m.roundIndex, 'written ' + when(m.createdAt), humanise(m.reviewStatus) + ' sources', m.limitedEvidence ? 'limited evidence' : ''].filter(Boolean).join(' · ');
   }
   function memoRefs(m) {
     var refs = {};
@@ -2151,6 +2151,61 @@
     side.appendChild(files);
     return side;
   }
+  function memoRevisionPanel(m, data) {
+    var panel = el('div', 'form-grid');
+    var route = data.revisionRoute;
+    if (!route) return panel;
+    if (!route.eligible) {
+      add(panel, el('p', 'meta', route.reason));
+      if (route.route !== 'review') add(panel, C.linkButton('Return to ' +
+        (route.route === 'analysis/findings' ? 'Findings' : capital(route.route)), function () { C.navigate(route.route); }));
+      return panel;
+    }
+    var execution = state.view.memoRevision;
+    if (execution && execution.parentMemoId && execution.parentMemoId !== m.id) execution = null;
+    var authorized = execution && execution.authorized;
+    var running = execution && (execution.workerActive || execution.status === 'starting' || execution.status === 'running');
+    add(panel, el('h4', null, 'Editorial revision'), el('p', 'meta', route.reason),
+      el('p', 'meta', 'The original memo and decision are preserved. The new version needs fresh review; publication remains blocked.'));
+    if (execution) {
+      add(panel, el('p', 'meta', 'Revision: ' + humanise(execution.status) +
+        (typeof execution.remainingCalls === 'number' ? ' · ' + execution.remainingCalls + ' unused authorized calls' : '')));
+      if (execution.authority) add(panel, el('p', 'meta', 'Frozen writer model: ' + execution.authority.model));
+      if (execution.error || execution.launcherError) {
+        var error = el('p', 'meta fail', execution.error || execution.launcherError);
+        error.setAttribute('role', 'alert');
+        add(panel, error);
+      }
+    }
+    if (authorized && ['blocked', 'indeterminate'].indexOf(execution.status) !== -1) {
+      return add(panel, el('p', 'meta', 'Inspect the saved receipts. Starting again cannot grant another call or replay an uncertain invocation.'));
+    }
+    if (execution && execution.status === 'memo-review') {
+      return add(panel, C.linkButton('Review revised draft', function () { C.navigate('review'); }));
+    }
+    var confirm = null;
+    var key = 'memo-revision:' + state.runId + ':' + m.id + ':' + data.target.memo.artifactSha256 + ':' + data.decision.id + ':';
+    if (!authorized && !running) {
+      confirm = el('input');
+      confirm.type = 'checkbox';
+      confirm = C.bindDraft(confirm, key + 'authorized', false);
+      add(panel, add(el('label', 'check'), confirm,
+        el('span', null, 'Authorize one editorial writer call using this feedback and the saved Settings model.')));
+    }
+    var button = C.actButton(running ? 'Revision is running' : authorized ? 'Resume editorial revision' : 'Start editorial revision',
+      'btn-primary', function () {
+        C.postAction({ action: authorized ? 'resume-memo-revision' : 'start-memo-revision',
+          runId: state.runId, memoId: m.id, reviewerId: C.analyst() }).then(function (result) {
+            if (result && result.ok) C.dropDrafts(key);
+          });
+      }, true, Boolean(running) || !C.analyst() || Boolean(confirm && !confirm.checked));
+    if (confirm) confirm.addEventListener('change', function () {
+      var blocked = !confirm.checked || !C.analyst();
+      button.setAttribute('data-blocked', blocked ? '1' : '');
+      button.disabled = Boolean(state.busy) || blocked;
+    });
+    return add(panel, add(el('div', 'btn-row'), button));
+  }
   function memoDecisionPanel(m) {
     var gate = el('div', 'panel-sec');
     var data = state.view.memoReview;
@@ -2162,6 +2217,8 @@
     var reason = el('p', 'meta', 'Publication remains blocked by the recorded verification and provisional standard. A review decision cannot override those checks.');
     reason.id = 'approve-reason';
     add(gate, approve, reason);
+    if (m.supersedesMemoId) add(gate, el('p', 'meta', 'Version ' + m.version +
+      ' supersedes ' + m.supersedesMemoId + '. This draft requires its own review decision.'));
     if (!data || data.error || !data.target || data.target.memoId !== m.id) {
       var error = el('p', 'meta fail', data && data.error ? data.error : 'Version-bound review is unavailable. Refresh to reopen the recorded draft.');
       error.setAttribute('role', 'alert');
@@ -2174,7 +2231,7 @@
       add(gate, el('p', null, capital(humanise(data.decision.decision)) + ' by ' + data.decision.reviewerId),
         el('p', 'meta', when(data.decision.decidedAt)), el('p', 'prose', data.decision.feedback),
         el('p', 'meta', 'This decision is bound to the reviewed artifacts. A revision requires a new draft; no model work or publication was authorized.'));
-      return gate;
+      return add(gate, memoRevisionPanel(m, data));
     }
     var target = data.target;
     var key = 'memo-review:' + state.runId + ':' + m.id + ':' +

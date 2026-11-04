@@ -50,8 +50,9 @@ event log or duplicate mutable gate is needed for completion.
 
 Decisions are immutable, including revision requests and rejections. Repeated
 submissions do not overwrite them. A revision requires a separately authorized
-new draft and a fresh review; this slice neither grants additional model calls
-nor implements revision generation. An incompatible saved decision is displayed
+new draft and a fresh review; the decision itself grants no additional model
+calls. [Bounded editorial revision](bounded-memo-revision.md) provides a separate
+explicit authorization for eligible feedback. An incompatible saved decision is displayed
 as stale, grants no authority, and requires operator inspection/new draft.
 This assumes the existing local, hard-link-capable filesystem and immutable
 artifact protocol, not transactional protection from arbitrary external writes.

@@ -425,6 +425,8 @@ def _memo_view(run_id: str, full: dict[str, Any], rounds: list[dict[str, Any]], 
         "currentRound": current,
         "isCurrent": bool(round_index) and round_index == current,
         "versions": len(found),
+        "version": _num(memo.get("version")),
+        "supersedesMemoId": _txt(memo.get("supersedesMemoId")),
         "bluf": [statement(e) for e in _arr(memo.get("bluf"))],
         "keyJudgments": [statement(e) for e in _arr(memo.get("keyJudgments"))],
         "analysis": [statement(e) for e in _arr(memo.get("analysis"))],
@@ -827,7 +829,7 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any],
                 queue.append(_queue_item(phase, step["state"], step_titles[step["key"]], f"Synthesis round {current_round['index']} · {step['detail']}", {"tab": "synthesis", "round": current_round["index"]}))
             elif step["state"] == "ready":
                 phase = next(p for k, _, p in ROUND_STEPS if k == step["key"])
-                label = "Prepare the key-judgement selection" if step["key"] == "key-judgements" else "Prepare the memo writer"
+                label = "Authorize selection and writing" if step["key"] == "key-judgements" else "Prepare the memo writer"
                 queue.append(_queue_item(phase, "you", label, f"Synthesis round {current_round['index']}", {"tab": "synthesis", "round": current_round["index"]}))
     if next_build:
         queue.append(_queue_item("synthesise", "ai", "Run the AI synthesis Build", f"Round {next_build['index']} · {readiness['noteCount']} source notes", {"tab": "synthesis", "round": next_build["index"]}))
@@ -1026,7 +1028,7 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any],
                 "path": gate_path,
                 "approvalAvailable": memo["gate"]["humanApprovalAvailable"],
             }
-    projection_input = compose_workflow(projection_input, bounded_synthesis)
+    projection_input = compose_workflow(projection_input, bounded_synthesis, current_round)
     blockers = projection_input["blockers"]
     workflow = project_workflow(projection_input)
     queue_index_by_id = {

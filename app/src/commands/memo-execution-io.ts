@@ -1,11 +1,12 @@
 import { isAbsolute, relative, resolve } from "node:path";
-import { mkdir, open, realpath, stat, unlink } from "node:fs/promises";
+import { mkdir, open, readdir, realpath, stat, unlink } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { ArtifactBinding } from "../modules/assurance/types.js";
 import { isRecord, readArtifactBinding } from "../modules/assurance/validators.js";
 import { keyJudgementPolicyFromStandard, validateMemoStandardV1 } from "../modules/memo/standard-v1.js";
-import { createBoundedWriterRequest, recordWriterResponse, validateBoundedWriterRequest, type WriterRecord } from "../modules/memo/writer.js";
+import { createBoundedWriterRequest, editorialWriterRequest, recordWriterResponse, validateBoundedWriterRequest,
+  type EditorialRevision, type WriterRecord } from "../modules/memo/writer.js";
 import { createKeyJudgementRequest, recordKeyJudgementResponse, validateKeyJudgementRequest,
   validatePerformedAdjudication, type KeyJudgementRecord } from "../modules/synthesis/key-judgement-stage.js";
 import type { MemoAuthorization, MemoStage } from "../workflow/bounded-memo.js";
@@ -23,6 +24,15 @@ export const reserveManualMemo = async (root: string, runId: string) => {
     await lock.sync();
   } finally { await lock.close(); }
   try {
+    const revisions = resolve(root, runId, "memo", "revisions");
+    try {
+      for (const entry of await readdir(revisions)) {
+        try {
+          await stat(resolve(revisions, entry, "authorization.json"));
+          throw new Error("This run has bounded editorial revision authority. Use revise:memo status/resume; manual memo work is excluded.");
+        } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+      }
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
     try { await stat(resolve(directory, "authorization.json")); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return async () => { await unlink(lockPath); };
@@ -108,7 +118,8 @@ export const memoWriterRequest = (authority: MemoInputBindings, input: MemoInput
 export type MemoRequest = ReturnType<typeof memoSelectionRequest> | ReturnType<typeof memoWriterRequest>;
 
 export const validateMemoRequest = (stage: MemoStage, value: unknown, authority: MemoInputBindings,
-  input: MemoInputs, selection?: { record: KeyJudgementRecord; binding: ArtifactBinding }): MemoRequest => {
+  input: MemoInputs, selection?: { record: KeyJudgementRecord; binding: ArtifactBinding },
+  revision?: EditorialRevision): MemoRequest => {
   if (stage === "key-judgements") {
     const parsed = validateKeyJudgementRequest(value);
     if (!parsed.ok || !isDeepStrictEqual(parsed.value, memoSelectionRequest(authority, input, parsed.value.preparedAt))) {
@@ -117,8 +128,8 @@ export const validateMemoRequest = (stage: MemoStage, value: unknown, authority:
     return parsed.value;
   }
   const parsed = validateBoundedWriterRequest(value);
-  if (!parsed.ok || !selection || !isDeepStrictEqual(parsed.value,
-    memoWriterRequest(authority, input, selection.record, selection.binding, parsed.value.preparedAt))) {
+  const base = parsed.ok && selection ? memoWriterRequest(authority, input, selection.record, selection.binding, parsed.value.preparedAt) : null;
+  if (!parsed.ok || !base || !isDeepStrictEqual(parsed.value, revision ? editorialWriterRequest(base, revision) : base)) {
     throw new Error("Writer request no longer matches frozen selection.");
   }
   return parsed.value;
@@ -150,7 +161,8 @@ export const memoStageRecord = (stage: MemoStage, request: MemoRequest, requestB
 };
 
 export const reopenMemoRecord = async (root: string, stage: MemoStage, binding: ArtifactBinding,
-  authority: MemoInputBindings, input: MemoInputs, selection?: { record: KeyJudgementRecord; binding: ArtifactBinding }) => {
+  authority: MemoInputBindings, input: MemoInputs, selection?: { record: KeyJudgementRecord; binding: ArtifactBinding },
+  revision?: EditorialRevision) => {
   const artifact = requireChecksum(await loadRunArtifact(root, binding.artifactRef, "Stage record"), binding.artifactSha256, "Stage record");
   const value = artifact.value;
   if (!isRecord(value) || typeof value.recordedAt !== "string" ||
@@ -160,7 +172,7 @@ export const reopenMemoRecord = async (root: string, stage: MemoStage, binding: 
     String(value.request.artifactSha256), "Recorded request");
   const response = requireChecksum(await loadRunArtifact(root, value.response.artifactRef, "Recorded response"),
     String(value.response.artifactSha256), "Recorded response");
-  const parsed = validateMemoRequest(stage, request.value, authority, input, selection);
+  const parsed = validateMemoRequest(stage, request.value, authority, input, selection, revision);
   const expected = memoStageRecord(stage, parsed, request.binding, response.value, response.binding, input,
     value.recordedAt, selection?.record);
   if (!isDeepStrictEqual(expected, value)) throw new Error("Memo record does not reconstruct from its saved inputs.");
