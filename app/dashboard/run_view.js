@@ -211,6 +211,8 @@
     'draft-research-question': 'Approving scope and drafting the research question',
     'save-copilot-settings': 'Saving the Copilot model',
     'prepare-synthesis': 'Preparing the synthesis Build',
+    'start-bounded-synthesis': 'Starting bounded Build and Challenge',
+    'resume-bounded-synthesis': 'Resuming unused bounded synthesis work',
     'prepare-key-judgements': 'Preparing the key-judgement selection',
     'prepare-memo-writer': 'Preparing the memo writer',
     'run-next': 'Checking the next deterministic step'
@@ -278,6 +280,7 @@
     if (!running) add(head, linkButton('Dismiss', function () { box.hidden = true; }));
     box.appendChild(head);
     if (running) return;
+    if (data && data.message) add(box, el('p', 'meta prose', data.message));
     var steps = (data && data.steps) || [];
     if (steps.length) {
       var list = el('ol', 'action-steps');

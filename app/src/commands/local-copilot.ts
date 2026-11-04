@@ -45,13 +45,15 @@ const readInput = async (): Promise<unknown> => {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 };
 
-const main = async (): Promise<void> => {
-  const input = await readInput();
+export const runLocalCopilot = async (input: unknown): Promise<unknown> => {
   if (typeof input !== "object" || input === null || !("action" in input)) {
     throw new Error("Expected a Copilot operation.");
   }
   if (input.action !== "models" && input.action !== "generate") {
     throw new Error("Unsupported Copilot operation.");
+  }
+  if (Buffer.byteLength(JSON.stringify(input), "utf8") > MAX_INPUT_BYTES) {
+    throw new Error("Copilot request exceeds 4 MiB.");
   }
   const baseDirectory = await mkdtemp(join(tmpdir(), "memo-copilot-"));
   const client = new CopilotClient({
@@ -71,10 +73,9 @@ const main = async (): Promise<void> => {
       (model) => model.id !== "auto" && model.policy?.state !== "disabled"
     );
     if (input.action === "models") {
-      process.stdout.write(JSON.stringify({
+      return {
         models: models.map((model) => ({ id: model.id, name: model.name }))
-      }));
-      return;
+      };
     }
     if (
       !("model" in input) ||
@@ -107,7 +108,7 @@ const main = async (): Promise<void> => {
       if (Buffer.byteLength(answer.data.content, "utf8") > MAX_OUTPUT_BYTES) {
         throw new Error("Copilot answer exceeds 4 MiB.");
       }
-      process.stdout.write(JSON.stringify({
+      return {
         invocationId: session.sessionId,
         provider: "github-copilot-sdk",
         model: currentModel.modelId,
@@ -115,7 +116,7 @@ const main = async (): Promise<void> => {
         completedAt: new Date().toISOString(),
         freshSession: true,
         content: answer.data.content
-      }));
+      };
     } catch (error) {
       await session.abort();
       throw error;
@@ -136,7 +137,7 @@ const main = async (): Promise<void> => {
 
 if (import.meta.url === pathToFileURL(resolve(process.argv[1] ?? "")).href) {
   try {
-    await main();
+    process.stdout.write(JSON.stringify(await runLocalCopilot(await readInput())));
   } catch (error) {
     console.error(error instanceof Error ? error.message : "Local Copilot operation failed.");
     process.exitCode = 1;

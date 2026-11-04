@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 from .evidence_workspace import build_evidence_workspace
 from .workflow_projection import project_workflow
+from .bounded_synthesis import compose_workflow
 PHASES = (
     ("frame", "Frame"),
     ("collect", "Collect"),
@@ -747,7 +748,8 @@ def _queue_item(phase: str, actor: str, title: str, detail: str, target: dict[st
     return {"phase": phase, "actor": actor, "title": title, "detail": detail, "target": target, "weight": weight}
 
 
-def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> dict[str, Any]:
+def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any],
+                  bounded_synthesis: dict[str, Any] | None = None) -> dict[str, Any]:
     panel1 = parts["panel1"]
     leads, discoveries = _leads_and_discoveries(full)
     candidates_by_id = {c["candidateId"]: c for c in parts["evidenceReview"]}
@@ -1023,6 +1025,8 @@ def build_journey(run_id: str, full: dict[str, Any], parts: dict[str, Any]) -> d
                 "path": gate_path,
                 "approvalAvailable": memo["gate"]["humanApprovalAvailable"],
             }
+    projection_input = compose_workflow(projection_input, bounded_synthesis)
+    blockers = projection_input["blockers"]
     workflow = project_workflow(projection_input)
     queue_index_by_id = {
         work_id: work["queueIndex"]
