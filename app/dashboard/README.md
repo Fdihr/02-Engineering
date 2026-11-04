@@ -103,6 +103,25 @@ Choose **Review and approve plan**, then explicitly confirm under your analyst I
 
 At subsequent AI tasks, **Run with Copilot** starts a fresh, tool-disabled SDK session and feeds the answer through the same deterministic recorder as the manual fallback. The SDK runs in empty mode without plugins, inherited instructions, skills, hooks, MCP servers, file access or permission grants. Runtime setup and generation are time-bounded. Model output never performs an evidence review, source review, adjudication or publication approval.
 
+In **Findings**, **Start bounded Build and Challenge** records an explicit analyst
+authorization and runs both ready stages without successive model-execution
+clicks. Inputs, target round and effective Settings models are frozen; each
+needed stage has at most one generation call. Existing Build/Challenge records
+are reused. Status is polled read-only; **Resume bounded synthesis** can use
+only remaining authority. Every successful Challenge stops for human
+adjudication, including a zero-finding pass. No collection, source review,
+key-judgement selection, writing or publication is authorized by this action.
+
+Bounded receipts live under `synthesis/execution/`; the request also has an
+exclusive generation-attempt reservation. A saved response or complete Build
+can be reused after interruption, but a reserved call without a saved response
+is indeterminate and will not be replayed. Failed work retains its exact phase,
+error, raw output where received, and earlier valid artifacts. Recovery is an
+inspection boundary, not permission to delete receipts or start another round.
+Manual Build/Challenge controls cannot bypass this authority. Other source
+work remains eligible according to the shared scoped workflow projection.
+See the [bounded execution contract](../../02-Contracts/bounded-synthesis-execution.md).
+
 The request directory retains `copilot-invocation-*.json` with raw output, session/model/timestamps and the exact request checksum, including when JSON validation fails. Successful answers also produce the stage's normal response and record artifacts. Only one automatic generation runs per dashboard process at a time; recorded requests cannot be automatically rerun. Keep one dashboard process per run root. Manual copy/paste remains a secondary fallback, honestly recording unknown legacy model identity.
 
 Install the optional sign-in dependency from `app/` before running the dashboard with Entra configured:

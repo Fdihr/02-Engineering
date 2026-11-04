@@ -8,6 +8,7 @@ from dashboard.model import (
     failure_counts,
     parse_events,
 )
+from dashboard.workflow_projection import project_workflow
 
 
 def file_entry(rel_path, size=100):
@@ -15,6 +16,50 @@ def file_entry(rel_path, size=100):
 
 
 class ModelTests(unittest.TestCase):
+    def test_dashboard_and_runner_share_the_recommended_machine_action(self):
+        projection = project_workflow({
+            "runId": "run-1",
+            "intentApproved": True,
+            "evidenceAvailable": True,
+            "committedOutcomes": [{"stage": "intent", "paths": ["runs/run-1/approved.json"]}],
+            "readyWork": [
+                {"id": "support-review", "stage": "assure", "actor": "human", "kind": "decision",
+                 "title": "Review source support", "detail": "", "paths": ["runs/run-1/review-package.json"], "priority": 1},
+                {"id": "challenge", "stage": "synthesise", "actor": "machine", "kind": "work",
+                 "title": "Run Challenge", "detail": "", "paths": ["runs/run-1/challenge-request.json"], "priority": 1},
+            ],
+            "humanDecisions": [{"id": "support-review", "stage": "assure", "paths": []}],
+            "interimCheckpoints": [{"id": "challenge", "stage": "synthesise", "paths": []}],
+            "blockers": [],
+        })
+        self.assertEqual(projection["status"], "ready-machine")
+        self.assertEqual(projection["recommendedNextAction"]["work"]["id"], "challenge")
+        self.assertEqual(projection["readyWork"][0]["id"], "challenge")
+
+    def test_scoped_exception_does_not_globally_block_dashboard_work(self):
+        projection = project_workflow({
+            "runId": "run-1",
+            "intentApproved": True,
+            "evidenceAvailable": True,
+            "committedOutcomes": [],
+            "readyWork": [
+                {"id": "source-a", "stage": "assure", "actor": "machine", "kind": "work",
+                 "title": "Process source A", "detail": "", "paths": ["runs/run-1/source-a.json"], "priority": 1},
+                {"id": "source-b", "stage": "assure", "actor": "machine", "kind": "work",
+                 "title": "Process source B", "detail": "", "paths": ["runs/run-1/source-b.json"], "priority": 1},
+            ],
+            "humanDecisions": [],
+            "interimCheckpoints": [],
+            "blockers": [{
+                "id": "exception-a", "kind": "exception", "scope": "work",
+                "paths": ["runs/run-1/exceptions/a.json", "runs/run-1/source-a.json"],
+                "affectedWorkIds": ["source-a"], "uncertain": False,
+                "title": "Source A exception", "detail": "Source A only.",
+            }],
+        })
+        self.assertEqual(projection["recommendedNextAction"]["work"]["id"], "source-b")
+        self.assertEqual(projection["blockers"][0]["affectedWorkIds"], ["source-a"])
+
     def test_local_article_capture_projects_once_and_does_not_invent_admission(self):
         from dashboard.journey import _source_rows
         path = "article-captures/article-1/article-capture.json"
@@ -251,6 +296,77 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(view["counts"]["openExceptions"], 1)
         self.assertIn("exception queue: 1 open", view["waitingOn"])
         self.assertIn("publication gate: blocked (provisional or synthetic lineage)", view["waitingOn"])
+        self.assertEqual(view["journey"]["workflow"]["status"], "blocked")
+        self.assertTrue(view["journey"]["workflow"]["blockers"][0]["uncertain"])
+        exception_step = next(item for item in view["journey"]["queue"] if item["title"].startswith("Resolve "))
+        self.assertIn("scope is uncertain", exception_step["detail"])
+
+    def test_challenge_pending_is_distinct_from_checked_with_zero_findings(self):
+        from dashboard.journey import _rounds
+
+        build_path = "synthesis/records/build-1/synthesis-build-record.json"
+        request_path = "synthesis/challenge/requests/challenge-1/challenge-request.json"
+        build = {
+            "recordedAt": "2026-11-03T10:00:00Z",
+            "synthesis": {"sourceNoteIds": ["note-1"], "claims": []},
+        }
+        waiting = [{
+            "stage": "challenge", "status": "awaiting-ai", "requestPath": request_path,
+            "preparedAt": "2026-11-03T10:01:00Z",
+        }]
+        request = {"buildRecord": {"artifactRef": f"runs/r/{build_path}"}}
+        pending, _ = _rounds("r", {build_path: build, request_path: request}, [], waiting)
+        challenge = next(step for step in pending[0]["steps"] if step["key"] == "challenge")
+        self.assertEqual(challenge["state"], "ai")
+        self.assertEqual(pending[0]["challengeStatus"], "pending")
+
+        challenge_path = "synthesis/challenge/records/challenge-1/challenge-record.json"
+        recorded = {
+            "recordedAt": "2026-11-03T10:02:00Z",
+            "buildRecord": {"artifactRef": f"runs/r/{build_path}"},
+            "metrics": {"challengesRaised": 0},
+        }
+        checked, _ = _rounds("r", {build_path: build, challenge_path: recorded, request_path: request}, [], [])
+        challenge = next(step for step in checked[0]["steps"] if step["key"] == "challenge")
+        self.assertEqual(challenge["state"], "done")
+        self.assertEqual(challenge["detail"], "0 challenges raised")
+        self.assertEqual(checked[0]["challengeStatus"], "checked")
+
+        invalid_path = "synthesis/challenge/records/challenge-invalid/challenge-record.json"
+        unavailable, _ = _rounds("r", {
+            build_path: build,
+            request_path: request,
+            invalid_path: {"buildRecord": {"artifactRef": f"runs/r/{build_path}"}},
+        }, [], [])
+        challenge = next(step for step in unavailable[0]["steps"] if step["key"] == "challenge")
+        self.assertEqual(challenge["state"], "failed")
+        self.assertEqual(unavailable[0]["challengeStatus"], "unavailable")
+
+    def test_dashboard_waits_for_the_current_round_before_offering_another_build(self):
+        build_path = "synthesis/records/build-1/synthesis-build-record.json"
+        request_path = "synthesis/challenge/requests/challenge-1/challenge-request.json"
+        docs = {
+            build_path: {
+                "recordedAt": "2026-11-03T10:00:00Z",
+                "synthesis": {"sourceNoteIds": ["note-old"], "claims": []},
+            },
+            request_path: {"buildRecord": {"artifactRef": f"runs/r/{build_path}"}},
+            "assurance/snap-old/source-note-reviewed.json": {
+                "id": "note-old", "candidateId": "candidate-old",
+            },
+            "assurance/snap-new/source-note-reviewed.json": {
+                "id": "note-new", "candidateId": "candidate-new",
+            },
+        }
+        view = build_run_view(
+            "r", [file_entry(path) for path in docs],
+            [{"relPath": path, "value": value} for path, value in docs.items()], [], "t",
+        )
+        journey = view["journey"]
+        self.assertFalse(journey["readiness"]["currentRoundComplete"])
+        self.assertFalse(journey["readiness"]["canBuild"])
+        self.assertTrue(journey["readiness"]["newNotes"])
+        self.assertFalse(any("Build a new synthesis round" in item["title"] for item in journey["queue"]))
 
     def test_journey_keeps_unretrieved_leads_pending_and_ignores_duplicate_retrieval(self):
         docs = {

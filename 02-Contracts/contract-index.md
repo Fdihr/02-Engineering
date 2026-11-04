@@ -16,6 +16,8 @@ Use this file as the index of active contracts. Historical retrieval contracts a
 10. [Bounded RSS capture and opt-in batch policy admission](rss-capture.md)
 11. [Local exact-URL article retrieval and one-source policy](local-article-retrieval.md)
 12. [Versioned question relevance policy: direct contribution versus coverage](question-relevance-policy.md)
+13. [Shared workflow projection](workflow-projection.md)
+14. [Bounded Build and Challenge execution](bounded-synthesis-execution.md)
 
 ## Retired acquisition contracts
 

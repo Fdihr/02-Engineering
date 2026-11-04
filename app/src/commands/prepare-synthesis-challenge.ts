@@ -1,25 +1,33 @@
 import { appendFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   createChallengeRequest
 } from "../modules/synthesis/challenge.js";
-import { validateSynthesisBuildEnvelope } from "../modules/synthesis/build.js";
-import { validateSynthesisBuildRecord } from "../modules/synthesis/response.js";
-import { validateSynthesisSourceNote } from "../modules/synthesis/source-note.js";
+import { loadBuildRecordContext, writeSynthesisArtifact } from "./synthesis-io.js";
 import {
   assuranceRunRoot,
   commandError,
   ensureDirectory,
-  loadJsonArtifact,
-  loadRunArtifact,
   longPath,
-  requireChecksum,
-  withSyncRetry,
-  writeJsonOnce
+  withSyncRetry
 } from "./assurance-io.js";
 
 const usage =
   "Usage: npm run prepare:synthesis-challenge -- <synthesis-build-record.json>";
+
+export const prepareSynthesisChallenge = async (runRoot: string, recordPath: string, preparedAt: string, reuse = false) => {
+  const context = await loadBuildRecordContext(runRoot, recordPath);
+  const request = createChallengeRequest({
+    buildRecord: context.record, buildRecordArtifact: context.recordArtifact.binding,
+    envelope: context.envelope, sources: context.sources, preparedAt
+  });
+  if (!request.ok) throw new Error(`Challenge request rejected: ${request.error}`);
+  const requestDir = resolve(runRoot, request.value.runId, "synthesis", "challenge", "requests", request.value.id);
+  await ensureDirectory(requestDir);
+  const output = await writeSynthesisArtifact(resolve(requestDir, "challenge-request.json"), request.value, reuse);
+  return { request: request.value, output };
+};
 
 const main = async (): Promise<void> => {
   const preparedAt = new Date().toISOString();
@@ -27,53 +35,12 @@ const main = async (): Promise<void> => {
   try {
     const [recordPath, ...extra] = process.argv.slice(2);
     if (!recordPath || extra.length > 0) throw new Error(usage);
-    const recordArtifact = await loadRunArtifact(runRoot, recordPath, "Build record");
-    const record = validateSynthesisBuildRecord(recordArtifact.value);
-    if (!record.ok) throw new Error(`Build record rejected: ${record.error}`);
-    const envelopeArtifact = requireChecksum(
-      await loadRunArtifact(runRoot, record.value.envelope.artifactRef, "Build envelope"),
-      record.value.envelope.artifactSha256,
-      "Build envelope"
-    );
-    const envelope = validateSynthesisBuildEnvelope(envelopeArtifact.value);
-    if (!envelope.ok) throw new Error(`Build envelope rejected: ${envelope.error}`);
-    const sources = [];
-    for (const binding of envelope.value.sourceNotes) {
-      const artifact = requireChecksum(
-        await loadRunArtifact(runRoot, binding.artifactRef, "Source note"),
-        binding.artifactSha256,
-        "Source note"
-      );
-      const note = validateSynthesisSourceNote(artifact.value);
-      if (!note.ok) throw new Error(`Source note rejected: ${note.error}`);
-      sources.push({ note: note.value, artifact: artifact.binding });
-    }
-    const request = createChallengeRequest({
-      buildRecord: record.value,
-      buildRecordArtifact: recordArtifact.binding,
-      envelope: envelope.value,
-      sources,
-      preparedAt
-    });
-    if (!request.ok) throw new Error(`Challenge request rejected: ${request.error}`);
-    const requestDir = resolve(
-      runRoot,
-      request.value.runId,
-      "synthesis",
-      "challenge",
-      "requests",
-      request.value.id
-    );
-    await ensureDirectory(requestDir);
-    const output = await writeJsonOnce(
-      resolve(requestDir, "challenge-request.json"),
-      request.value
-    );
+    const { request: value, output } = await prepareSynthesisChallenge(runRoot, recordPath, preparedAt);
     await withSyncRetry(() =>
       appendFile(
-        longPath(resolve(runRoot, request.value.runId, "synthesis", "events.jsonl")),
+        longPath(resolve(runRoot, value.runId, "synthesis", "events.jsonl")),
         `${JSON.stringify({
-          runId: request.value.runId,
+          runId: value.runId,
           occurredAt: preparedAt,
           actorType: "controller",
           stage: "external_synthesis",
@@ -81,20 +48,20 @@ const main = async (): Promise<void> => {
           eventType: "synthesis.challenge.request.prepared",
           status: "completed",
           artifactRef: output,
-          reviewStatus: request.value.reviewStatus,
-          limitedEvidence: request.value.limitedEvidence,
-          claimCount: request.value.claims.length,
-          checklistItems: request.value.claims.length * request.value.checklist.length
+          reviewStatus: value.reviewStatus,
+          limitedEvidence: value.limitedEvidence,
+          claimCount: value.claims.length,
+          checklistItems: value.claims.length * value.checklist.length
         })}\n`,
         "utf8"
       )
     );
-    console.log(`Run: ${request.value.runId}`);
-    console.log(`Challenge request: ${request.value.id}`);
-    console.log(`Review status: ${request.value.reviewStatus}`);
-    console.log(`Limited evidence: ${request.value.limitedEvidence}`);
-    console.log(`Claims: ${request.value.claims.length}`);
-    console.log(`Checklist answers required: ${request.value.claims.length * request.value.checklist.length}`);
+    console.log(`Run: ${value.runId}`);
+    console.log(`Challenge request: ${value.id}`);
+    console.log(`Review status: ${value.reviewStatus}`);
+    console.log(`Limited evidence: ${value.limitedEvidence}`);
+    console.log(`Claims: ${value.claims.length}`);
+    console.log(`Checklist answers required: ${value.claims.length * value.checklist.length}`);
     console.log(`Output: ${output}`);
   } catch (error) {
     console.error(`Synthesis Challenge preparation failed: ${commandError(error)}`);
@@ -102,4 +69,4 @@ const main = async (): Promise<void> => {
   }
 };
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) await main();

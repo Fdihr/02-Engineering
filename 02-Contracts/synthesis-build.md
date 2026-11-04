@@ -72,6 +72,12 @@ For a provisional note, support failure rate, chrome rate, omission count, tag p
 
 ## Build
 
+The optional [bounded execution slice](bounded-synthesis-execution.md) connects
+these existing Build and Challenge contracts under one explicit analyst start,
+with frozen inputs/round/models, at most one call per needed stage and no
+automatic retries. Existing output schemas and interim human adjudication
+remain authoritative; recording a zero-finding Challenge is not adjudication.
+
 `prepare:synthesis-build` accepts checksum-bound reviewed, provisional, or synthetic source notes. It rejects extract commits, review packages, and incomplete note lineage. Code derives qualified observation aliases, outlet identity, observation-pair relationships, question coverage, gaps, limitations, and the preliminary `limitedEvidence` value before any model call, then writes a checksum-bound model-ready request.
 
 Synthetic is a third source-note status, not a flavor of provisional. A synthetic note can never be superseded into a reviewed note. Any envelope consuming one is `reviewStatus: "synthetic"`; every claim it supports has both `provisional: true` and `synthetic: true`. A chain is reviewed only when every consumed note is reviewed.

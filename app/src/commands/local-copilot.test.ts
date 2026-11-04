@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { localSessionConfig, SOURCE_TRUST_RULES } from "./local-copilot.js";
+import { localSessionConfig, runLocalCopilot, SOURCE_TRUST_RULES } from "./local-copilot.js";
 import { readModelIdentity } from "../core/model-identity.js";
 
 test("local Copilot sessions have no tools, permissions, plugins or inherited instructions", async () => {
@@ -37,4 +37,11 @@ test("model identity preserves legacy provenance and requires an explicit SDK mo
   ]) {
     assert.equal(readModelIdentity(value), undefined);
   }
+});
+
+test("the programmatic transport rejects oversized prompts before creating a client", async () => {
+  await assert.rejects(runLocalCopilot({
+    action: "generate", model: "synthetic-only",
+    prompt: { system: "Bounded task", user: "x".repeat(4 * 1024 * 1024) }
+  }), /request exceeds 4 MiB/);
 });

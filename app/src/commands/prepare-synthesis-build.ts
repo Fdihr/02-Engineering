@@ -1,5 +1,6 @@
 import { appendFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { createSynthesisBuildEnvelope } from "../modules/synthesis/build.js";
 import {
   validateOutletIdentityTable,
@@ -8,7 +9,9 @@ import {
 import { validateSynthesisSourceNote } from "../modules/synthesis/source-note.js";
 import { createSynthesisBuildRequest } from "../modules/synthesis/request.js";
 import { isRecord } from "../modules/assurance/validators.js";
-import { BUILD_REQUEST_SCHEMA_VERSION } from "../modules/synthesis/types.js";
+import { BUILD_REQUEST_SCHEMA_VERSION, type BoundSourceNote, type OutletIdentityTable, type SynthesisProfilePolicy } from "../modules/synthesis/types.js";
+import type { ArtifactBinding } from "../modules/assurance/types.js";
+import { writeSynthesisArtifact } from "./synthesis-io.js";
 import {
   artifactRef,
   assuranceRunRoot,
@@ -17,12 +20,34 @@ import {
   loadJsonArtifact,
   loadRunArtifact,
   longPath,
-  withSyncRetry,
-  writeJsonOnce
+  withSyncRetry
 } from "./assurance-io.js";
 
 const usage =
   "Usage: npm run prepare:synthesis-build -- <synthesis-policy.json> <outlet-identity-table.json> <source-note.json> [source-note.json ...] [--prior=<synthesis-id>] [--authorisation=<artifact.json>]";
+
+export const prepareSynthesisBuild = async (runRoot: string, input: {
+  sources: BoundSourceNote[]; policy: SynthesisProfilePolicy; policyArtifact: ArtifactBinding;
+  outletIdentityTable: OutletIdentityTable; outletIdentityArtifact: ArtifactBinding;
+  createdAt: string; priorSynthesisId?: string; authorisation?: ArtifactBinding;
+}, reuse = false) => {
+  const envelope = createSynthesisBuildEnvelope(input);
+  if (!envelope.ok) throw new Error(`Build envelope rejected: ${envelope.error}`);
+  const directory = resolve(runRoot, envelope.value.runId, "synthesis");
+  await ensureDirectory(directory);
+  const envelopeOutput = await writeSynthesisArtifact(resolve(directory, `${envelope.value.id}.json`), envelope.value, reuse);
+  const envelopeArtifact = await loadJsonArtifact(resolve(envelopeOutput));
+  const request = createSynthesisBuildRequest({
+    envelope: envelope.value, envelopeArtifact: envelopeArtifact.binding,
+    sources: input.sources, policy: input.policy, preparedAt: input.createdAt,
+    ...(input.authorisation ? { authorisation: input.authorisation } : {})
+  });
+  if (!request.ok) throw new Error(`Build request rejected: ${request.error}`);
+  const requestDir = resolve(directory, "requests", request.value.id);
+  await ensureDirectory(requestDir);
+  const output = await writeSynthesisArtifact(resolve(requestDir, "build-request.json"), request.value, reuse);
+  return { envelope: envelope.value, envelopeOutput, request: request.value, output };
+};
 
 const main = async (): Promise<void> => {
   const createdAt = new Date().toISOString();
@@ -81,45 +106,20 @@ const main = async (): Promise<void> => {
       throw new Error("Build authorisation is invalid.");
     }
 
-    const envelope = createSynthesisBuildEnvelope({
+    const prepared = await prepareSynthesisBuild(runRoot, {
       sources,
       policy: policy.value,
       policyArtifact: policyArtifact.binding,
       outletIdentityTable: outlets.value,
       outletIdentityArtifact: outletArtifact.binding,
       createdAt,
-      ...(priorSynthesisId ? { priorSynthesisId } : {})
+      ...(priorSynthesisId ? { priorSynthesisId } : {}),
+      ...(authorisationArtifact ? { authorisation: authorisationArtifact.binding } : {})
     });
-    if (!envelope.ok) throw new Error(`Build envelope rejected: ${envelope.error}`);
-
-    const synthesisDir = resolve(runRoot, envelope.value.runId, "synthesis");
-    await ensureDirectory(synthesisDir);
-    const envelopeOutput = await writeJsonOnce(
-      resolve(synthesisDir, `${envelope.value.id}.json`),
-      envelope.value
-    );
-    const envelopeArtifact = await loadJsonArtifact(resolve(envelopeOutput));
-    const request = createSynthesisBuildRequest({
-      envelope: envelope.value,
-      envelopeArtifact: envelopeArtifact.binding,
-      sources,
-      policy: policy.value,
-      preparedAt: createdAt,
-      ...(authorisationArtifact
-        ? { authorisation: authorisationArtifact.binding }
-        : {})
-    });
-    if (!request.ok) {
-      throw new Error(`Build request rejected: ${request.error}`);
-    }
-    const requestDir = resolve(synthesisDir, "requests", request.value.id);
-    await ensureDirectory(requestDir);
-    const requestOutput = await writeJsonOnce(
-      resolve(requestDir, "build-request.json"),
-      request.value
-    );
+    const { envelope, envelopeOutput, output: requestOutput } = prepared;
+    const synthesisDir = resolve(runRoot, envelope.runId, "synthesis");
     const event = {
-      runId: envelope.value.runId,
+      runId: envelope.runId,
       occurredAt: createdAt,
       actorType: "controller",
       stage: "external_synthesis",
@@ -128,8 +128,8 @@ const main = async (): Promise<void> => {
       status: "completed",
       artifactRef: requestOutput,
       envelopeArtifactRef: envelopeOutput,
-      reviewStatus: envelope.value.reviewStatus,
-      limitedEvidence: envelope.value.limitedEvidence
+      reviewStatus: envelope.reviewStatus,
+      limitedEvidence: envelope.limitedEvidence
     };
     await withSyncRetry(() =>
       appendFile(
@@ -139,11 +139,11 @@ const main = async (): Promise<void> => {
       )
     );
 
-    console.log(`Run: ${envelope.value.runId}`);
-    console.log(`Build envelope: ${envelope.value.id}`);
-    console.log(`Review status: ${envelope.value.reviewStatus}`);
-    console.log(`Limited evidence: ${envelope.value.limitedEvidence}`);
-    console.log(`Source notes: ${envelope.value.sourceNoteIds.length}`);
+    console.log(`Run: ${envelope.runId}`);
+    console.log(`Build envelope: ${envelope.id}`);
+    console.log(`Review status: ${envelope.reviewStatus}`);
+    console.log(`Limited evidence: ${envelope.limitedEvidence}`);
+    console.log(`Source notes: ${envelope.sourceNoteIds.length}`);
     console.log(`Envelope: ${artifactRef(resolve(envelopeOutput))}`);
     console.log(`Output: ${artifactRef(resolve(requestOutput))}`);
   } catch (error) {
@@ -152,4 +152,4 @@ const main = async (): Promise<void> => {
   }
 };
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) await main();

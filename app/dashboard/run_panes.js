@@ -1436,7 +1436,10 @@
     round.claims.forEach(function (claim) {
       var li = el('li', 'claim');
       add(li, el('div', 'claim-text', claim.statement), el('div', 'meta', [claim.alias, capital(humanise(claim.kind)), (claim.confidence || 'unknown') + ' confidence', claim.singleSource ? 'single source' : ''].filter(Boolean).join(' · ')));
-      if (!claim.challenges.length) add(li, el('div', 'meta', 'No challenges raised.'));
+      if (!claim.challenges.length) add(li, el('div', 'meta',
+        round.challengeStatus === 'checked' ? 'No challenges raised.' :
+        round.challengeStatus === 'pending' ? 'Challenge pending.' :
+        round.challengeStatus === 'unavailable' ? 'Challenge findings unavailable.' : 'Challenge not recorded.'));
       claim.challenges.forEach(function (ch) {
         var box = el('div', 'challenge');
         add(box, el('div', null, capital(humanise(ch.check))), el('div', 'meta', ch.rationale));
@@ -1558,11 +1561,16 @@
     var entry = map[disposition] || ['unclear', 'Not assessed yet'];
     return el('span', 'mark ' + entry[0], entry[1]);
   }
-  function claimRow(claim) {
+  function claimRow(claim, challengeStatus) {
     var li = el('li');
     add(li, el('p', 'finding-text', claim.statement));
     var marks = el('div', 'finding-marks');
-    var parts = [capital(claim.confidence || 'unknown') + ' confidence', plural(claim.noteIds.length, 'source'), claim.challenges.length ? plural(claim.challenges.length, 'challenge') + ' raised' : 'No challenges raised'];
+    var challengeState = claim.challenges.length
+      ? plural(claim.challenges.length, 'challenge') + ' raised'
+      : challengeStatus === 'checked' ? 'No challenges raised' :
+        challengeStatus === 'pending' ? 'Challenge pending' :
+        challengeStatus === 'unavailable' ? 'Challenge findings unavailable' : 'Challenge not recorded';
+    var parts = [capital(claim.confidence || 'unknown') + ' confidence', plural(claim.noteIds.length, 'source'), challengeState];
     add(marks, claimStatusMark(claim.status), el('span', 'meta', parts.join(' · ')));
     li.appendChild(marks);
     return li;
@@ -1586,7 +1594,7 @@
       var group = el('div', 'finding-group');
       add(group, C.sectionHead('Research question ' + n, 'h3', el('span', 'meta', req.text)));
       var list = el('ul', 'rows');
-      claims.forEach(function (c) { list.appendChild(claimRow(c)); });
+      claims.forEach(function (c) { list.appendChild(claimRow(c, round.challengeStatus)); });
       if (!claims.length) add(list, add(el('li'), el('span', 'meta', 'No claim selected for this question.')));
       group.appendChild(list);
       sec.appendChild(group);
@@ -1596,7 +1604,7 @@
       var other = el('div', 'finding-group');
       add(other, C.sectionHead(selections.length || round.coverage.length ? 'Other claims' : 'Claims in this round', 'h3', el('span', 'meta', String(rest.length))));
       var ol = el('ul', 'rows');
-      rest.forEach(function (c) { ol.appendChild(claimRow(c)); });
+      rest.forEach(function (c) { ol.appendChild(claimRow(c, round.challengeStatus)); });
       other.appendChild(ol);
       sec.appendChild(other);
     }
@@ -1618,13 +1626,51 @@
       add(gate, el('p', 'meta prose', 'Still in progress and not included if you build now:'), bullets(r.inFlight.map(function (s) { return s.title + ' — at ' + s.step.toLowerCase(); })));
     }
     if (r.provisionalNotes) add(gate, el('p', 'meta', plural(r.provisionalNotes, 'note is', 'notes are') + ' provisional. A memo built on them cannot be published.'));
+    var execution = state.view.boundedSynthesis;
+    var authorizationExists = execution && (execution.authorized === true || Boolean(execution.authorizationId));
+    var waitingHuman = execution && execution.status === 'human-waiting';
+    var stopped = execution && ['failed', 'blocked', 'indeterminate'].indexOf(execution.status) >= 0 && authorizationExists;
+    var executing = execution && (execution.workerActive || execution.status === 'starting' || execution.status === 'running');
+    var canStart = authorizationExists || r.noteCount > 0 || j.nextBuild || j.rounds.length > 0;
+    add(gate, el('p', 'meta prose', 'Bounded execution freezes this round and its source notes. One call per needed Build or Challenge stage, no automatic retries, then your adjudication. It does not collect, review sources, write or publish.'));
+    if (execution) {
+      var progress = el('div');
+      progress.setAttribute('role', 'status');
+      progress.setAttribute('aria-live', 'polite');
+      add(progress, el('p', execution.error ? 'meta fail' : 'meta',
+        'Bounded synthesis: ' + humanise(execution.status) +
+        (typeof execution.remainingCalls === 'number' ? ' \u00b7 ' + execution.remainingCalls + ' unused authorized call(s)' : '') +
+        (execution.error ? '. ' + execution.error : '')));
+      if (execution.launcherError) add(progress, el('p', 'meta fail', 'Dashboard launcher: ' + execution.launcherError));
+      if (execution.stages) ['build', 'challenge'].forEach(function (stage) {
+        var value = execution.stages[stage];
+        if (value) add(progress, el('p', 'meta', capital(stage) + ': ' + humanise(value.phase)));
+      });
+      gate.appendChild(progress);
+    }
+    if (!waitingHuman) {
+      add(gate, add(el('div', 'btn-row'),
+        C.actButton(authorizationExists ? 'Resume bounded synthesis' : 'Start bounded Build and Challenge',
+          'btn-primary', function () {
+            C.postAction({ action: authorizationExists ? 'resume-bounded-synthesis' : 'start-bounded-synthesis',
+              runId: state.runId, reviewerId: C.analyst() });
+          }, false, !canStart || Boolean(executing) || Boolean(stopped)),
+        stopped ? el('span', 'meta', 'Recovery requires inspection of the saved attempt; starting again will not grant more calls.') : null));
+    } else {
+      add(gate, el('p', 'meta prose', 'Challenge is committed. Adjudicate this round below, including when it raised no findings.'));
+    }
     if (j.nextBuild) {
       gate.appendChild(step('Round ' + j.nextBuild.index + ': run the AI synthesis Build', [C.aiTask('stage', j.nextBuild.item)]));
     } else {
       var label = j.rounds.length ? 'Build round ' + (j.rounds.length + 1) + ' from ' + plural(r.noteCount, 'note') : 'Build the first synthesis from ' + plural(r.noteCount, 'note');
       var primary = !j.rounds.length || r.newNotes.length > 0;
-      var build = C.actButton(label, primary ? 'btn-primary' : 'btn-secondary', function () { C.postAction({ action: 'prepare-synthesis', runId: state.runId }); }, false, !r.canBuild);
-      add(gate, add(el('div', 'btn-row'), build, !r.canBuild ? el('span', 'meta', 'Admit and review at least one source first.') : !primary ? el('span', 'meta', 'No new notes since the last round; a rebuild uses the same inputs.') : null));
+      var build = C.actButton(label, primary ? 'btn-primary' : 'btn-secondary', function () { C.postAction({ action: 'prepare-synthesis', runId: state.runId }); }, false, !r.canBuild || Boolean(authorizationExists));
+      var buildHint = !r.canBuild
+        ? r.noteCount === 0 ? 'Admit and review at least one source first.' :
+          !r.currentRoundComplete ? 'Complete the current synthesis round before starting another.' :
+          'A synthesis Build is already pending.'
+        : !primary ? 'No new notes since the last round; a rebuild uses the same inputs.' : null;
+      add(gate, add(el('div', 'btn-row'), build, buildHint ? el('span', 'meta', buildHint) : null));
     }
     frag.appendChild(gate);
 
@@ -1910,7 +1956,10 @@
       if (roundClaim && roundClaim.challenges.length) {
         roundClaim.challenges.forEach(function (ch) { add(box, add(el('div', 'challenge'), el('div', 'meta', capital(humanise(ch.check)) + ': ' + ch.rationale))); });
         if (round.adjudicationPath) box.appendChild(C.artifactLink(round.adjudicationPath, 'Adjudication record'));
-      } else if (roundClaim) add(box, el('div', 'meta', 'No challenges raised.'));
+      } else if (roundClaim) add(box, el('div', 'meta',
+        round.challengeStatus === 'checked' ? 'No challenges raised.' :
+        round.challengeStatus === 'pending' ? 'Challenge pending.' :
+        round.challengeStatus === 'unavailable' ? 'Challenge findings unavailable.' : 'Challenge status not recorded.'));
       sec.appendChild(box);
     });
     return sec;

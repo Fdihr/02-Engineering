@@ -5,6 +5,7 @@ import json
 import math
 import re
 from collections import defaultdict
+from pathlib import PurePath
 from typing import Any
 
 from .journey import build_journey
@@ -297,7 +298,7 @@ def _build_synthesis_view(files: list[FileEntry], json_by_path: dict[str, Any]) 
     return stages
 
 
-def _build_exceptions(files: list[FileEntry], json_by_path: dict[str, Any]) -> list[dict[str, str]]:
+def _build_exceptions(files: list[FileEntry], json_by_path: dict[str, Any]) -> list[dict[str, Any]]:
     exceptions = []
     for file in files:
         if RULES["exceptions_dir"] not in _segments(file["relPath"]) or not file["relPath"].endswith(".json"):
@@ -310,6 +311,11 @@ def _build_exceptions(files: list[FileEntry], json_by_path: dict[str, Any]) -> l
             "kind": _string_field(record, ["kind", "type"]) or "unknown",
             "status": _string_field(record, ["status"]) or "unknown",
             "raisedAt": _string_field(record, ["raisedAt", "occurredAt", "createdAt"]),
+            "refs": [
+                ref["artifactRef"]
+                for ref in record.get("refs", [])
+                if _is_record(ref) and isinstance(ref.get("artifactRef"), str)
+            ] if isinstance(record.get("refs"), list) else [],
         })
     return sorted(exceptions, key=lambda item: item["raisedAt"], reverse=True)
 
@@ -410,8 +416,9 @@ def ai_stage_for(rel_path: str) -> str | None:
 def _build_ai_queue(run_id: str, json_by_path: dict[str, Any]) -> list[dict[str, Any]]:
     recorded = {
         value["request"]["artifactRef"]
-        for value in json_by_path.values()
-        if _is_record(value) and _is_record(value.get("request")) and isinstance(value["request"].get("artifactRef"), str)
+        for path, value in json_by_path.items()
+        if path.rsplit("/", 1)[-1] in ("synthesis-build-record.json", "challenge-record.json", "key-judgement-record.json", "writer-record.json")
+        and _is_record(value) and _is_record(value.get("request")) and isinstance(value["request"].get("artifactRef"), str)
     }
     queue: list[dict[str, Any]] = []
     for rel_path in sorted(json_by_path):
@@ -746,7 +753,7 @@ def _derive_run_waiting(
     panel1: dict[str, Any],
     sources: list[dict[str, Any]],
     synthesis: list[dict[str, Any]],
-    exceptions: list[dict[str, str]],
+    exceptions: list[dict[str, Any]],
 ) -> list[str]:
     waiting: list[str] = []
     scope = panel1.get("scope")
@@ -779,14 +786,38 @@ def _derive_run_waiting(
     return waiting
 
 
+def _canonical_run_bindings(value: Any, run_id: str, run_directory: str, available: set[str]) -> Any:
+    """Canonicalize local bindings for display only; never rewrite persisted lineage."""
+    if isinstance(value, list):
+        return [_canonical_run_bindings(item, run_id, run_directory, available) for item in value]
+    if not isinstance(value, dict):
+        return value
+    result = {}
+    for key, item in value.items():
+        if key == "artifactRef" and isinstance(item, str) and PurePath(item).is_absolute():
+            try:
+                local = PurePath(item).relative_to(PurePath(run_directory))
+            except ValueError:
+                local = None
+            if local is not None and ".." not in local.parts and local.as_posix() in available:
+                result[key] = f"runs/{run_id}/{local.as_posix()}"
+                continue
+        result[key] = _canonical_run_bindings(item, run_id, run_directory, available)
+    return result
+
+
 def build_run_view(
     run_id: str,
     files: list[FileEntry],
     jsons: list[JsonFile],
     event_files: list[EventLines],
     scanned_at: str,
+    bounded_synthesis: dict[str, Any] | None = None,
+    run_directory: str | None = None,
 ) -> dict[str, Any]:
     json_by_path = {entry["relPath"]: entry["value"] for entry in jsons}
+    if run_directory is not None:
+        json_by_path = _canonical_run_bindings(json_by_path, run_id, run_directory, set(json_by_path))
     full = dict(json_by_path)
     by_snapshot: dict[str, list[FileEntry]] = defaultdict(list)
     synthesis_files: list[FileEntry] = []
@@ -853,7 +884,7 @@ def build_run_view(
         "adjudications": adjudications,
         "aiQueue": ai_queue,
         "exceptions": exceptions,
-    })
+    }, bounded_synthesis)
     from .rss import project as project_rss
     return {
         "rss": project_rss(full),

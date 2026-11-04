@@ -21,7 +21,7 @@ from string import Template
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from . import auth, settings, rss
+from . import auth, settings, rss, bounded_synthesis
 from .model import RELEVANCE_REQUEST_PATH, ai_stage_for, build_run_view
 from .relevance_bridge import build_relevance_prompt, build_response, parse_model_answer
 from .scan import _fs_path, list_available_runs, read_artifact_text, resolve_inside_run, scan_run_directory
@@ -73,6 +73,8 @@ def _write_json(path: Path, payload: Any) -> None:
     os.makedirs(_fs_path(parent), exist_ok=True)
     with Path(_fs_path(path)).open("x", encoding="utf-8") as target:
         target.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+        target.flush()
+        os.fsync(target.fileno())
 
 
 def _ensure_provider_operation_manifest(runs_root: Path, run_id: str, raw_ref: str) -> tuple[str, str]:
@@ -585,6 +587,14 @@ def _handle_ai_stage(runs_root: Path, payload: dict[str, Any], invocation: dict[
     if text is None:
         return 404, {"ok": False, "error": "AI request not found in this run."}
     request = json.loads(text)
+    if stage in ("build", "challenge"):
+        if (runs_root / run_id / "synthesis" / "execution" / "authorization.json").is_file():
+            return 409, {"ok": False, "error": "This run has a bounded synthesis authorization. Manual paste-back cannot replace its frozen or saved stage output."}
+        reservation_file = Path(request_file).parent / "generation-attempt.json"
+        if reservation_file.is_file():
+            reservation = json.loads(reservation_file.read_text(encoding="utf-8"))
+            if isinstance(reservation, dict) and reservation.get("authorization"):
+                return 409, {"ok": False, "error": "This request belongs to a bounded synthesis authorization. Use its saved response and explicit recovery path; do not record a different answer."}
     proposal, problem = parse_stage_answer(str(payload.get("answer") or ""))
     if problem:
         return 400, {"ok": False, "runId": run_id, "error": problem, "steps": [
@@ -790,6 +800,8 @@ def _handle_run_ai(runs_root: Path, payload: dict[str, Any]) -> tuple[int, dict[
     run_dir = runs_root / run_id
     relevance = bool(RELEVANCE_REQUEST_PATH.fullmatch(rel_path))
     stage = ai_stage_for(rel_path)
+    if stage in ("build", "challenge") and (run_dir / "synthesis" / "execution" / "authorization.json").is_file():
+        return 409, {"ok": False, "error": "This run has a bounded synthesis authorization. Use its start/status/resume controls; manual model execution cannot add call authority."}
     request_file = resolve_inside_run(run_dir, rel_path) if relevance or stage else None
     text = read_artifact_text(request_file, MAX_ARTIFACT_BYTES) if request_file else None
     if text is None:
@@ -813,8 +825,16 @@ def _handle_run_ai(runs_root: Path, payload: dict[str, Any]) -> tuple[int, dict[
             record = json.loads(record_text)
             binding = record.get("request") if isinstance(record, dict) else None
             if isinstance(binding, dict) and isinstance(binding.get("artifactRef"), str):
-                if (APP_DIR / binding["artifactRef"]).resolve() == request_file.resolve():
+                reference = binding["artifactRef"]
+                prefix = f"runs/{run_id}/"
+                recorded_request = (run_dir / reference[len(prefix):]).resolve() if reference.startswith(prefix) else (APP_DIR / reference).resolve()
+                if recorded_request == request_file.resolve():
                     return 409, {"ok": False, "error": "This request is already recorded. Continue to the next workflow step."}
+    if stage in ("build", "challenge"):
+        if (request_file.parent / "generation-attempt.json").exists() or any(
+            request_file.parent.glob("copilot-invocation-*.json")
+        ) or any(request_file.parent.glob("copilot-response*.json")):
+            return 409, {"ok": False, "error": "This synthesis request has a reserved or consumed call. Inspect it or resume its bounded authorization; no automatic retry."}
     request = json.loads(text)
     if not isinstance(request, dict):
         return 400, {"ok": False, "error": "AI request must be a JSON object."}
@@ -853,6 +873,13 @@ def _handle_run_ai(runs_root: Path, payload: dict[str, Any]) -> tuple[int, dict[
                 })
             except FileExistsError:
                 return 409, {"ok": False, "error": "This article's relevance-call budget is already consumed. Inspect the preserved attempt; no automatic retry."}
+    if stage in ("build", "challenge"):
+        _write_json(request_file.parent / "generation-attempt.json", {
+            "requestId": request["id"], "requestPath": rel_path,
+            "requestArtifactSha256": hashlib.sha256(request_file.read_bytes()).hexdigest(),
+            "reservedAt": datetime.now(timezone.utc).isoformat(), "status": "reserved", "maxCalls": 1,
+            "basis": "Exclusive manual attempt; consumed even if transport or recording fails. No automatic retry.",
+        })
     invocation = _generate_and_preserve(runs_root, request_file, request, prompt, "relevance" if relevance else stage)
     recorded_payload = {**payload, "answer": invocation["content"], "freshSession": True}
     status, response = (_handle_record_relevance(runs_root, recorded_payload, invocation)
@@ -871,6 +898,8 @@ def _handle_prepare_synthesis(runs_root: Path, payload: dict[str, Any]) -> tuple
     run_id = _valid_id(payload.get("runId"))
     if not run_id:
         return 400, {"ok": False, "error": "A valid run is required."}
+    if (runs_root / run_id / "synthesis" / "execution" / "authorization.json").is_file():
+        return 409, {"ok": False, "error": "This run has a frozen bounded synthesis authorization. Resume it or complete its human checkpoint; do not create another round."}
     notes = []
     for snapshot_dir in sorted(Path(_fs_path(runs_root / run_id / "assurance")).glob("*")):
         for name in ("source-note-reviewed.json", "source-note-provisional.json"):
@@ -879,7 +908,7 @@ def _handle_prepare_synthesis(runs_root: Path, payload: dict[str, Any]) -> tuple
                 break
     if not notes:
         return 400, {"ok": False, "error": "No assembled source notes in this run yet."}
-    step = _run_npm_script("prepare:synthesis-build", [SYNTHESIS_POLICY, OUTLET_TABLE, *notes])
+    step = _run_npm_script("prepare:synthesis-build", [SYNTHESIS_POLICY, OUTLET_TABLE, *notes], runs_root=runs_root)
     return (200 if step["ok"] else 400), {"ok": step["ok"], "runId": run_id, "steps": [step], "error": "" if step["ok"] else step["stderr"]}
 
 
@@ -992,6 +1021,8 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
 
 def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     action = payload.get("action")
+    if action in ("start-bounded-synthesis", "resume-bounded-synthesis"):
+        return bounded_synthesis.start(runs_root, payload, _run_npm_script, COPILOT_LOCK)
     if action == "collect-rss-batch":
         return rss.start_batch(runs_root, payload, _run_npm_script, _handle_run_ai, COPILOT_LOCK)
     if action == "save-copilot-settings":
@@ -1344,10 +1375,12 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
                     return cached["view"]
                 scan = scan_run_directory(target_dir, run_id=target_id)
                 scanned_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-                view = build_run_view(target_id, scan["files"], scan["jsons"], scan["events"], scanned_at)
+                execution = bounded_synthesis.status(runs_root, target_id, _run_npm_script)
+                view = build_run_view(target_id, scan["files"], scan["jsons"], scan["events"], scanned_at, execution, str(target_dir))
                 view["truncated"] = scan["truncated"]
                 view["availableRuns"] = list_available_runs(runs_root)
                 view["rss"]["feeds"] = rss.feeds()
+                view["boundedSynthesis"] = execution
                 for batch in view["rss"]["batches"]:
                     if batch["status"] == "running" and batch["id"] not in rss.ACTIVE:
                         batch["status"] = "interrupted"

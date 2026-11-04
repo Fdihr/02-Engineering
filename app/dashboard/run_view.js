@@ -211,6 +211,8 @@
     'draft-research-question': 'Approving scope and drafting the research question',
     'save-copilot-settings': 'Saving the Copilot model',
     'prepare-synthesis': 'Preparing the synthesis Build',
+    'start-bounded-synthesis': 'Starting bounded Build and Challenge',
+    'resume-bounded-synthesis': 'Resuming unused bounded synthesis work',
     'prepare-key-judgements': 'Preparing the key-judgement selection',
     'prepare-memo-writer': 'Preparing the memo writer',
     'run-next': 'Checking the next deterministic step'
@@ -278,6 +280,7 @@
     if (!running) add(head, linkButton('Dismiss', function () { box.hidden = true; }));
     box.appendChild(head);
     if (running) return;
+    if (data && data.message) add(box, el('p', 'meta prose', data.message));
     var steps = (data && data.steps) || [];
     if (steps.length) {
       var list = el('ol', 'action-steps');
@@ -554,23 +557,39 @@
       return states.some(function (s) { return LIVE[s]; }) ? 'ready' : 'todo';
     });
   }
+  function projectedStageIndex(j) {
+    var stage = j.workflow && j.workflow.currentStage;
+    if (stage === 'collect' || stage === 'evidence' || stage === 'assure') stage = 'collect';
+    if (stage === 'synthesise') stage = 'synthesise';
+    if (stage === 'intent') stage = 'frame';
+    if (stage === 'publication') return STAGES.length - 1;
+    return STAGES.findIndex(function (item) { return item.phases.indexOf(stage) >= 0; });
+  }
   function renderStrip(j) {
     var strip = el('div', 'activity-strip');
     strip.setAttribute('role', 'group');
     strip.setAttribute('aria-label', 'Analysis progress');
     var states = stageStates(j);
-    var current = states.findIndex(function (s) { return s !== 'done'; });
+    var projected = projectedStageIndex(j);
+    var current = projected >= 0 ? projected : states.findIndex(function (s) { return s !== 'done'; });
     var now = el('span', 'now');
-    var mine = j.queue.filter(function (q) { return q.actor === 'you'; })[0];
-    var next = mine || j.queue[0];
-    if (!next && j.pendingRssLeadCount) {
+    var recommendation = j.workflow && j.workflow.recommendedNextAction;
+    var next = recommendation && (recommendation.work || null);
+    if (recommendation && recommendation.kind === 'blocked') {
+      add(now, el('span', 'mark attention',
+        recommendation.blocker.scope === 'publication' ? 'Publication blocked' : 'Workflow paused'),
+        recommendation.blocker.title, recommendation.blocker.detail);
+    } else if (recommendation && recommendation.kind === 'machine') {
+      add(now, el('span', 'ai-mark', 'Machine work ready'), next.title);
+    } else if (recommendation && recommendation.kind === 'human') {
+      var label = recommendation.surface === 'publication' ? 'Publication decision' :
+        recommendation.surface === 'intent' ? 'Waiting for intent approval' :
+        recommendation.surface === 'collection' ? 'Collection is next' : 'Next human step';
+      add(now, el('span', 'mark attention', label), (next && next.title) || 'No usable evidence is committed yet.');
+    } else if (!next && j.pendingRssLeadCount) {
       add(now, el('span', 'mark attention', 'Source acquisition blocked'));
-    } else if (!next) {
-      add(now, el('span', 'mark done', 'Nothing is waiting'));
-    } else if (next.actor === 'you') {
-      add(now, el('span', 'mark attention', 'Waiting for you'), next.title);
     } else {
-      add(now, el('span', 'ai-mark', 'AI step ready'), next.title);
+      add(now, el('span', 'mark done', 'Nothing is waiting'));
     }
     var list = el('ol', 'stages');
     STAGES.forEach(function (stage, i) {
@@ -581,7 +600,18 @@
       list.appendChild(li);
     });
     add(strip, now, list);
-    if (next) add(strip, add(el('span', 'yours'), linkButton(next.actor === 'you' ? 'Open your next step' : 'Open the AI step', function () { go(next.target); })));
+    var target = next && next.target;
+    if (!target && recommendation && recommendation.kind === 'human') {
+      target = recommendation.surface === 'publication' ? { tab: 'memo' } :
+        recommendation.surface === 'collection' ? { tab: 'brief', focus: 'collect' } :
+        recommendation.surface === 'intent' ? { tab: 'brief' } : null;
+    } else if (!target && recommendation && recommendation.kind === 'blocked') {
+      target = recommendation.blocker.scope === 'publication' ? { tab: 'memo' } : { tab: 'audit' };
+    }
+    if (target) add(strip, add(el('span', 'yours'), linkButton(
+      recommendation.kind === 'machine' ? 'Open the machine step' : 'Open the next step',
+      function () { go(target); }
+    )));
     return strip;
   }
   function renderDraftStrip() {
