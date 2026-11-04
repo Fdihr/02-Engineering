@@ -89,6 +89,76 @@ export type PublicationContractError =
   | "SAMPLED_VERDICT_MISMATCH"
   | "INVALID_ARTIFACT_BINDING";
 
+export type MemoReviewTarget = {
+  runId: string;
+  memoId: string;
+  memoVersion: number;
+  memo: ArtifactBinding;
+  markdown: ArtifactBinding;
+  writer: ArtifactBinding;
+  verification: ArtifactBinding;
+  gate: ArtifactBinding;
+  calibrationPolicy: ArtifactBinding;
+};
+
+export type BoundMemoDecision = Omit<MemoPublicationDecision, "schemaVersion"> & {
+  schemaVersion: "memo-publication-decision-v3";
+  target: MemoReviewTarget;
+  selectedObservationIds: string[];
+  calibrationStatus: "not-reached";
+};
+
+export const validateMemoReviewTarget = (value: unknown): value is MemoReviewTarget =>
+  isRecord(value) && hasOnlyKeys(value, ["runId", "memoId", "memoVersion", "memo",
+    "markdown", "writer", "verification", "gate", "calibrationPolicy"]) &&
+  !!pathSafeId(value.runId) && !!pathSafeId(value.memoId) && !!positiveInteger(value.memoVersion) &&
+  ["memo", "markdown", "writer", "verification", "gate", "calibrationPolicy"]
+    .every(key => !!readArtifactBinding(value[key]));
+
+export const createBoundMemoDecision = (input: {
+  submitted: unknown;
+  target: MemoReviewTarget;
+  selectedObservationIds: string[];
+  approvalBlockers: string[];
+  decidedAt: string;
+}): Result<BoundMemoDecision, "INVALID_MEMO_REVIEW" | "STALE_MEMO_REVIEW" |
+  "INCOMPLETE_MEMO_SAMPLE" | "PUBLICATION_BLOCKED"> => {
+  const value = input.submitted;
+  if (!isRecord(value) || !hasOnlyKeys(value, ["target", "reviewerId", "decision", "issueType",
+    "feedback", "sampledVerdicts", "drillDownVerdicts"]) ||
+      typeof value.reviewerId !== "string" || !pathSafeId(value.reviewerId) || !validTime(input.decidedAt) ||
+      !["approved", "rejected", "revision-requested"].includes(String(value.decision)) ||
+      !["editorial", "external-judgment", "source-analysis", "organizational-relevance",
+        "evidence-gap", "standard-policy"].includes(String(value.issueType)) ||
+      typeof value.feedback !== "string" || value.feedback.trim().length < 3 ||
+      value.feedback.length > 2000 ||
+      !validateMemoReviewTarget(value.target)) return err("INVALID_MEMO_REVIEW");
+  if (canonicalJson(value.target) !== canonicalJson(input.target)) return err("STALE_MEMO_REVIEW");
+  const sampledVerdicts = readSampledVerdicts(value.sampledVerdicts);
+  const drillDownVerdicts = readDrillDownVerdicts(value.drillDownVerdicts);
+  if (!sampledVerdicts || !drillDownVerdicts ||
+      drillDownVerdicts.some(row => Date.parse(row.clickedAt) > Date.parse(input.decidedAt))) {
+    return err("INVALID_MEMO_REVIEW");
+  }
+  if (sampledVerdicts.length !== input.selectedObservationIds.length ||
+      sampledVerdicts.some(row => !input.selectedObservationIds.includes(row.observationId))) {
+    return err("INCOMPLETE_MEMO_SAMPLE");
+  }
+  if (value.decision === "approved" && (input.approvalBlockers.length ||
+      sampledVerdicts.some(row => row.verdict !== "supported"))) return err("PUBLICATION_BLOCKED");
+  const body = {
+    runId: input.target.runId, memoId: input.target.memoId, memoVersion: input.target.memoVersion,
+    reviewerId: value.reviewerId, decidedAt: input.decidedAt,
+    decision: value.decision as MemoPublicationDecision["decision"],
+    issueType: value.issueType as NonNullable<MemoPublicationDecision["issueType"]>,
+    feedback: value.feedback.trim(), sampledVerdicts, drillDownVerdicts,
+    target: input.target, selectedObservationIds: input.selectedObservationIds,
+    calibrationStatus: "not-reached" as const
+  };
+  return ok({ schemaVersion: "memo-publication-decision-v3",
+    id: `publication-${sha256Text(canonicalJson(body)).slice(0, 24)}`, ...body });
+};
+
 const verdict = (value: unknown): value is CalibrationVerdict =>
   value === "supported" || value === "unsupported" || value === "uncertain";
 

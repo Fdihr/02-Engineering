@@ -22,6 +22,22 @@ The workbench is organised around the analyst's job, not the artefact tree. `jou
 
 `POST /api/action` supports explicit scope approval and question drafting, final question/requirements approval, bounded Seerist discovery, provider item classification, analyst decisions, local Copilot execution or manual paste-back for each AI stage, opt-in RSS batches, re-preparing a key-judgement or memo-writer request when the automatic chain did not, and `run:next`. Publisher retrieval is CLI-first and requires a separately approved exact-URL plan. Existing Seerist leads remain pending; native captured provider content can still be canonicalized and assessed for relevance. Recording relevance alone never admits evidence. These actions delegate validation and approval recording to TypeScript commands; they do not automate the full analysis loop. A scope-approved run can resume question drafting or complete question approval only against the same approved scope. Existing approvals cannot be overwritten. Partial command failures retain completed artifacts and must be inspected before retrying.
 
+Memo review offers explicit **Request revision** and **Reject memo** decisions
+for reconstructable writer v2 drafts. Reviewers check deterministic observation
+samples, select an issue, give feedback and confirm the exact draft. The
+`record-memo-review` action delegates to `review:memo`, forwarding the active
+run root. Its immutable decision binds the memo JSON, Markdown, writer record,
+verification, publication gate and calibration policy checksums. Changed
+artifacts disable review; stale receipts grant no approval. Historical writer
+v1 drafts remain read-only. Publication approval is still disabled under the
+provisional standard, and revision/rejection does not start another model call.
+See [the review contract](../../02-Contracts/memo-review-and-publication-decision.md).
+
+CLI from `app/`: `npm run review:memo -- inspect <run-id> <memo-id>` returns the
+exact target and selected samples; `npm run review:memo -- record <run-id>
+<memo-id> <review-input.json>` accepts that target, reviewer ID, decision,
+issue type, feedback, sampled verdicts and drill-down records.
+
 Saved local articles with a completed nonpositive v1 decision can use the
 operator-only `py -3 -m dashboard.article_reassessment <approved-authorization.json>`
 path from `app/`. This requires a separate checksum-bound production approval

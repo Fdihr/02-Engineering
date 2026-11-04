@@ -21,7 +21,7 @@ from string import Template
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from . import auth, settings, rss, bounded_synthesis
+from . import auth, settings, rss, bounded_synthesis, memo_review
 from .model import RELEVANCE_REQUEST_PATH, ai_stage_for, build_run_view
 from .relevance_bridge import build_relevance_prompt, build_response, parse_model_answer
 from .scan import _fs_path, list_available_runs, read_artifact_text, resolve_inside_run, scan_run_directory
@@ -1037,6 +1037,8 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
 
 def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     action = payload.get("action")
+    if action == "record-memo-review":
+        return memo_review.record(runs_root, payload, _run_npm_script)
     if action in ("start-bounded-synthesis", "resume-bounded-synthesis"):
         return bounded_synthesis.start(runs_root, payload, _run_npm_script, COPILOT_LOCK)
     if action in ("start-bounded-memo", "resume-bounded-memo"):
@@ -1402,6 +1404,8 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
                 view["rss"]["feeds"] = rss.feeds()
                 view["boundedSynthesis"] = execution
                 view["boundedMemo"] = memo_execution
+                memo = view["journey"].get("memo")
+                view["memoReview"] = memo_review.status(runs_root, target_id, memo["id"], _run_npm_script) if memo else None
                 for batch in view["rss"]["batches"]:
                     if batch["status"] == "running" and batch["id"] not in rss.ACTIVE:
                         batch["status"] = "interrupted"
