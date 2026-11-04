@@ -7,6 +7,7 @@ import {
   type DeterministicRunStep,
   type RunNextFacts
 } from "../workflow/run-next.js";
+import type { WorkflowStage } from "../workflow/workflow-projection.js";
 import { assuranceRunRoot, commandError, longPath } from "./assurance-io.js";
 
 const usage = "Usage: npm run run:next -- <run-id>";
@@ -88,9 +89,17 @@ const inspectRun = async (runRoot: string, runId: string): Promise<RunNextFacts>
   if (!(await stat(longPath(directory))).isDirectory()) throw new Error("Run directory does not exist.");
   const files = await listFiles(directory);
   const openExceptionPaths: string[] = [];
+  const openExceptions: Array<{ path: string; refs: string[] }> = [];
   for (const path of files.filter((file) => basename(file) === "exception-item.json")) {
     const item = validateExceptionItem(await readJson(path));
-    if (item.ok && item.value.status === "open") openExceptionPaths.push(artifactRef(path));
+    if (item.ok && item.value.status === "open") {
+      const exceptionPath = artifactRef(path);
+      openExceptionPaths.push(exceptionPath);
+      openExceptions.push({
+        path: exceptionPath,
+        refs: item.value.refs.map((ref) => ref.artifactRef)
+      });
+    }
   }
   const hasIntentApproval = files.some(
     (path) => basename(path) === "approved-research-question.json"
@@ -139,24 +148,35 @@ const inspectRun = async (runRoot: string, runId: string): Promise<RunNextFacts>
     ? (gate as { humanApprovalAvailable?: unknown; reasons?: unknown })
     : undefined;
   const governanceBlockerPaths =
-    gateRecord &&
-    Array.isArray(gateRecord.reasons) &&
-    gateRecord.reasons.some(
-      (reason) => reason === "PROVISIONAL_MEMO_STANDARD" || reason === "LEGACY_SCOPE_LINEAGE_UNAVAILABLE"
-    ) &&
-    latestGate
+    gateRecord && Array.isArray(gateRecord.reasons) && gateRecord.reasons.length > 0 && latestGate
       ? [artifactRef(latestGate)]
       : [];
+  const committedOutcomes = files.flatMap((path) => {
+    const name = basename(path);
+    const stage: WorkflowStage | undefined =
+      name === "approved-research-question.json" ? "intent" :
+      name === "discovery-results.json" ? "collect" :
+      /^source-note-(reviewed|provisional)\.json$/.test(name) ? "assure" :
+      name === "synthesis-build-record.json" ? "synthesise" :
+      name === "memo.json" ? "memo" : undefined;
+    return stage ? [{ stage, paths: [artifactRef(path)] }] : [];
+  });
   return {
     hasIntentApproval,
+    runId,
+    committedOutcomes,
     openExceptionPaths,
+    openExceptions,
     deterministicSteps,
     pendingModelRequestPaths: newestPendingModelRequest
       ? [newestPendingModelRequest.path]
       : [],
     ...(latestGate ? { publicationGatePath: artifactRef(latestGate) } : {}),
     publicationApprovalAvailable: gateRecord?.humanApprovalAvailable === true,
-    governanceBlockerPaths
+    governanceBlockerPaths,
+    evidenceAvailable: files.some((path) =>
+      /^(source-note-(reviewed|provisional)\.json|synthesis-build-record\.json)$/.test(basename(path))
+    )
   };
 };
 
@@ -168,7 +188,7 @@ const main = async (): Promise<void> => {
     }
     const action = chooseRunNextAction(await inspectRun(assuranceRunRoot(), runId));
     if (action.kind === "human-wait") {
-      console.log(`Human surface waiting: ${action.surface}`);
+      console.log(`Recommended human action: ${action.surface}`);
       action.paths.forEach((path) => console.log(`Path: ${path}`));
       return;
     }

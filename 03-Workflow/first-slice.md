@@ -17,6 +17,22 @@ live-validated acquisition path; see persisted run receipts for actual outcomes.
 
 Human references below are either one of the four target surfaces (intent, publication, pushed exceptions, governance), compatibility history, or an interim stand-in named in `memo-workflow.md`. Per-source review and manual model transport are not additional permanent human surfaces.
 
+## Implemented shared next-action projection (2026-11-04)
+
+The run-next runner and dashboard now use the same deterministic selector over
+their artifact-derived ready-work facts. The projection exposes committed
+outcomes, pending decisions and interim checkpoints, scoped blockers, current
+stage/status, and one recommended next action without persisting duplicate
+workflow state. Exact artifact references can scope a source exception to its
+dependent work; unknown scope remains an explicit conservative run blocker.
+Publication blockers do not stop unrelated draft work.
+
+This slice does not automate model calls or collection, remove compatibility
+admission/support/adjudication checks, or grant publication authority.
+Prepared model requests remain inspectable manual checkpoints, and
+`run:next` executes only existing deterministic recorders with saved
+responses. See [the active contract](../02-Contracts/workflow-projection.md).
+
 ## Product boundary
 
 **Current implementation update (2026-11-02):** Firecrawl source retrieval and its Settings key

@@ -297,7 +297,7 @@ def _build_synthesis_view(files: list[FileEntry], json_by_path: dict[str, Any]) 
     return stages
 
 
-def _build_exceptions(files: list[FileEntry], json_by_path: dict[str, Any]) -> list[dict[str, str]]:
+def _build_exceptions(files: list[FileEntry], json_by_path: dict[str, Any]) -> list[dict[str, Any]]:
     exceptions = []
     for file in files:
         if RULES["exceptions_dir"] not in _segments(file["relPath"]) or not file["relPath"].endswith(".json"):
@@ -310,6 +310,11 @@ def _build_exceptions(files: list[FileEntry], json_by_path: dict[str, Any]) -> l
             "kind": _string_field(record, ["kind", "type"]) or "unknown",
             "status": _string_field(record, ["status"]) or "unknown",
             "raisedAt": _string_field(record, ["raisedAt", "occurredAt", "createdAt"]),
+            "refs": [
+                ref["artifactRef"]
+                for ref in record.get("refs", [])
+                if _is_record(ref) and isinstance(ref.get("artifactRef"), str)
+            ] if isinstance(record.get("refs"), list) else [],
         })
     return sorted(exceptions, key=lambda item: item["raisedAt"], reverse=True)
 
@@ -746,7 +751,7 @@ def _derive_run_waiting(
     panel1: dict[str, Any],
     sources: list[dict[str, Any]],
     synthesis: list[dict[str, Any]],
-    exceptions: list[dict[str, str]],
+    exceptions: list[dict[str, Any]],
 ) -> list[str]:
     waiting: list[str] = []
     scope = panel1.get("scope")
