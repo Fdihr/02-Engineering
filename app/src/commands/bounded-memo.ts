@@ -42,7 +42,7 @@ const filesIn = async (directory: string): Promise<string[]> => {
   if (result.length > 10_000) throw new Error("Run exceeds the bounded memo scan limit.");
   return result;
 };
-const alive = (pid: unknown) => {
+export const memoWorkerAlive = (pid: unknown) => {
   if (!Number.isSafeInteger(pid) || Number(pid) < 1) throw new Error("Invalid memo worker ownership.");
   try { process.kill(Number(pid), 0); return true; }
   catch (error) {
@@ -53,7 +53,7 @@ const alive = (pid: unknown) => {
 };
 
 // Only complete, flushed files become visible, and an existing destination is never replaced.
-const durableText = async (path: string, text: string, reuse = false) => {
+export const durableMemoText = async (path: string, text: string, reuse = false) => {
   await ensureDirectory(dirname(path));
   const pending = resolve(dirname(path), `.pending-${randomUUID()}.tmp`);
   const file = await open(longPath(pending), "wx");
@@ -65,8 +65,8 @@ const durableText = async (path: string, text: string, reuse = false) => {
     if (await readFile(longPath(path), "utf8") !== text) throw new Error("An immutable memo artifact changed.");
   } finally { await unlink(longPath(pending)); }
 };
-const durable = async (path: string, value: unknown, reuse = false) => {
-  await durableText(path, `${JSON.stringify(value, null, 2)}\n`, reuse);
+export const durableMemoJson = async (path: string, value: unknown, reuse = false) => {
+  await durableMemoText(path, `${JSON.stringify(value, null, 2)}\n`, reuse);
   return (await loadJsonArtifact(path)).binding;
 };
 const bound = async (root: string, binding: ArtifactBinding, runId?: string) => {
@@ -102,7 +102,8 @@ const modelsFromSettings = async (root: string) => {
   return models;
 };
 
-const checkExceptions = async (root: string, authority: MemoAuthorization) => {
+export const checkMemoExceptions = async (root: string, authority: Pick<MemoAuthorization,
+  "runId" | "build" | "challenge" | "adjudication" | "question" | "standard" | "lineage">) => {
   const participants = new Set([authority.build, authority.challenge, authority.adjudication, authority.question,
     authority.standard, ...authority.lineage].map(binding => resolve(binding.artifactRef)));
   const sourceIds = new Set<string>();
@@ -206,8 +207,8 @@ const freeze = async (root: string, runId: string, analyst: string, adjudication
     actorId: analyst, occurredAt: authority.approvedAt, decision: authority.decision, maxCalls: authority.maxCalls });
 };
 
-const responseFrom = (raw: unknown, authority: MemoAuthorization, stage: MemoStage, request: { id: string; preparedAt: string }, reservedAt: string) => {
-  if (!isRecord(raw) || raw.provider !== "github-copilot-sdk" || raw.model !== authority.stages[stage].model ||
+export const memoResponseFrom = (raw: unknown, model: string, actor: string, stage: MemoStage, request: { id: string; preparedAt: string }, reservedAt: string) => {
+  if (!isRecord(raw) || raw.provider !== "github-copilot-sdk" || raw.model !== model ||
       raw.freshSession !== true || typeof raw.invocationId !== "string" || !raw.invocationId.trim() ||
       !validTime(raw.startedAt) || !validTime(raw.completedAt) || typeof raw.content !== "string" ||
       Date.parse(String(raw.startedAt)) < Math.max(Date.parse(request.preparedAt), Date.parse(reservedAt)) ||
@@ -216,10 +217,17 @@ const responseFrom = (raw: unknown, authority: MemoAuthorization, stage: MemoSta
   const proposal: unknown = JSON.parse(raw.content.trim().replace(/^```(?:json)?\s*|\s*```$/gi, ""));
   return { schemaVersion: stage === "writer" ? "memo-writer-copilot-response-v1" : "key-judgement-copilot-response-v1",
     requestId: request.id, invocationId: raw.invocationId, provider: raw.provider, model: raw.model,
-    freshSession: true, startedAt: raw.startedAt, completedAt: raw.completedAt, capturedBy: authority.approvedBy, proposal };
+    freshSession: true, startedAt: raw.startedAt, completedAt: raw.completedAt, capturedBy: actor, proposal };
 };
+const responseFrom = (raw: unknown, authority: MemoAuthorization, stage: MemoStage,
+  request: { id: string; preparedAt: string }, reservedAt: string) =>
+  memoResponseFrom(raw, authority.stages[stage].model, authority.approvedBy, stage, request, reservedAt);
+const alive = memoWorkerAlive;
+const durable = durableMemoJson;
+const durableText = durableMemoText;
+const checkExceptions = checkMemoExceptions;
 
-const writeHandoff = async (root: string, runId: string, record: ReturnType<typeof memoStageRecord>) => {
+export const writeMemoHandoff = async (root: string, runId: string, record: ReturnType<typeof memoStageRecord>) => {
   if (!isWriterRecord(record)) return durable(resolve(root, runId, "synthesis", "key-judgements", "records",
     record.id, "key-judgement-record.json"), record, true);
   const directory = resolve(root, runId, "memo", record.memo.id);
@@ -234,7 +242,7 @@ const writeHandoff = async (root: string, runId: string, record: ReturnType<type
   return binding;
 };
 
-const verifyHandoff = async (binding: ArtifactBinding, record: ReturnType<typeof memoStageRecord>) => {
+export const verifyMemoHandoff = async (binding: ArtifactBinding, record: ReturnType<typeof memoStageRecord>) => {
   if (!isWriterRecord(record)) return;
   const directory = dirname(binding.artifactRef);
   for (const [file, expected] of [["memo.json", record.memo], ["verification.json", record.verification],
@@ -244,6 +252,8 @@ const verifyHandoff = async (binding: ArtifactBinding, record: ReturnType<typeof
   }
   same(await readFile(longPath(resolve(directory, "memo.md")), "utf8"), renderMemoMarkdown(record.memo), "Memo rendering changed.");
 };
+const writeHandoff = writeMemoHandoff;
+const verifyHandoff = verifyMemoHandoff;
 
 export const inspectBoundedMemo = async (root: string, runId: string) => {
   if (!pathSafeId(runId)) throw new Error("A valid run ID is required.");

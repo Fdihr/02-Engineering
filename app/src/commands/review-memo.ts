@@ -6,12 +6,13 @@ import { isDeepStrictEqual } from "node:util";
 import { isRecord, pathSafeId, sha256Text } from "../modules/assurance/validators.js";
 import { createBoundMemoDecision, validateSupportCalibrationPolicy,
   type MemoReviewTarget } from "../modules/memo/publication.js";
-import { renderMemoMarkdown, validateBoundedWriterRequest } from "../modules/memo/writer.js";
+import { renderMemoMarkdown, validateBoundedWriterRequest, type EditorialRevision } from "../modules/memo/writer.js";
 import { validateKeyJudgementRecord } from "../modules/synthesis/key-judgement-stage.js";
 import { validateSynthesisSourceNote } from "../modules/synthesis/source-note.js";
 import { assuranceRunRoot, artifactRef, commandError, ensureDirectory, loadJsonArtifact,
   loadRunArtifact, longPath, requireChecksum, sha256 } from "./assurance-io.js";
 import { isWriterRecord, loadMemoInputs, reopenMemoRecord } from "./memo-execution-io.js";
+import { memoRevisionRoute } from "../workflow/memo-revision.js";
 
 const policyPath = resolve("src/modules/memo/standards/support-calibration-policy-v1.json");
 const optional = async (path: string) => {
@@ -19,7 +20,8 @@ const optional = async (path: string) => {
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }
 };
 
-export const inspectMemoReview = async (root: string, runId: string, memoId: string) => {
+export const loadMemoDraft = async (root: string, runId: string, memoId: string, depth = 0) => {
+  if (depth > 16) throw new Error("Memo revision lineage exceeds the supported depth.");
   if (!pathSafeId(runId) || !pathSafeId(memoId)) throw new Error("Valid run and memo IDs are required.");
   const run = resolve(root, runId);
   const runDelta = relative(await realpath(root), await realpath(run));
@@ -48,8 +50,22 @@ export const inspectMemoReview = async (root: string, runId: string, memoId: str
   const selection = await reopenMemoRecord(root, "key-judgements", parsed.value.keyJudgementRecord, authority, input);
   const selected = validateKeyJudgementRecord(selection.record);
   if (!selected.ok) throw new Error("Invalid key-judgement record.");
+  let revision: EditorialRevision | undefined;
+  if (parsed.value.editorialRevision) {
+    const saved = parsed.value.editorialRevision;
+    const parent = await inspectMemoReview(root, runId, saved.parentMemoId, depth + 1);
+    if (!parent.decision || parent.decision.decision !== "revision-requested" || parent.decision.issueType !== "editorial" ||
+        !parent.decisionPath || parent.decision.sampledVerdicts.some(row => row.verdict !== "supported")) {
+      throw new Error("Editorial revision requires a matching recorded editorial decision with supported samples.");
+    }
+    const decisionArtifact = await loadRunArtifact(root, parent.decisionPath, "Parent decision");
+    revision = { parentMemo: parent.target.memo, parentMemoId: parent.target.memoId, parentVersion: parent.target.memoVersion,
+      decision: decisionArtifact.binding, feedback: parent.decision.feedback!,
+      previousDraft: await readFile(longPath(resolve(parent.target.markdown.artifactRef)), "utf8") };
+    if (!isDeepStrictEqual(saved, revision)) throw new Error("Revision no longer matches its parent memo and decision.");
+  }
   const reopened = await reopenMemoRecord(root, "writer", writer.binding, authority, input,
-    { record: selected.value, binding: selection.binding });
+    { record: selected.value, binding: selection.binding }, revision);
   if (!isWriterRecord(reopened.record)) throw new Error("Invalid writer record.");
   const record = reopened.record;
   if (record.memo.id !== memoId || record.runId !== runId ||
@@ -70,6 +86,22 @@ export const inspectMemoReview = async (root: string, runId: string, memoId: str
     memo: memo.binding, markdown: { artifactRef: artifactRef(markdownPath), artifactSha256: sha256(markdown) },
     writer: writer.binding, verification: verification.binding, gate: gate.binding,
     calibrationPolicy: policyArtifact.binding };
+  return { target, record, authority, input, selection: { record: selected.value, binding: selection.binding } };
+};
+
+type MemoReviewInspection = {
+  target: MemoReviewTarget; draftCreatedAt: string; sampleSize: number;
+  samples: Array<{ observationId: string; text: string; quote: string; sourceNoteId: string }>;
+  approvalBlockers: string[]; approvalAvailable: boolean; decisionStatus: string;
+  decision: import("../modules/memo/publication.js").BoundMemoDecision | null; decisionPath: string | null;
+  revisionRoute: ReturnType<typeof memoRevisionRoute>;
+};
+
+export const inspectMemoReview = async (root: string, runId: string, memoId: string, depth = 0): Promise<MemoReviewInspection> => {
+  const { target, record, input } = await loadMemoDraft(root, runId, memoId, depth);
+  const directory = resolve(root, runId, "memo", memoId);
+  const policy = validateSupportCalibrationPolicy((await loadJsonArtifact(policyPath)).value);
+  if (!policy.ok) throw new Error("Invalid support calibration policy.");
   const samples: Array<{ observationId: string; text: string; quote: string; sourceNoteId: string }> = [];
   for (const binding of input.lineage.slice(3)) {
     const note = validateSynthesisSourceNote(requireChecksum(
@@ -81,8 +113,8 @@ export const inspectMemoReview = async (root: string, runId: string, memoId: str
     }
   }
   if (new Set(samples.map(row => row.observationId)).size !== samples.length) throw new Error("Sample observation IDs are ambiguous.");
-  samples.sort((a, b) => sha256Text(`${memo.binding.artifactSha256}:${a.observationId}`)
-    .localeCompare(sha256Text(`${memo.binding.artifactSha256}:${b.observationId}`)));
+  samples.sort((a, b) => sha256Text(`${target.memo.artifactSha256}:${a.observationId}`)
+    .localeCompare(sha256Text(`${target.memo.artifactSha256}:${b.observationId}`)));
   const selectedSamples = samples.slice(0, policy.value.sampleSizePerMemo);
   const approvalBlockers = [...record.verification.blockers, "PUBLICATION_GATE_BLOCKED"];
   if (selectedSamples.length < policy.value.sampleSizePerMemo) approvalBlockers.push("INSUFFICIENT_CALIBRATION_SAMPLE");
@@ -112,7 +144,8 @@ export const inspectMemoReview = async (root: string, runId: string, memoId: str
   }
   return { target, draftCreatedAt: record.memo.createdAt, sampleSize: policy.value.sampleSizePerMemo,
     samples: selectedSamples, approvalBlockers, approvalAvailable: false,
-    decisionStatus, decision, decisionPath: existing ? artifactRef(existing.path) : null };
+    decisionStatus, decision, decisionPath: existing ? artifactRef(existing.path) : null,
+    revisionRoute: memoRevisionRoute(decision) };
 };
 
 export const recordMemoReview = async (root: string, runId: string, memoId: string, submitted: unknown) => {

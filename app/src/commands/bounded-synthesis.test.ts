@@ -25,6 +25,8 @@ import type { SynthesisBuildRequest } from "../modules/synthesis/types.js";
 import { inspectBoundedMemo, runBoundedMemo, type MemoEffects } from "./bounded-memo.js";
 import { validateMemoAuthorization } from "../workflow/bounded-memo.js";
 import { inspectMemoReview, recordMemoReview } from "./review-memo.js";
+import { inspectMemoRevision, runMemoRevision, type RevisionEffects } from "./revise-memo.js";
+import { reserveManualMemo } from "./memo-execution-io.js";
 
 const now = () => new Date().toISOString();
 const json = async (path: string, value: unknown): Promise<ArtifactBinding> => {
@@ -241,6 +243,159 @@ const memoRunner = (f: MemoFixture, override?: (stage: string) => unknown) => {
   };
   return { calls, runModel };
 };
+
+const revisionFixture = async (issueType = "editorial") => {
+  const f = await memoFixture();
+  await runBoundedMemo(f.root, f.runId, "start", "TESTER", f.adjudicationPath, memoRunner(f));
+  const execution = await inspectBoundedMemo(f.root, f.runId);
+  const original = await read(execution.stages.writer.record!.artifactRef);
+  const review = await inspectMemoReview(f.root, f.runId, original.memo.id);
+  await recordMemoReview(f.root, f.runId, original.memo.id, { target: review.target, reviewerId: "REVIEWER",
+    decision: "revision-requested", issueType, feedback: "Improve clarity without changing the selected judgement.",
+    sampledVerdicts: review.samples.map(row => ({ observationId: row.observationId, verdict: "supported" })),
+    drillDownVerdicts: [] });
+  let calls = 0;
+  const runModel: RevisionEffects["runModel"] = async input => {
+    assert.ok(isRecordForTest(input));
+    if (input.action === "models") return { models: [{ id: "writer-test" }] };
+    assert.equal(input.action, "generate");
+    calls++;
+    assert.equal(input.model, "writer-test");
+    assert.match(JSON.stringify(input.prompt), /Improve clarity without changing/);
+    assert.match(JSON.stringify(input.prompt), /editorial revision only/);
+    return { invocationId: "revision-fake", provider: "github-copilot-sdk", model: "writer-test",
+      startedAt: now(), completedAt: now(), freshSession: true, content: '{"statements":[]}' };
+  };
+  return { ...f, original, originalBinding: execution.stages.writer.record!,
+    calls: () => calls, runModel, revisionDirectory: resolve(f.run, "memo", "revisions", original.memo.id) };
+};
+const isRecordForTest = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+
+test("editorial revision freezes one writer call and preserves originals with fresh version-bound review", async () => {
+  const f = await revisionFixture();
+  try {
+    const originalBytes = await readFile(f.originalBinding.artifactRef, "utf8");
+    const first = await runMemoRevision(f.root, f.runId, f.original.memo.id, "start", "EDITOR", { runModel: f.runModel });
+    assert.equal(first.status, "memo-review", JSON.stringify(first));
+    const execution = await inspectMemoRevision(f.root, f.runId, f.original.memo.id);
+    assert.equal(f.calls(), 1);
+    assert.equal(execution.remainingCalls, 0);
+    const revised = await read(resolve(f.run, "memo", execution.memoId!, "writer-record.json"));
+    assert.equal(revised.memo.version, 2);
+    assert.equal(revised.memo.supersedesMemoId, f.original.memo.id);
+    assert.deepEqual(revised.memo.keyJudgments, f.original.memo.keyJudgments);
+    assert.deepEqual(revised.memo.gaps, f.original.memo.gaps);
+    assert.deepEqual(revised.memo.publicationBlockers, f.original.memo.publicationBlockers);
+    assert.equal(await readFile(f.originalBinding.artifactRef, "utf8"), originalBytes);
+    const review = await inspectMemoReview(f.root, f.runId, execution.memoId!);
+    assert.equal(review.decisionStatus, "pending");
+    assert.equal(review.target.memoVersion, 2);
+    assert.equal(review.approvalAvailable, false);
+    await json(resolve(f.root, ".copilot-settings.json"), { model: "changed-later" });
+    await runMemoRevision(f.root, f.runId, f.original.memo.id, "start", "LATER", { runModel: f.runModel });
+    await runMemoRevision(f.root, f.runId, f.original.memo.id, "resume", undefined, { runModel: f.runModel });
+    assert.equal(f.calls(), 1);
+    assert.equal((await inspectMemoRevision(f.root, f.runId, f.original.memo.id)).authority.model, "writer-test");
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("editorial revision routes non-editorial decisions without a model call and serializes concurrent starts", async () => {
+  const blocked = await revisionFixture("evidence-gap");
+  try {
+    const result = await runMemoRevision(blocked.root, blocked.runId, blocked.original.memo.id, "start", "EDITOR", { runModel: blocked.runModel });
+    assert.equal(result.status, "blocked");
+    assert.match(result.error, /evidence or source concerns/);
+    assert.equal(blocked.calls(), 0);
+    await assert.rejects(readFile(resolve(blocked.revisionDirectory, "authorization.json")), /ENOENT/);
+  } finally { await rm(blocked.root, { recursive: true, force: true }); }
+  const f = await revisionFixture();
+  try {
+    const results = await Promise.all([runMemoRevision(f.root, f.runId, f.original.memo.id, "start", "EDITOR", { runModel: f.runModel }),
+      runMemoRevision(f.root, f.runId, f.original.memo.id, "start", "OTHER", { runModel: f.runModel })]);
+    assert.ok(results.some(result => result.status === "memo-review"), JSON.stringify(results));
+    assert.equal(f.calls(), 1);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("editorial revision failures cannot refill allowance or mutate the reviewed original", async () => {
+  for (const mode of ["transport", "invalid-output", "stale-parent"] as const) {
+    const f = await revisionFixture();
+    try {
+      const result = await runMemoRevision(f.root, f.runId, f.original.memo.id, "start", "EDITOR", {
+        runModel: async input => {
+          if (isRecordForTest(input) && input.action === "models") return f.runModel(input);
+          if (mode === "transport") throw new Error("Transport failed");
+          const output = await f.runModel(input);
+          if (mode === "stale-parent") await writeFile(resolve(f.run, "memo", f.original.memo.id, "memo.md"), "changed");
+          return mode === "invalid-output" ? { ...output as object, content: '{"statements":[{"invented":true}]}' } : output;
+        }
+      });
+      assert.equal(result.status, "blocked", JSON.stringify(result));
+      const again = await runMemoRevision(f.root, f.runId, f.original.memo.id, "start", "LATER", { runModel: f.runModel });
+      assert.equal(again.status, "blocked");
+      assert.equal(f.calls(), mode === "transport" ? 0 : 1);
+      assert.ok(await readFile(resolve(f.revisionDirectory, "reserved.json")));
+    } finally { await rm(f.root, { recursive: true, force: true }); }
+  }
+});
+
+test("editorial revision recovers killed workers without replaying reserved or saved calls", async () => {
+  for (const phase of ["reserved", "response-saved", "recorded"]) {
+    const f = await revisionFixture();
+    try {
+      const originalBytes = await readFile(f.originalBinding.artifactRef, "utf8");
+      const code = `
+        import { appendFile } from "node:fs/promises";
+        import { runMemoRevision } from ${JSON.stringify(pathToFileURL(resolve("src/commands/revise-memo.ts")).href)};
+        await runMemoRevision(${JSON.stringify(f.root)},${JSON.stringify(f.runId)},${JSON.stringify(f.original.memo.id)},"start","EDITOR",{
+          afterReceipt:async phase=>{if(phase===${JSON.stringify(phase)})process.exit(19);},
+          runModel:async input=>{
+            if(input.action==="models")return {models:[{id:"writer-test"}]};
+            await appendFile(${JSON.stringify(resolve(f.run, "revision-calls.jsonl"))},"writer\\n");
+            return {invocationId:"subprocess-revision",provider:"github-copilot-sdk",model:input.model,
+              startedAt:new Date().toISOString(),completedAt:new Date().toISOString(),freshSession:true,
+              content:'{"statements":[]}'};
+          }
+        });`;
+      const killed = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", code], { encoding: "utf8" });
+      assert.equal(killed.status, 19, killed.stderr);
+      const result = await runMemoRevision(f.root, f.runId, f.original.memo.id, "resume", undefined, { runModel: f.runModel });
+      assert.equal(result.status, phase === "reserved" ? "indeterminate" : "memo-review", `${phase}: ${JSON.stringify(result)}`);
+      assert.equal(f.calls(), 0, "Recovery must never call a model again");
+      assert.equal((await inspectMemoRevision(f.root, f.runId, f.original.memo.id)).remainingCalls, 0);
+      assert.equal(await readFile(f.originalBinding.artifactRef, "utf8"), originalBytes);
+      const cli = spawnSync(process.execPath, ["--import", "tsx", "src/commands/run-next.ts", f.runId], {
+        env: { ...process.env, SOURCE_ASSURANCE_RUN_DIR: f.root }, encoding: "utf8"
+      });
+      assert.equal(cli.status, 0, cli.stderr);
+      assert.match(cli.stdout, /Editorial revision:/);
+      assert.match(cli.stdout, phase === "reserved" ? /cannot be replayed/ : /review revised memo/);
+    } finally { await rm(f.root, { recursive: true, force: true }); }
+  }
+});
+
+test("editorial revision unavailable models and model substitution fail closed with immutable authority", async () => {
+  for (const scenario of ["unavailable", "substitution"]) {
+    const f = await revisionFixture();
+    try {
+      const result = await runMemoRevision(f.root, f.runId, f.original.memo.id, "start", "EDITOR", {
+        runModel: async input => {
+          if (isRecordForTest(input) && input.action === "models" && scenario === "unavailable") return { models: [] };
+          const output = await f.runModel(input);
+          return isRecordForTest(input) && input.action === "generate" ? { ...output as object, model: "different-model" } : output;
+        }
+      });
+      assert.equal(result.status, "blocked");
+      const authority = await readFile(resolve(f.revisionDirectory, "authorization.json"), "utf8");
+      const failure = await readFile(resolve(f.revisionDirectory, "failure.json"), "utf8");
+      await runMemoRevision(f.root, f.runId, f.original.memo.id, "start", "LATER", { runModel: f.runModel });
+      assert.equal(f.calls(), scenario === "unavailable" ? 0 : 1);
+      assert.equal(await readFile(resolve(f.revisionDirectory, "authorization.json"), "utf8"), authority);
+      assert.equal(await readFile(resolve(f.revisionDirectory, "failure.json"), "utf8"), failure);
+      await assert.rejects(reserveManualMemo(f.root, f.runId), /bounded editorial revision authority/);
+    } finally { await rm(f.root, { recursive: true, force: true }); }
+  }
+});
 
 test("memo review binds exact handoff, blocks approval and records one immutable human decision", async () => {
   const f = await memoFixture();

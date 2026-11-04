@@ -4,14 +4,14 @@ const path = require('node:path');
 const { test } = require('node:test');
 const { JSDOM } = require('jsdom');
 
-function harness(journey, pane, execution = null, drafts = {}, memoExecution = null, memoReview = null) {
+function harness(journey, pane, execution = null, drafts = {}, memoExecution = null, memoReview = null, memoRevision = null) {
   const dom = new JSDOM('<main><div id="pane-synthesis"></div><div id="pane-sources"></div><div id="pane-memo"></div></main>', { runScripts: 'outside-only' });
   const { document, Event } = dom.window;
   const actions = [];
   let sequence = 0;
   const C = {
     state: {
-      runId: 'fixture', view: { boundedSynthesis: execution, boundedMemo: memoExecution, memoReview }, drafts, expanded: {}, openRounds: {},
+      runId: 'fixture', view: { boundedSynthesis: execution, boundedMemo: memoExecution, memoReview, memoRevision }, drafts, expanded: {}, openRounds: {},
       evidenceView: 'explorer', sourceFilter: 'all', sourceQuery: ''
     },
     panes: {}, journey: () => journey,
@@ -134,6 +134,53 @@ test('memo decisions and stale or unavailable review never expose a writable app
     assert.equal(h.button('Approve for publication').disabled, true);
     assert.equal(h.button('Record decision'), undefined);
   }
+});
+
+test('editorial revision requires separate confirmation and routes other feedback upstream', () => {
+  const data = { ...memoReview(), decisionStatus: 'recorded',
+    decision: { decision: 'revision-requested', reviewerId: 'REVIEWER', feedback: 'Improve clarity.' },
+    revisionRoute: { eligible: true, route: 'review', reason: 'One editorial writer call.' } };
+  const h = harness(memoJourney(), 'memo', null, {}, null, data);
+  const button = h.button('Start editorial revision');
+  assert.equal(button.disabled, true);
+  const confirm = h.document.querySelector('input[type="checkbox"]');
+  confirm.checked = true;
+  confirm.dispatchEvent(new h.document.defaultView.Event('change', { bubbles: true }));
+  assert.equal(button.disabled, false);
+  button.click();
+  assert.equal(h.actions[0].action, 'start-memo-revision');
+  assert.equal(h.actions[0].memoId, 'memo-1');
+  assert.equal(h.actions[0].reviewerId, 'TESTER');
+  assert.equal(h.button('Approve for publication').disabled, true);
+  for (const route of ['evidence', 'analysis/findings', 'audit']) {
+    const routed = harness(memoJourney(), 'memo', null, {}, null, { ...data,
+      revisionRoute: { eligible: false, route, reason: 'Resolve upstream.' } });
+    assert.equal(routed.button('Start editorial revision'), undefined);
+    [...routed.document.querySelectorAll('button')].find(b => b.textContent.startsWith('Return to ')).click();
+    assert.equal(routed.actions[0].route, route);
+  }
+});
+
+test('editorial recovery cannot offer new calls for terminal receipts and a revised draft has fresh review', () => {
+  const data = { ...memoReview(), decision: { decision: 'revision-requested', reviewerId: 'REVIEWER', feedback: 'Edit.' },
+    revisionRoute: { eligible: true, reason: 'One call.' } };
+  for (const status of ['blocked', 'indeterminate', 'running', 'response-saved']) {
+    const h = harness(memoJourney(), 'memo', null, {}, null, data,
+      { authorized: true, parentMemoId: 'memo-1', status, remainingCalls: 0, authority: { model: 'writer-test' } });
+    assert.equal(h.button('Start editorial revision'), undefined);
+    const resume = h.button('Resume editorial revision');
+    assert.equal(Boolean(resume), status === 'response-saved');
+    if (resume) { resume.click(); assert.equal(h.actions[0].action, 'resume-memo-revision'); }
+    assert.equal(h.button('Approve for publication').disabled, true);
+  }
+  const j = memoJourney();
+  j.memo.id = 'memo-2';
+  j.memo.version = 2;
+  j.memo.supersedesMemoId = 'memo-1';
+  const h = harness(j, 'memo', null, {}, null, { ...memoReview(), target: { ...memoReview().target, memoId: 'memo-2', memoVersion: 2 } });
+  assert.ok(h.document.body.textContent.includes('Version 2 supersedes memo-1'));
+  assert.equal(h.button('Record decision').disabled, true);
+  assert.equal(h.document.querySelector('input[type="checkbox"]').checked, false);
 });
 
 function reviewJourney() {

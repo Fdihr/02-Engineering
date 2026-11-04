@@ -13,6 +13,7 @@ import type { WorkflowStage } from "../workflow/workflow-projection.js";
 import { assuranceRunRoot, commandError, longPath } from "./assurance-io.js";
 import { inspectBoundedSynthesis } from "./bounded-synthesis.js";
 import { inspectBoundedMemo } from "./bounded-memo.js";
+import { inspectMemoRevision } from "./revise-memo.js";
 
 const usage = "Usage: npm run run:next -- <run-id>";
 
@@ -190,6 +191,24 @@ const main = async (): Promise<void> => {
     if (!runId || extra.length > 0 || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(runId)) {
       throw new Error(usage);
     }
+    const revisions = [];
+    try {
+      for (const entry of await readdir(longPath(resolve(assuranceRunRoot(), runId, "memo", "revisions")), { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+        const path = resolve(assuranceRunRoot(), runId, "memo", "revisions", entry.name, "authorization.json");
+        try { revisions.push({ parent: entry.name, time: (await stat(longPath(path))).mtimeMs }); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+      }
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    revisions.sort((a, b) => b.time - a.time);
+    if (revisions[0]) {
+      const execution = await inspectMemoRevision(assuranceRunRoot(), runId, revisions[0].parent);
+      console.log(`Editorial revision: ${execution.status}\nUnused authorized calls: ${execution.remainingCalls}`);
+      if (execution.error) console.log(`Stopped: ${execution.error}`);
+      else if (execution.memoId) console.log(`Recommended human action: review revised memo ${execution.memoId}; publication is not approved.`);
+      else console.log(`Resume: npm run revise:memo -- resume ${runId} ${revisions[0].parent}`);
+      return;
+    }
     let boundedMemo = false;
     try { boundedMemo = (await stat(longPath(resolve(assuranceRunRoot(), runId, "memo", "execution", "authorization.json")))).isFile(); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
@@ -197,7 +216,10 @@ const main = async (): Promise<void> => {
       const execution = await inspectBoundedMemo(assuranceRunRoot(), runId);
       console.log(`Bounded memo: ${execution.status}\nUnused authorized calls: ${execution.remainingCalls}`);
       if (execution.error) console.log(`Stopped: ${execution.error}`);
-      else if (execution.memoReview?.decision) console.log(`Memo decision: ${execution.memoReview.decision.decision}. A new draft needs separate authorization; publication remains blocked.`);
+      else if (execution.memoReview?.decision) {
+        console.log(`Memo decision: ${execution.memoReview.decision.decision}. ${execution.memoReview.revisionRoute.reason} Publication remains blocked.`);
+        if (execution.memoReview.revisionRoute.eligible) console.log(`Start: npm run revise:memo -- start ${runId} ${execution.memoReview.target.memoId} <analyst-id>`);
+      }
       else if (execution.memoReview?.decisionStatus === "stale") console.log("Stopped: the saved memo decision is stale and grants no approval.");
       else if (execution.status === "memo-review") console.log("Recommended human action: review the memo; publication is not approved.");
       else console.log(`Resume: npm run run:memo -- resume ${runId}`);

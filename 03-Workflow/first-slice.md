@@ -89,9 +89,23 @@ approval. Dashboard and `review:memo` use the same deterministic recorder.
 
 Publication approval remains unavailable under the current provisional memo
 standard. Neither a review decision nor a forged ready gate overrides the
-writer's blockers. Revision generation and publication delivery are not
-implemented, and review cannot refill bounded model authority. See
+writer's blockers. Publication delivery is not implemented, and review cannot
+refill bounded model authority. See
 [the decision contract](../02-Contracts/memo-review-and-publication-decision.md).
+
+## Implemented bounded editorial revision (2026-11-04)
+
+A recorded editorial revision request with supported samples can receive a
+separate explicit one-call writer authorization. It freezes the parent and
+feedback, approved inputs, selected judgements and Settings writer model.
+Original artifacts and the prior decision remain immutable; the linked new
+version requires fresh human review. Saved output can finish deterministic
+recording after interruption, but reserved unsaved calls cannot replay.
+Evidence, judgement/scope and policy concerns route upstream without writer
+authority. Publication remains blocked under the provisional standard.
+Dashboard controls and `run:next` follow the latest revision status.
+This slice has synthetic coverage and does not advance the live analysis.
+See [the revision contract](../02-Contracts/bounded-memo-revision.md).
 
 ## Product boundary
 

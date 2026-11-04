@@ -38,6 +38,22 @@ exact target and selected samples; `npm run review:memo -- record <run-id>
 <memo-id> <review-input.json>` accepts that target, reviewer ID, decision,
 issue type, feedback, sampled verdicts and drill-down records.
 
+For an eligible editorial request, a separate confirmation enables **Start
+editorial revision**. The launcher calls `revise:memo` with the active run root,
+freezes the saved writer model and grants one writer call. The original memo and
+decision are preserved; the new version displays its parent and requires fresh
+review. Evidence, judgement/scope and policy feedback instead links upstream.
+Interrupted saved output can resume recording, but uncertain invocations cannot
+replay and terminal failures cannot refill allowance. Publication stays blocked.
+CLI: `npm run revise:memo -- start <run-id> <parent-memo-id> <analyst-id>`;
+`status` and `resume` omit the analyst ID.
+See [the revision contract](../../02-Contracts/bounded-memo-revision.md).
+
+Once a matching performed adjudication is recorded, the workflow header uses
+the observed writing handoff instead of the earlier bounded Challenge stop.
+Missing or mismatched adjudication and blocked execution keep their existing
+guidance; integrity and exception blockers are retained.
+
 Saved local articles with a completed nonpositive v1 decision can use the
 operator-only `py -3 -m dashboard.article_reassessment <approved-authorization.json>`
 path from `app/`. This requires a separate checksum-bound production approval
