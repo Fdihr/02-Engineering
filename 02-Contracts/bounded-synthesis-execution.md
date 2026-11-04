@@ -61,7 +61,7 @@ feeds the shared workflow selector. The command boundary performs filesystem
 and SDK effects, reusing existing preparation, validators and recorders.
 The dashboard combines these execution facts with unrelated source work
 before invoking that same selector; it does not persist another queue/status
-database. For isolated run roots, absolute bindings to known scanned artifacts
+database. For isolated run roots, absolute and app-relative bindings to known scanned artifacts
 are canonicalized only in the dashboard presentation so recorded stages and
 the human handoff stay connected; persisted lineage is never rewritten.
 `run:next` displays bounded status and the explicit resume handoff
