@@ -24,6 +24,7 @@ import { validateChallengeRequest, type ChallengeRequest } from "../modules/synt
 import type { SynthesisBuildRequest } from "../modules/synthesis/types.js";
 import { inspectBoundedMemo, runBoundedMemo, type MemoEffects } from "./bounded-memo.js";
 import { validateMemoAuthorization } from "../workflow/bounded-memo.js";
+import { inspectMemoReview, recordMemoReview } from "./review-memo.js";
 
 const now = () => new Date().toISOString();
 const json = async (path: string, value: unknown): Promise<ArtifactBinding> => {
@@ -240,6 +241,64 @@ const memoRunner = (f: MemoFixture, override?: (stage: string) => unknown) => {
   };
   return { calls, runModel };
 };
+
+test("memo review binds exact handoff, blocks approval and records one immutable human decision", async () => {
+  const f = await memoFixture();
+  try {
+    const runner = memoRunner(f);
+    await runBoundedMemo(f.root, f.runId, "start", "TESTER", f.adjudicationPath, runner);
+    const execution = await inspectBoundedMemo(f.root, f.runId);
+    const writerPath = execution.stages.writer.record!.artifactRef;
+    const writer = await read(writerPath);
+    const review = await inspectMemoReview(f.root, f.runId, writer.memo.id);
+    assert.equal(review.approvalAvailable, false);
+    assert.ok(review.samples.length > 0);
+    const submitted = { target: review.target, reviewerId: "REVIEWER", decision: "revision-requested",
+      issueType: "evidence-gap", feedback: "Resolve the remaining evidence gap.",
+      sampledVerdicts: review.samples.map(row => ({ observationId: row.observationId, verdict: "supported" })),
+      drillDownVerdicts: review.samples.map(row => ({ targetType: "observation", targetId: row.observationId, clickedAt: now() })) };
+    await assert.rejects(recordMemoReview(f.root, f.runId, writer.memo.id,
+      { ...submitted, decision: "approved" }), /PUBLICATION_BLOCKED/);
+    await assert.rejects(recordMemoReview(f.root, f.runId, writer.memo.id,
+      { ...submitted, target: { ...review.target, markdown: { ...review.target.markdown, artifactSha256: "a".repeat(64) } } }), /STALE_MEMO_REVIEW/);
+    await assert.rejects(recordMemoReview(f.root, f.runId, writer.memo.id,
+      { ...submitted, sampledVerdicts: [] }), /INCOMPLETE_MEMO_SAMPLE/);
+    const recorded = await Promise.allSettled([recordMemoReview(f.root, f.runId, writer.memo.id, submitted),
+      recordMemoReview(f.root, f.runId, writer.memo.id, submitted)]);
+    assert.equal(recorded.filter(result => result.status === "fulfilled").length, 1);
+    const after = await inspectMemoReview(f.root, f.runId, writer.memo.id);
+    assert.equal(after.decisionStatus, "recorded");
+    assert.equal(after.decision?.reviewerId, "REVIEWER");
+    assert.equal(after.decision?.decision, "revision-requested");
+    assert.equal(after.decision?.calibrationStatus, "not-reached");
+    const cli = spawnSync(process.execPath, ["--import", "tsx", "src/commands/run-next.ts", f.runId], {
+      encoding: "utf8", env: { ...process.env, SOURCE_ASSURANCE_RUN_DIR: f.root }
+    });
+    assert.equal(cli.status, 0, cli.stderr);
+    assert.match(cli.stdout, /Memo decision: revision-requested/);
+    assert.equal((await inspectBoundedMemo(f.root, f.runId)).workflowInput.readyWork[0]?.title, "Memo revision requested");
+    await assert.rejects(recordMemoReview(f.root, f.runId, writer.memo.id, submitted), /immutable decision/);
+    const markdownPath = resolve(dirname(writerPath), "memo.md");
+    const original = await readFile(markdownPath, "utf8");
+    await writeFile(markdownPath, `${original}\nChanged draft`);
+    await assert.rejects(inspectMemoReview(f.root, f.runId, writer.memo.id), /Markdown changed/);
+    await writeFile(markdownPath, original);
+    const gatePath = resolve(dirname(writerPath), "publication-gate.json");
+    const originalGate = await readFile(gatePath, "utf8");
+    await json(gatePath, { schemaVersion: "memo-publication-gate-v1", memoId: writer.memo.id,
+      status: "ready", humanApprovalAvailable: true, reasons: [] });
+    await assert.rejects(inspectMemoReview(f.root, f.runId, writer.memo.id), /differs from its recorded output/);
+    await writeFile(gatePath, originalGate);
+    for (const name of ["memo.json", "verification.json", "writer-record.json"]) {
+      const path = resolve(dirname(writerPath), name);
+      const original = await readFile(path, "utf8");
+      await writeFile(path, original.replace(/"schemaVersion": "[^"]+"/, '"schemaVersion": "changed"'));
+      await assert.rejects(inspectMemoReview(f.root, f.runId, writer.memo.id));
+      await writeFile(path, original);
+    }
+    assert.deepEqual(runner.calls, ["key-judgements", "writer"]);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
 
 test("bounded memo freezes authority, invokes each stage once and stops at blocked memo review", async () => {
   const f = await memoFixture();

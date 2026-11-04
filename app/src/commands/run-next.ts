@@ -197,6 +197,8 @@ const main = async (): Promise<void> => {
       const execution = await inspectBoundedMemo(assuranceRunRoot(), runId);
       console.log(`Bounded memo: ${execution.status}\nUnused authorized calls: ${execution.remainingCalls}`);
       if (execution.error) console.log(`Stopped: ${execution.error}`);
+      else if (execution.memoReview?.decision) console.log(`Memo decision: ${execution.memoReview.decision.decision}. A new draft needs separate authorization; publication remains blocked.`);
+      else if (execution.memoReview?.decisionStatus === "stale") console.log("Stopped: the saved memo decision is stale and grants no approval.");
       else if (execution.status === "memo-review") console.log("Recommended human action: review the memo; publication is not approved.");
       else console.log(`Resume: npm run run:memo -- resume ${runId}`);
       return;

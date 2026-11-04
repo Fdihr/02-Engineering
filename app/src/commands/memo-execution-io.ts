@@ -32,8 +32,10 @@ export const reserveManualMemo = async (root: string, runId: string) => {
   } catch (error) { await unlink(lockPath); throw error; }
 };
 
-export const loadMemoInputs = async (root: string, authority: Pick<MemoAuthorization,
-  "runId" | "build" | "challenge" | "adjudication" | "question" | "standard">) => {
+export type MemoInputBindings = Pick<MemoAuthorization,
+  "runId" | "build" | "challenge" | "adjudication" | "question" | "standard">;
+
+export const loadMemoInputs = async (root: string, authority: MemoInputBindings) => {
   const challenge = await loadChallengeRecordContext(root, authority.challenge.artifactRef);
   requireChecksum(challenge.recordArtifact, authority.challenge.artifactSha256, "Frozen Challenge");
   if (!isDeepStrictEqual(challenge.build.recordArtifact.binding, authority.build) ||
@@ -80,7 +82,7 @@ export const loadMemoInputs = async (root: string, authority: Pick<MemoAuthoriza
 };
 export type MemoInputs = Awaited<ReturnType<typeof loadMemoInputs>>;
 
-export const memoSelectionRequest = (authority: MemoAuthorization, input: MemoInputs, preparedAt: string) => {
+export const memoSelectionRequest = (authority: MemoInputBindings, input: MemoInputs, preparedAt: string) => {
   const result = createKeyJudgementRequest({
     buildRecord: input.build, buildRecordArtifact: authority.build,
     challengeRecord: input.challenge, challengeRecordArtifact: authority.challenge,
@@ -90,7 +92,7 @@ export const memoSelectionRequest = (authority: MemoAuthorization, input: MemoIn
   if (!result.ok) throw new Error(`Key-judgement inputs rejected: ${JSON.stringify(result.error)}`);
   return result.value;
 };
-export const memoWriterRequest = (authority: MemoAuthorization, input: MemoInputs,
+export const memoWriterRequest = (authority: MemoInputBindings, input: MemoInputs,
   selection: KeyJudgementRecord, binding: ArtifactBinding, preparedAt: string) => {
   const result = createBoundedWriterRequest({
     buildRecord: input.build, buildRecordArtifact: authority.build,
@@ -105,7 +107,7 @@ export const memoWriterRequest = (authority: MemoAuthorization, input: MemoInput
 };
 export type MemoRequest = ReturnType<typeof memoSelectionRequest> | ReturnType<typeof memoWriterRequest>;
 
-export const validateMemoRequest = (stage: MemoStage, value: unknown, authority: MemoAuthorization,
+export const validateMemoRequest = (stage: MemoStage, value: unknown, authority: MemoInputBindings,
   input: MemoInputs, selection?: { record: KeyJudgementRecord; binding: ArtifactBinding }): MemoRequest => {
   if (stage === "key-judgements") {
     const parsed = validateKeyJudgementRequest(value);
@@ -148,7 +150,7 @@ export const memoStageRecord = (stage: MemoStage, request: MemoRequest, requestB
 };
 
 export const reopenMemoRecord = async (root: string, stage: MemoStage, binding: ArtifactBinding,
-  authority: MemoAuthorization, input: MemoInputs, selection?: { record: KeyJudgementRecord; binding: ArtifactBinding }) => {
+  authority: MemoInputBindings, input: MemoInputs, selection?: { record: KeyJudgementRecord; binding: ArtifactBinding }) => {
   const artifact = requireChecksum(await loadRunArtifact(root, binding.artifactRef, "Stage record"), binding.artifactSha256, "Stage record");
   const value = artifact.value;
   if (!isRecord(value) || typeof value.recordedAt !== "string" ||

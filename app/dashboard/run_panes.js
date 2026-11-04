@@ -2132,15 +2132,7 @@
     if (m.blockers.length) review1.appendChild(bl2);
     side.appendChild(review1);
 
-    var gate = el('div', 'panel-sec');
-    var approve = el('button', 'btn-primary', 'Approve for publication');
-    approve.type = 'button';
-    approve.disabled = true;
-    approve.setAttribute('aria-describedby', 'approve-reason');
-    var reason = el('p', 'meta', (m.blockers.length ? 'Resolve ' + plural(m.blockers.length, 'blocker') + ' first. ' : '') + 'Publication approval is not a workflow action yet. Gate: ' + (m.gate.status || 'not checked') + '.' + (m.gate.humanApprovalAvailable ? '' : ' Human approval is not available.'));
-    reason.id = 'approve-reason';
-    add(gate, approve, reason);
-    side.appendChild(gate);
+    side.appendChild(memoDecisionPanel(m));
 
     add(side, tracePanel(m, j, sel));
 
@@ -2158,6 +2150,104 @@
     add(files, el('h3', null, 'Files'), copyMarkdown(m, true));
     side.appendChild(files);
     return side;
+  }
+  function memoDecisionPanel(m) {
+    var gate = el('div', 'panel-sec');
+    var data = state.view.memoReview;
+    add(gate, el('h3', null, 'Publication decision'));
+    var approve = el('button', 'btn-primary', 'Approve for publication');
+    approve.type = 'button';
+    approve.disabled = true;
+    approve.setAttribute('aria-describedby', 'approve-reason');
+    var reason = el('p', 'meta', 'Publication remains blocked by the recorded verification and provisional standard. A review decision cannot override those checks.');
+    reason.id = 'approve-reason';
+    add(gate, approve, reason);
+    if (!data || data.error || !data.target || data.target.memoId !== m.id) {
+      var error = el('p', 'meta fail', data && data.error ? data.error : 'Version-bound review is unavailable. Refresh to reopen the recorded draft.');
+      error.setAttribute('role', 'alert');
+      return add(gate, error);
+    }
+    if (data.decisionStatus === 'stale') {
+      return add(gate, el('p', 'meta fail', 'The recorded decision no longer matches this draft or its policy. It grants no approval. Produce a new draft for a fresh decision.'));
+    }
+    if (data.decision) {
+      add(gate, el('p', null, capital(humanise(data.decision.decision)) + ' by ' + data.decision.reviewerId),
+        el('p', 'meta', when(data.decision.decidedAt)), el('p', 'prose', data.decision.feedback),
+        el('p', 'meta', 'This decision is bound to the reviewed artifacts. A revision requires a new draft; no model work or publication was authorized.'));
+      return gate;
+    }
+    var target = data.target;
+    var key = 'memo-review:' + state.runId + ':' + m.id + ':' +
+      [target.memo, target.markdown, target.writer, target.verification, target.gate, target.calibrationPolicy]
+        .map(function (binding) { return binding.artifactSha256; }).join(':') + ':';
+    var form = el('form');
+    var decision = C.selectInput([['revision-requested', 'Request revision'], ['rejected', 'Reject memo']], key + 'decision', 'revision-requested');
+    var issue = C.selectInput([['', 'Choose an issue'], ['editorial', 'Editorial'], ['external-judgment', 'External judgement'],
+      ['source-analysis', 'Source analysis'], ['organizational-relevance', 'Organizational relevance'],
+      ['evidence-gap', 'Evidence gap'], ['standard-policy', 'Standard or policy']], key + 'issue', '');
+    var feedback = C.textInput(key + 'feedback', '', 'Explain what should change', true);
+    feedback.maxLength = 2000;
+    feedback.required = true;
+    feedback.minLength = 3;
+    add(form, el('p', 'meta', 'Reviewing draft version ' + target.memoVersion + '. Check each sampled statement against its quote before recording a decision.'),
+      add(el('div', 'form-grid'), C.field('Decision', decision), C.field('Issue', issue), C.field('Feedback', feedback, true)));
+    var verdicts = [];
+    if (!state.memoReviewClicks) state.memoReviewClicks = {};
+    var clicks = state.memoReviewClicks[key] || (state.memoReviewClicks[key] = {});
+    var samples = el('div', 'form-grid');
+    (data.samples || []).forEach(function (sample) {
+      var item = el('div', 'field-wide');
+      var details = el('details');
+      var summary = el('summary', null, sample.text);
+      var quote = el('blockquote', null, sample.quote);
+      add(details, summary, quote, el('p', 'meta', 'Observation ' + sample.observationId));
+      details.open = Boolean(state.expanded[key + sample.observationId]);
+      summary.addEventListener('click', function () {
+        if (!details.open) clicks[sample.observationId] = { targetType: 'observation', targetId: sample.observationId, clickedAt: new Date().toISOString() };
+      });
+      details.addEventListener('toggle', function () {
+        state.expanded[key + sample.observationId] = details.open;
+      });
+      var verdict = C.selectInput([['', 'Choose a verdict'], ['supported', 'Supported'], ['unsupported', 'Unsupported'], ['uncertain', 'Uncertain']],
+        key + sample.observationId, '');
+      verdicts.push({ sample: sample, input: verdict });
+      add(item, details, C.field('Quote supports this statement', verdict));
+      samples.appendChild(item);
+    });
+    form.appendChild(samples);
+    if (data.samples.length < data.sampleSize) add(form, el('p', 'meta', 'Only ' + plural(data.samples.length, 'observation') +
+      ' available for the ' + data.sampleSize + '-observation policy sample. This cannot establish publication eligibility.'));
+    else if (!data.samples.length) add(form, el('p', 'meta', 'There are no in-scope observations to sample. This does not establish support or publication eligibility.'));
+    var confirm = el('input');
+    confirm.type = 'checkbox';
+    confirm = C.bindDraft(confirm, key + 'confirmed', false);
+    add(form, add(el('label', 'check'), confirm, el('span', null, 'I reviewed this exact draft and the sampled evidence.')));
+    var save = C.actButton('Record decision', 'btn-primary', function () {}, true, true);
+    save.type = 'submit';
+    function update() {
+      var blocked = !C.analyst() || !confirm.checked || !issue.value || feedback.value.trim().length < 3 ||
+        verdicts.some(function (row) { return !row.input.value; });
+      save.setAttribute('data-blocked', blocked ? '1' : '');
+      save.disabled = Boolean(state.busy) || blocked;
+    }
+    form.addEventListener('input', update);
+    form.addEventListener('change', update);
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      update();
+      if (save.disabled) return;
+      save.disabled = true;
+      C.postAction({ action: 'record-memo-review', runId: state.runId, memoId: m.id, reviewerId: C.analyst(),
+        target: target, decision: decision.value, issueType: issue.value, feedback: feedback.value.trim(),
+        sampledVerdicts: verdicts.map(function (row) { return { observationId: row.sample.observationId, verdict: row.input.value }; }),
+        drillDownVerdicts: Object.keys(clicks).map(function (id) { return clicks[id]; }) }).then(function (result) {
+        if (result && result.ok) { C.dropDrafts(key); delete state.memoReviewClicks[key]; }
+        else update();
+      });
+    });
+    add(form, add(el('div', 'btn-row'), save));
+    update();
+    return add(gate, form);
   }
   function reviewPage(m, j) {
     var layout = el('div', 'doc-layout');

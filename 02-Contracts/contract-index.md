@@ -19,6 +19,7 @@ Use this file as the index of active contracts. Historical retrieval contracts a
 13. [Shared workflow projection](workflow-projection.md)
 14. [Bounded Build and Challenge execution](bounded-synthesis-execution.md)
 15. [Bounded post-adjudication selection and writing](bounded-memo-execution.md)
+16. [Version-bound memo review and publication decisions](memo-review-and-publication-decision.md)
 
 ## Retired acquisition contracts
 

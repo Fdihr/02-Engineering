@@ -78,6 +78,21 @@ has synthetic coverage only and does not execute or change the live analysis.
 CLI `run:next` reports memo status/resume before the earlier synthesis handoff.
 See [the active contract](../02-Contracts/bounded-memo-execution.md).
 
+## Implemented version-bound memo review (2026-11-04)
+
+The review surface can record a human revision request or rejection for a
+reconstructable writer v2 draft, with sampled observation verdicts and
+drill-down timestamps. Each immutable decision binds the exact memo JSON,
+Markdown, writer, verification, gate and calibration policy checksums.
+Changed or incomplete artifacts disable review; stale decisions grant no
+approval. Dashboard and `review:memo` use the same deterministic recorder.
+
+Publication approval remains unavailable under the current provisional memo
+standard. Neither a review decision nor a forged ready gate overrides the
+writer's blockers. Revision generation and publication delivery are not
+implemented, and review cannot refill bounded model authority. See
+[the decision contract](../02-Contracts/memo-review-and-publication-decision.md).
+
 ## Product boundary
 
 **Current implementation update (2026-11-02):** Firecrawl source retrieval and its Settings key

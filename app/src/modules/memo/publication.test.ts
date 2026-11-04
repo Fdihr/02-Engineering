@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import test from "node:test";
 import {
   createSupportCalibrationRecord,
+  createBoundMemoDecision,
   validateMemoPublicationDecision,
   validateSupportCalibrationPolicy,
   validateSupportCalibrationRecord
@@ -12,6 +13,30 @@ import {
 const binding = (name: string) => ({
   artifactRef: `runs/run-1/${name}.json`,
   artifactSha256: name === "decision" ? "a".repeat(64) : "b".repeat(64)
+});
+
+test("bound publication decisions reject stale targets, incomplete samples and blockers", () => {
+  const target = { runId: "run-1", memoId: "memo-1", memoVersion: 1,
+    memo: binding("memo"), markdown: binding("markdown"), writer: binding("writer"),
+    verification: binding("verification"), gate: binding("gate"), calibrationPolicy: binding("policy") };
+  const submitted = { target, reviewerId: "reviewer", decision: "approved", issueType: "editorial",
+    feedback: "Reviewed the exact draft.", sampledVerdicts: [{ observationId: "obs-1", verdict: "supported" }],
+    drillDownVerdicts: [] };
+  const input = { submitted, target, selectedObservationIds: ["obs-1"], approvalBlockers: [],
+    decidedAt: "2026-11-04T13:00:00.000Z" };
+  assert.equal(createBoundMemoDecision(input).ok, true);
+  assert.deepEqual(createBoundMemoDecision({ ...input, approvalBlockers: ["PROVISIONAL_MEMO_STANDARD"] }),
+    { ok: false, error: "PUBLICATION_BLOCKED" });
+  assert.deepEqual(createBoundMemoDecision({ ...input, submitted: { ...submitted, sampledVerdicts: [] } }),
+    { ok: false, error: "INCOMPLETE_MEMO_SAMPLE" });
+  assert.deepEqual(createBoundMemoDecision({ ...input, submitted: { ...submitted, target: { ...target, memoVersion: 2 } } }),
+    { ok: false, error: "STALE_MEMO_REVIEW" });
+  assert.deepEqual(createBoundMemoDecision({ ...input, submitted: { ...submitted,
+    sampledVerdicts: [{ observationId: "obs-1", verdict: "uncertain" }] } }), { ok: false, error: "PUBLICATION_BLOCKED" });
+  assert.deepEqual(createBoundMemoDecision({ ...input, submitted: { ...submitted, reviewerId: "" } }),
+    { ok: false, error: "INVALID_MEMO_REVIEW" });
+  assert.equal(createBoundMemoDecision({ ...input, approvalBlockers: ["PROVISIONAL_MEMO_STANDARD"],
+    submitted: { ...submitted, decision: "rejected" } }).ok, true);
 });
 
 test("validates publication samples and records drill-down calibration", async () => {

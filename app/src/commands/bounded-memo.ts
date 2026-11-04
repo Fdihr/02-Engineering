@@ -17,6 +17,7 @@ import { runLocalCopilot } from "./local-copilot.js";
 import { isWriterRecord, loadMemoInputs, memoSelectionRequest, memoStageRecord, memoWriterRequest,
   reopenMemoRecord, validateMemoRequest } from "./memo-execution-io.js";
 import { loadChallengeRecordContext } from "./synthesis-io.js";
+import { inspectMemoReview } from "./review-memo.js";
 
 const STANDARD = "src/modules/memo/standards/memo-standard-v1.json";
 const now = () => new Date().toISOString();
@@ -327,13 +328,20 @@ export const inspectBoundedMemo = async (root: string, runId: string) => {
   try { await checkExceptions(root, authority); }
   catch (issue) { error = commandError(issue); }
   const projection = projectBoundedMemo({ stages, workerActive, ...(error ? { error } : {}) });
+  const writerBinding = stages.writer.record;
+  const review = writerBinding && await optional(resolve(dirname(writerBinding.artifactRef), "review", "decision.json"))
+    ? await inspectMemoReview(root, runId, basename(dirname(writerBinding.artifactRef))) : null;
   const paths = [authority.adjudication.artifactRef, ...MEMO_STAGES.flatMap(stage =>
     [stages[stage].request?.artifactRef, stages[stage].record?.artifactRef].filter((path): path is string => Boolean(path)))];
   const human = projection.action === "stop" && projection.status !== "running";
   const work = { id: "bounded:memo", stage: "memo" as const, actor: human ? "human" as const : "machine" as const,
     kind: human ? "checkpoint" as const : "work" as const, surface: "workflow" as const,
-    title: projection.status === "memo-review" ? "Review the memo draft" : human ? "Inspect bounded memo recovery" : "Continue bounded memo",
-    detail: projection.error || "Only frozen selection and writing are authorized. Publication is a separate human decision.",
+    title: review?.decision ? review.decision.decision === "revision-requested" ? "Memo revision requested" : "Memo rejected" :
+      review?.decisionStatus === "stale" ? "Inspect stale memo decision" :
+      projection.status === "memo-review" ? "Review the memo draft" : human ? "Inspect bounded memo recovery" : "Continue bounded memo",
+    detail: projection.error || (review?.decision
+      ? "The human decision is recorded. A new draft requires separately authorized work; publication remains blocked."
+      : "Only frozen selection and writing are authorized. Publication is a separate human decision."),
     paths, priority: 100, target: { tab: projection.status === "memo-review" ? "memo" : "synthesis", focus: "gate" } };
   const workflowInput: WorkflowProjectionInput = {
     runId, intentApproved: true, evidenceAvailable: true,
@@ -345,7 +353,7 @@ export const inspectBoundedMemo = async (root: string, runId: string) => {
   };
   return { ...projection, workflow: projectWorkflow(workflowInput), workflowInput,
     runId, pipeline: "memo", authority, authorizationBinding: artifact.binding, stages, workerActive, directory,
-    maxCalls: authority.maxCalls, input, selection };
+    maxCalls: authority.maxCalls, input, selection, memoReview: review };
 };
 
 export const runBoundedMemo = async (root: string, runId: string, mode: "start" | "resume",

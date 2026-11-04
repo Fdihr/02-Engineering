@@ -4,14 +4,14 @@ const path = require('node:path');
 const { test } = require('node:test');
 const { JSDOM } = require('jsdom');
 
-function harness(journey, pane, execution = null, drafts = {}, memoExecution = null) {
-  const dom = new JSDOM('<main><div id="pane-synthesis"></div><div id="pane-sources"></div></main>', { runScripts: 'outside-only' });
+function harness(journey, pane, execution = null, drafts = {}, memoExecution = null, memoReview = null) {
+  const dom = new JSDOM('<main><div id="pane-synthesis"></div><div id="pane-sources"></div><div id="pane-memo"></div></main>', { runScripts: 'outside-only' });
   const { document, Event } = dom.window;
   const actions = [];
   let sequence = 0;
   const C = {
     state: {
-      runId: 'fixture', view: { boundedSynthesis: execution, boundedMemo: memoExecution }, drafts, expanded: {}, openRounds: {},
+      runId: 'fixture', view: { boundedSynthesis: execution, boundedMemo: memoExecution, memoReview }, drafts, expanded: {}, openRounds: {},
       evidenceView: 'explorer', sourceFilter: 'all', sourceQuery: ''
     },
     panes: {}, journey: () => journey,
@@ -75,6 +75,7 @@ function harness(journey, pane, execution = null, drafts = {}, memoExecution = n
     render: () => C.panes[pane]()
   };
   dom.window.CTI = C;
+  dom.window.fetch = () => new Promise(() => {});
   dom.window.eval(fs.readFileSync(path.join(__dirname, 'run_panes.js'), 'utf8'));
   C.render();
   return {
@@ -83,6 +84,57 @@ function harness(journey, pane, execution = null, drafts = {}, memoExecution = n
     change: (input, value) => { input.value = value; input.dispatchEvent(new Event('change', { bubbles: true })); }
   };
 }
+
+function memoJourney() {
+  return { brief: {}, rounds: [], memo: {
+    id: 'memo-1', createdAt: '2026-11-04T13:00:00Z', markdownPath: 'memo/memo-1/memo.md',
+    roundIndex: 1, currentRound: 1, isCurrent: true, claims: {}, blockers: [{ code: 'PROVISIONAL_MEMO_STANDARD', label: 'Provisional standard' }],
+    gate: { status: 'blocked', humanApprovalAvailable: false },
+    verification: { contentVerdict: 'pass', publicationVerdict: 'block', checks: [] },
+    bluf: [], keyJudgments: [], analysis: [], uncertainties: [], indicators: [], competing: []
+  } };
+}
+function memoReview() {
+  const binding = { artifactRef: 'memo.json', artifactSha256: 'a'.repeat(64) };
+  return { target: { runId: 'fixture', memoId: 'memo-1', memoVersion: 1,
+    memo: binding, markdown: binding, writer: binding, verification: binding, gate: binding, calibrationPolicy: binding },
+  decisionStatus: 'pending', approvalAvailable: false,
+  samples: [{ observationId: 'obs-1', text: 'The review was announced.', quote: 'We announced a review.' }] };
+}
+
+test('memo review requires sample verdict, feedback and explicit exact-draft confirmation', () => {
+  const review = memoReview();
+  const h = harness(memoJourney(), 'memo', null, {}, null, review);
+  assert.equal(h.button('Approve for publication').disabled, true);
+  assert.equal(h.button('Record decision').disabled, true);
+  const selects = h.document.querySelectorAll('select');
+  h.change(selects[1], 'evidence-gap');
+  h.change(selects[2], 'supported');
+  h.change(h.document.querySelector('textarea'), 'Resolve remaining gaps.');
+  const confirm = h.document.querySelector('input[type="checkbox"]');
+  confirm.checked = true;
+  confirm.dispatchEvent(new h.document.defaultView.Event('change', { bubbles: true }));
+  assert.equal(h.button('Record decision').disabled, false);
+  h.document.querySelector('form').dispatchEvent(new h.document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+  assert.equal(h.actions.length, 1);
+  assert.equal(h.actions[0].action, 'record-memo-review');
+  assert.equal(h.actions[0].decision, 'revision-requested');
+  assert.deepEqual(JSON.parse(JSON.stringify(h.actions[0].target)), review.target);
+  assert.deepEqual(JSON.parse(JSON.stringify(h.actions[0].sampledVerdicts)), [{ observationId: 'obs-1', verdict: 'supported' }]);
+});
+
+test('memo decisions and stale or unavailable review never expose a writable approval', () => {
+  for (const data of [
+    { ...memoReview(), decisionStatus: 'recorded', decision: { decision: 'revision-requested', reviewerId: 'REVIEWER',
+      decidedAt: '2026-11-04T13:01:00Z', feedback: 'Close the gap.' } },
+    { ...memoReview(), decisionStatus: 'stale' },
+    { error: 'Memo Markdown changed; restore or produce a new draft before review.' }
+  ]) {
+    const h = harness(memoJourney(), 'memo', null, {}, null, data);
+    assert.equal(h.button('Approve for publication').disabled, true);
+    assert.equal(h.button('Record decision'), undefined);
+  }
+});
 
 function reviewJourney() {
   return {
