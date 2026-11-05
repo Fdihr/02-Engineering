@@ -39,7 +39,7 @@ ROUND_STEPS = (
 BLOCKERS = {
     "PROVISIONAL_MEMO_STANDARD": (
         "Memo standard still provisional",
-        "memo-standard-v1 has not been approved, so no memo can be published yet. The memo can still be read internally.",
+        "The memo's governing standard has not been approved, so no memo can be published yet. The memo can still be read internally.",
     ),
     "OPEN_KEY_JUDGEMENT_CONTEST": (
         "A key judgement is contested",

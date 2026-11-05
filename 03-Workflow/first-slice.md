@@ -61,6 +61,12 @@ See [authorization, receipts and recovery limits](../02-Contracts/bounded-synthe
 
 ## Implemented bounded selection and writing (2026-11-04)
 
+New starts now use provisional `memo-standard-v2` without a total word ceiling.
+The writer is guided to be concise, but two-page memos are allowed; evidence,
+selection, structured output, call allowances and publication boundaries are
+unchanged. Existing drafts, authorizations and editorial revisions retain their
+checksum-bound historical standard rather than being silently migrated.
+
 After performed human adjudication, Findings has a separate explicit bounded
 start for key-judgement selection and writer v2. It freezes the adjudicated
 round, approved question/scope and source lineage, policy/standard and Settings

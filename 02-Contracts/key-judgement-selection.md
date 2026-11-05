@@ -20,7 +20,8 @@ Rejected claims are excluded. Contested claims are included only when policy per
 
 ## Policy
 
-`memo-standard-v1` owns `keyJudgementPolicy`:
+The governing memo standard owns `keyJudgementPolicy`. The current default,
+`memo-standard-v2`, preserves the selection policy introduced by v1:
 
 - `policyId: memo-standard-v1-key-judgements-v1`
 - `maxKeyJudgements: 3`
@@ -28,7 +29,9 @@ Rejected claims are excluded. Contested claims are included only when policy per
 - `allowContested: true`
 - `judgementTextMaxChars: 240`
 
-The earlier `memo-standard-v0.json` bytes and existing run artifacts remain unchanged.
+Standard v2 removes the total memo word ceiling, not selection or evidence
+constraints. The earlier v0/v1 standard bytes and existing run artifacts remain
+unchanged.
 
 ## Model boundary
 
@@ -54,11 +57,20 @@ Failures contain only `{ check, count, rule }`. On success, code attaches claim-
 Run from `app/`:
 
 ```powershell
-npm run prepare:key-judgements -- <build-record.json> <challenge-record.json> <performed-adjudication.json> <memo-standard-v1.json>
+npm run prepare:key-judgements -- <build-record.json> <challenge-record.json> <performed-adjudication.json> <memo-standard.json>
 npm run record:key-judgements -- <key-judgement-request.json> <copilot-response.json>
-npm run prepare:memo-writer -- <build-record.json> <challenge-record.json> <performed-adjudication.json> <key-judgement-record.json> <approved-question.json> <memo-standard-v1.json>
+npm run prepare:memo-writer -- <build-record.json> <challenge-record.json> <performed-adjudication.json> <key-judgement-record.json> <approved-question.json> <memo-standard.json>
 ```
 
 Requests and records are write-once beneath `runs/<runId>/synthesis/key-judgements/`. Recording reopens and checksum-verifies Build, Challenge, performed adjudication, memo standard, request, and response. Writer v2 recomputes eligibility and KJ1-KJ8 from those authoritative inputs before accepting the selection record.
 
 Writer v2 accepts only selected claims. It carries key-judgement wording unchanged into canonical memo JSON; the writer model may return only optional analysis, uncertainty, and indicator statements. Model-authored BLUF or key-judgement rows are rejected. Code derives BLUF, citations, confidence, status, open challenges, gaps, omissions, limitations, and publication blockers.
+
+Use `src/modules/memo/standards/memo-standard-v2.json` for new work. The writer
+must use the exact standard bound by the recorded selection, not silently
+substitute the current default. Under v2, brevity is guidance rather than a
+hard word limit, and two-page memos are acceptable. Historical v1 writer requests
+retain their word budgets and exact reconstruction. A separately approved,
+single-call repair of a historical saved length failure follows
+[the bounded memo contract](bounded-memo-execution.md); it cannot rerun selection
+or relax that frozen standard.

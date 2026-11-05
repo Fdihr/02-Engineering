@@ -17,6 +17,9 @@ import { loadArticleCapture } from "./article-io.js";
 import { admitArticle } from "./admit-article.js";
 import { loadAdmittedSource, loadJsonArtifact } from "./assurance-io.js";
 import { prepareArticleReassessment, loadArticleReassessment } from "./article-reassessment.js";
+import { validateExceptionItem } from "../modules/exceptions/exception-item.js";
+import { memoRelevanceExceptionScope } from "./memo-exception-scope.js";
+import { checkMemoExceptions } from "./bounded-memo.js";
 
 const question: ApprovedResearchQuestion = {
   id: "rq-1", runId: "article-test", scopeVersion: 1, question: "What threatens Polish factories?",
@@ -341,6 +344,56 @@ test("explicit v1-to-v2 production reassessment preserves history and consumes o
         const admitted = await loadAdmittedSource(f.runRoot, result.snapshotRef, new Date().toISOString());
         assert.equal(admitted.snapshotId, "snapshot-reassessment-1");
         assert.equal(admitted.candidateId, plan.id);
+        const exceptions = await readdir(resolve(f.run, "exceptions"));
+        assert.equal(exceptions.length, 1);
+        const exceptionPath = resolve(f.run, "exceptions", exceptions[0]!, "exception-item.json");
+        const exceptionBytes = await readFile(exceptionPath, "utf8");
+        const exception = validateExceptionItem(JSON.parse(exceptionBytes));
+        assert.ok(exception.ok);
+        const snapshotPath = result.snapshotRef;
+        const snapshotBytes = await readFile(snapshotPath, "utf8");
+        const scope = async (participants = new Set<string>()) => memoRelevanceExceptionScope(f.runRoot,
+          exception.value, [document.binding], [(await loadJsonArtifact(snapshotPath)).binding], participants);
+        assert.equal(await scope(), "superseded");
+        const notePath = resolve(f.run, "memo-source-note.json");
+        await writeFile(notePath, JSON.stringify({ lineage: {
+          sourceDocument: document.binding, snapshot: (await loadJsonArtifact(snapshotPath)).binding
+        } }));
+        const authority = {
+          runId: question.runId, build: document.binding, challenge: document.binding,
+          adjudication: document.binding, question: document.binding, standard: document.binding,
+          lineage: [(await loadJsonArtifact(notePath)).binding]
+        };
+        await checkMemoExceptions(f.runRoot, authority);
+        await assert.rejects(checkMemoExceptions(f.runRoot, {
+          ...authority, lineage: [...authority.lineage, authorization.previousAssessment]
+        }), /affects memo inputs/);
+        assert.equal(await scope(new Set([resolve(prior.assessmentPath)])), null);
+        assert.equal(await memoRelevanceExceptionScope(f.runRoot, exception.value, [document.binding], [], new Set()), null);
+        assert.equal(await memoRelevanceExceptionScope(f.runRoot,
+          { ...exception.value, refs: [...exception.value.refs, document.binding] },
+          [document.binding], [(await loadJsonArtifact(snapshotPath)).binding], new Set()), null);
+        const snapshot = JSON.parse(snapshotBytes);
+        for (const change of [
+          { questionRelevance: { ...snapshot.item.questionRelevance, assessmentArtifactSha256: "f".repeat(64) } },
+          { articleLineage: { ...snapshot.item.articleLineage, reassessment: undefined } }
+        ]) {
+          await writeFile(snapshotPath, JSON.stringify({ ...snapshot, item: { ...snapshot.item, ...change } }));
+          assert.equal(await scope(), null);
+        }
+        await writeFile(snapshotPath, snapshotBytes);
+        const admissionPath = resolve(snapshotPath, "..", "article-admission-result.json");
+        const admissionBytes = await readFile(admissionPath, "utf8");
+        await writeFile(admissionPath, JSON.stringify({ ...JSON.parse(admissionBytes), outcome: "exception" }));
+        assert.equal(await scope(), null);
+        await writeFile(admissionPath, admissionBytes);
+        const attemptPath = resolve(loaded.directory, "generation-attempt.json");
+        const attemptBytes = await readFile(attemptPath, "utf8");
+        await writeFile(attemptPath, JSON.stringify({ ...JSON.parse(attemptBytes), maxModelCalls: 2 }));
+        await assert.rejects(scope(), /generation receipt/);
+        await writeFile(attemptPath, attemptBytes);
+        assert.equal(await scope(), "superseded");
+        assert.equal(await readFile(exceptionPath, "utf8"), exceptionBytes);
       }
       await assert.rejects(admitArticle(f.runRoot, capturePath, next.assessmentPath, prepared.authorizationPath), /EEXIST/);
       await assert.rejects(prepareArticleReassessment(f.runRoot, approvalPath), /EEXIST/);

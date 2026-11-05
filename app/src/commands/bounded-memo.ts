@@ -7,6 +7,7 @@ import type { ArtifactBinding } from "../modules/assurance/types.js";
 import { isRecord, pathSafeId, readArtifactBinding, validTime } from "../modules/assurance/validators.js";
 import { validateExceptionItem } from "../modules/exceptions/exception-item.js";
 import { renderMemoMarkdown } from "../modules/memo/writer.js";
+import { DEFAULT_MEMO_STANDARD_PATH } from "../modules/memo/standard-v1.js";
 import { validateSourceDocument } from "../modules/source/source-document.js";
 import { validatePerformedAdjudication, type KeyJudgementRecord } from "../modules/synthesis/key-judgement-stage.js";
 import { MEMO_STAGES, projectBoundedMemo, validateMemoAuthorization,
@@ -15,13 +16,14 @@ import { projectWorkflow, type WorkflowProjectionInput } from "../workflow/workf
 import { assuranceRunRoot, commandError, ensureDirectory, loadJsonArtifact, longPath, requireChecksum } from "./assurance-io.js";
 import { runLocalCopilot } from "./local-copilot.js";
 import { isWriterRecord, loadMemoInputs, memoSelectionRequest, memoStageRecord, memoWriterRequest,
-  reopenMemoRecord, validateMemoRequest } from "./memo-execution-io.js";
+  reopenMemoRecord, validateMemoRequest, type MemoInputs } from "./memo-execution-io.js";
 import { loadChallengeRecordContext } from "./synthesis-io.js";
 import { inspectMemoReview } from "./review-memo.js";
+import { memoRelevanceExceptionScope } from "./memo-exception-scope.js";
 
-const STANDARD = "src/modules/memo/standards/memo-standard-v1.json";
 const now = () => new Date().toISOString();
 const directoryFor = (root: string, runId: string) => resolve(root, runId, "memo", "execution");
+const repairDirectoryFor = (root: string, runId: string) => resolve(directoryFor(root, runId), "length-repair");
 const optional = async (path: string) => {
   try { return await loadJsonArtifact(path); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }
@@ -107,6 +109,8 @@ export const checkMemoExceptions = async (root: string, authority: Pick<MemoAuth
   const participants = new Set([authority.build, authority.challenge, authority.adjudication, authority.question,
     authority.standard, ...authority.lineage].map(binding => resolve(binding.artifactRef)));
   const sourceIds = new Set<string>();
+  const documents: ArtifactBinding[] = [];
+  const snapshots: ArtifactBinding[] = [];
   const collectBindings = async (value: unknown) => {
     if (Array.isArray(value)) { for (const entry of value) await collectBindings(entry); }
     else if (isRecord(value)) {
@@ -116,7 +120,16 @@ export const checkMemoExceptions = async (root: string, authority: Pick<MemoAuth
       for (const entry of Object.values(value)) await collectBindings(entry);
     }
   };
-  for (const binding of authority.lineage) await collectBindings((await loadJsonArtifact(binding.artifactRef)).value);
+  for (const binding of authority.lineage) {
+    const value = (await loadJsonArtifact(binding.artifactRef)).value;
+    await collectBindings(value);
+    if (isRecord(value) && isRecord(value.lineage)) {
+      const document = readArtifactBinding(value.lineage.sourceDocument);
+      const snapshot = readArtifactBinding(value.lineage.snapshot);
+      if (document) documents.push(document);
+      if (snapshot) snapshots.push(snapshot);
+    }
+  }
   for (const path of (await filesIn(resolve(root, authority.runId))).filter(path => basename(path) === "exception-item.json")) {
     const parsed = validateExceptionItem((await loadJsonArtifact(path)).value);
     if (!parsed.ok || parsed.value.runId !== authority.runId) throw new Error("Exception integrity is uncertain.");
@@ -131,7 +144,9 @@ export const checkMemoExceptions = async (root: string, authority: Pick<MemoAuth
         !sourceIds.has(value.sourceItemId);
       unrelated &&= !participants.has(resolve(binding.artifactRef)) && establishedSource;
     }
-    if (!unrelated) throw new Error(`Open exception ${parsed.value.id} affects memo inputs or has uncertain scope.`);
+    if (!unrelated && !(await memoRelevanceExceptionScope(root, parsed.value, documents, snapshots, participants))) {
+      throw new Error(`Open exception ${parsed.value.id} affects memo inputs or has uncertain scope.`);
+    }
   }
 };
 
@@ -155,7 +170,7 @@ const freeze = async (root: string, runId: string, analyst: string, adjudication
     approvedBy: analyst, approvedAt: now(), decision: "bounded-selection-writing-authorized",
     build: challenge.build.recordArtifact.binding, challenge: challenge.recordArtifact.binding,
     adjudication: adjudicationArtifact.binding, question,
-    standard: (await loadJsonArtifact(resolve(STANDARD))).binding, lineage: [],
+    standard: (await loadJsonArtifact(resolve(DEFAULT_MEMO_STANDARD_PATH))).binding, lineage: [],
     stages: {
       "key-judgements": { provider: "github-copilot-sdk", model: models["key-judgements"], maxCalls: 1, request: null, record: null },
       writer: { provider: "github-copilot-sdk", model: models.writer, maxCalls: 1, request: null, record: null }
@@ -227,6 +242,77 @@ const durable = durableMemoJson;
 const durableText = durableMemoText;
 const checkExceptions = checkMemoExceptions;
 
+const loadLengthFailure = async (root: string, runId: string): Promise<{
+  authority: MemoAuthorization; input: MemoInputs; selection: { record: KeyJudgementRecord; binding: ArtifactBinding }; failedAt: string;
+  origin: NonNullable<MemoAuthorization["lengthRepair"]>;
+}> => {
+  const execution = await inspectBoundedMemo(root, runId, true);
+  const directory = directoryFor(root, runId);
+  const requestBinding = execution.stages.writer.request;
+  if (execution.authority.lengthRepair || execution.status !== "blocked" ||
+      execution.error !== 'recording: Writer response rejected: "MEMO_TOO_LONG"' ||
+      !requestBinding || !execution.selection || execution.stages.writer.record ||
+      execution.stages.writer.phase !== "response-saved" || execution.remainingCalls !== 0) {
+    throw new Error("Only a saved original MEMO_TOO_LONG writer failure can receive one length repair.");
+  }
+  const failure = await loadJsonArtifact(resolve(directory, "failure.json"));
+  if (!isRecord(failure.value) || failure.value.stage !== "writer" || failure.value.phase !== "recording" ||
+      typeof failure.value.occurredAt !== "string" || !validTime(failure.value.occurredAt) ||
+      Date.parse(failure.value.occurredAt) > Date.now()) throw new Error("Length failure receipt is incomplete.");
+  const request = validateMemoRequest("writer", (await bound(root, requestBinding, runId)).value,
+    execution.authority, execution.input, execution.selection);
+  const response = await loadJsonArtifact(resolve(directory, "writer", "copilot-response.json"));
+  const invocation = (await loadJsonArtifact(resolve(directory, "writer", "invocation.json"))).value;
+  const reserved = (await loadJsonArtifact(resolve(directory, "writer", "reserved.json"))).value;
+  const recording = (await loadJsonArtifact(resolve(directory, "writer", "recording.json"))).value;
+  if (!isRecord(invocation) || !isRecord(reserved) || !isRecord(recording) || !validTime(recording.recordedAt)) {
+    throw new Error("Saved length failure has incomplete writer receipts.");
+  }
+  same(recording.authorization, execution.authorizationBinding, "Failed recording changed authority.");
+  if (Date.parse(failure.value.occurredAt) < Date.parse(String(recording.recordedAt))) {
+    throw new Error("Length failure predates its saved recording.");
+  }
+  same(response.value, responseFrom(invocation.raw, execution.authority, "writer", request, String(reserved.reservedAt)),
+    "Saved failed response differs from its invocation.");
+  let tooLong = false;
+  try {
+    memoStageRecord("writer", request, requestBinding, response.value, response.binding, execution.input,
+      String(recording.recordedAt), execution.selection.record);
+  } catch (issue) {
+    if (commandError(issue) !== 'Writer response rejected: "MEMO_TOO_LONG"') throw issue;
+    tooLong = true;
+  }
+  if (!tooLong) throw new Error("Saved writer response no longer reconstructs a length failure.");
+  return { authority: execution.authority, input: execution.input, selection: execution.selection, failedAt: failure.value.occurredAt,
+    origin: { authorization: execution.authorizationBinding, request: requestBinding,
+      response: response.binding, failure: failure.binding } };
+};
+
+const freezeLengthRepair = async (root: string, runId: string, analyst: string) => {
+  if (!pathSafeId(analyst)) throw new Error("An explicit analyst must authorize one writer-only length repair.");
+  const original = await loadLengthFailure(root, runId);
+  const approvedAt = now();
+  const request = memoWriterRequest(original.authority, original.input, original.selection.record,
+    original.selection.binding, approvedAt);
+  const requestDirectory = resolve(root, runId, "memo", "requests", request.id);
+  await ensureDirectory(requestDirectory);
+  await confined(resolve(root, runId), requestDirectory);
+  const requestBinding = await durable(resolve(requestDirectory, "writer-request.json"), request);
+  const authority: MemoAuthorization = {
+    ...original.authority, id: `memo-length-repair-${randomUUID()}`, approvedBy: analyst, approvedAt,
+    decision: "bounded-length-repair-authorized", lengthRepair: original.origin, maxCalls: 1,
+    stages: {
+      "key-judgements": { ...original.authority.stages["key-judgements"], maxCalls: 0,
+        request: original.selection.record.request, record: original.selection.binding },
+      writer: { ...original.authority.stages.writer, maxCalls: 1, request: requestBinding, record: null }
+    }
+  };
+  const directory = repairDirectoryFor(root, runId);
+  const binding = await durable(resolve(directory, "authorization.json"), authority);
+  await durable(resolve(directory, "authorized.json"), { authorization: binding, actorType: "human",
+    actorId: analyst, occurredAt: approvedAt, decision: authority.decision, maxCalls: 1 });
+};
+
 export const writeMemoHandoff = async (root: string, runId: string, record: ReturnType<typeof memoStageRecord>) => {
   if (!isWriterRecord(record)) return durable(resolve(root, runId, "synthesis", "key-judgements", "records",
     record.id, "key-judgement-record.json"), record, true);
@@ -255,10 +341,12 @@ export const verifyMemoHandoff = async (binding: ArtifactBinding, record: Return
 const writeHandoff = writeMemoHandoff;
 const verifyHandoff = verifyMemoHandoff;
 
-export const inspectBoundedMemo = async (root: string, runId: string) => {
+export const inspectBoundedMemo = async (root: string, runId: string, originalOnly = false) => {
   if (!pathSafeId(runId)) throw new Error("A valid run ID is required.");
   await confined(root, resolve(root, runId));
-  const directory = directoryFor(root, runId);
+  const directory = !originalOnly && await optional(resolve(repairDirectoryFor(root, runId), "authorization.json"))
+    ? repairDirectoryFor(root, runId) : directoryFor(root, runId);
+  await confined(resolve(root, runId), directory);
   const artifact = await loadJsonArtifact(resolve(directory, "authorization.json"));
   const parsed = validateMemoAuthorization(artifact.value);
   if (!parsed.ok || parsed.value.runId !== runId || Date.parse(parsed.value.approvedAt) > Date.now()) throw new Error("Invalid frozen memo authorization.");
@@ -266,10 +354,25 @@ export const inspectBoundedMemo = async (root: string, runId: string) => {
   const receipt = (await loadJsonArtifact(resolve(directory, "authorized.json"))).value;
   same(receipt, { authorization: artifact.binding, actorType: "human", actorId: authority.approvedBy,
     occurredAt: authority.approvedAt, decision: authority.decision, maxCalls: authority.maxCalls }, "Memo human authority receipt changed.");
+  if (authority.lengthRepair) {
+    if (directory !== repairDirectoryFor(root, runId)) throw new Error("Use the unique length-repair authorization.");
+    const original = await loadLengthFailure(root, runId);
+    same(authority.lengthRepair, original.origin, "Length repair changed the original failure or saved response.");
+    for (const key of ["build", "challenge", "adjudication", "question", "standard", "lineage"] as const) {
+      same(authority[key], original.authority[key], "Length repair changed its frozen evidence or policy.");
+    }
+    same(authority.stages["key-judgements"].record, original.selection.binding, "Length repair changed selection.");
+    for (const stage of MEMO_STAGES) {
+      same(authority.stages[stage].model, original.authority.stages[stage].model, "Length repair changed a frozen model.");
+    }
+    if (Date.parse(authority.approvedAt) < Date.parse(original.failedAt)) {
+      throw new Error("Length repair must follow the original failure.");
+    }
+  } else if (directory === repairDirectoryFor(root, runId)) throw new Error("Length repair lacks explicit repair authority.");
   for (const binding of [authority.build, authority.challenge, authority.adjudication, authority.question]) await bound(root, binding, runId);
   const input = await loadMemoInputs(root, authority);
   same(input.lineage, authority.lineage, "Frozen evidence lineage changed.");
-  const worker = (await optional(resolve(directory, "worker.lock")))?.value;
+  const worker = (await optional(resolve(directoryFor(root, runId), "worker.lock")))?.value;
   const workerActive = isRecord(worker) && alive(worker.pid);
   const stages = {} as Record<MemoStage, MemoProgress>;
   let selection: { record: KeyJudgementRecord; binding: ArtifactBinding } | undefined;
@@ -292,6 +395,9 @@ export const inspectBoundedMemo = async (root: string, runId: string) => {
     if (request) {
       const loaded = await bound(root, request, runId);
       parsedRequest = validateMemoRequest(stage, loaded.value, authority, input, selection);
+      if (authority.lengthRepair && stage === "writer" &&
+          (!("wordBudget" in parsedRequest) || !parsedRequest.wordBudget ||
+           isDeepStrictEqual(request, authority.lengthRepair.request))) throw new Error("Length repair requires a fresh budgeted writer request.");
       attempt = (await optional(resolve(dirname(request.artifactRef), "generation-attempt.json")))?.value;
       if (attempt !== undefined && !entry.record) {
         if (!isRecord(attempt)) throw new Error("Invalid request reservation.");
@@ -366,19 +472,22 @@ export const inspectBoundedMemo = async (root: string, runId: string) => {
     maxCalls: authority.maxCalls, input, selection, memoReview: review };
 };
 
-export const runBoundedMemo = async (root: string, runId: string, mode: "start" | "resume",
+export const runBoundedMemo = async (root: string, runId: string, mode: "start" | "resume" | "repair",
   analyst?: string, adjudicationPath?: string, injected: Partial<MemoEffects> = {}) => {
   if (!pathSafeId(runId)) throw new Error("A valid run ID is required.");
   await confined(root, resolve(root, runId));
   const effects = { runModel: runLocalCopilot, ...injected };
-  const directory = directoryFor(root, runId);
+  const directory = mode === "repair" || await optional(resolve(repairDirectoryFor(root, runId), "authorization.json"))
+    ? repairDirectoryFor(root, runId) : directoryFor(root, runId);
   await ensureDirectory(directory);
-  const workerPath = resolve(directory, "worker.lock");
+  await confined(resolve(root, runId), directory);
+  const workerPath = resolve(directoryFor(root, runId), "worker.lock");
+  await ensureDirectory(dirname(workerPath));
   const workerId = randomUUID();
   const previous = await optional(workerPath);
   if (previous) {
     if (!isRecord(previous.value) || alive(previous.value.pid)) return { status: "running", runId, error: "Memo worker already owns this run." };
-    const recovery = resolve(directory, "recovery.lock");
+    const recovery = resolve(dirname(workerPath), "recovery.lock");
     try { await durable(recovery, { pid: process.pid, previous: previous.binding }); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code === "EEXIST") return { status: "blocked", runId, error: "Worker recovery already reserved; inspect recovery.lock." };
@@ -386,7 +495,7 @@ export const runBoundedMemo = async (root: string, runId: string, mode: "start" 
     }
     try {
       same((await optional(workerPath))?.binding, previous.binding, "Worker changed during recovery.");
-      await rename(longPath(workerPath), longPath(resolve(directory, `interrupted-worker-${randomUUID()}.json`)));
+      await rename(longPath(workerPath), longPath(resolve(dirname(workerPath), `interrupted-worker-${randomUUID()}.json`)));
     } finally { await unlink(longPath(recovery)); }
   }
   try { await durable(workerPath, { pid: process.pid, id: workerId, startedAt: now() }); }
@@ -398,8 +507,11 @@ export const runBoundedMemo = async (root: string, runId: string, mode: "start" 
   let stage: MemoStage | null = null;
   try {
     if (!(await optional(resolve(directory, "authorization.json")))) {
-      if (mode !== "start") throw new Error("Explicit bounded memo start is required.");
-      await freeze(root, runId, analyst ?? "", adjudicationPath);
+      if (mode === "repair") await freezeLengthRepair(root, runId, analyst ?? "");
+      else {
+        if (mode !== "start") throw new Error("Explicit bounded memo start is required.");
+        await freeze(root, runId, analyst ?? "", adjudicationPath);
+      }
     }
     for (let step = 0; step < 8; step += 1) {
       phase = "preflight";
@@ -486,10 +598,12 @@ export const runBoundedMemo = async (root: string, runId: string, mode: "start" 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
     const [mode, runId, analyst, adjudication, ...extra] = process.argv.slice(2);
-    if (!runId || !["start", "resume", "status"].includes(mode ?? "") || extra.length ||
-        (mode !== "start" && (analyst || adjudication))) throw new Error("Usage: npm run run:memo -- <start|resume|status> <run-id> [analyst-id] [performed-adjudication.json]");
+    if (!runId || !["start", "resume", "status", "repair"].includes(mode ?? "") || extra.length ||
+        (mode === "repair" ? !analyst || !!adjudication : mode !== "start" && (analyst || adjudication))) {
+      throw new Error("Usage: npm run run:memo -- <start|resume|status|repair> <run-id> [analyst-id] [performed-adjudication.json]");
+    }
     const execution = mode === "status" ? await inspectBoundedMemo(assuranceRunRoot(), runId)
-      : await runBoundedMemo(assuranceRunRoot(), runId, mode as "start" | "resume", analyst, adjudication);
+      : await runBoundedMemo(assuranceRunRoot(), runId, mode as "start" | "resume" | "repair", analyst, adjudication);
     const presentation = Object.fromEntries(Object.entries(execution).filter(([key]) => key !== "input" && key !== "selection"));
     console.log(`Execution: ${JSON.stringify(presentation)}`);
     if (["blocked", "indeterminate"].includes(execution.status)) process.exitCode = 1;

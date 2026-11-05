@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { ArtifactBinding } from "../modules/assurance/types.js";
 import { isRecord, readArtifactBinding } from "../modules/assurance/validators.js";
-import { keyJudgementPolicyFromStandard, validateMemoStandardV1 } from "../modules/memo/standard-v1.js";
+import { keyJudgementPolicyFromStandard, validateMemoStandard } from "../modules/memo/standard-v1.js";
 import { createBoundedWriterRequest, editorialWriterRequest, recordWriterResponse, validateBoundedWriterRequest,
   type EditorialRevision, type WriterRecord } from "../modules/memo/writer.js";
 import { createKeyJudgementRequest, recordKeyJudgementResponse, validateKeyJudgementRequest,
@@ -83,8 +83,8 @@ export const loadMemoInputs = async (root: string, authority: MemoInputBindings)
   }
   const standardArtifact = requireChecksum(await loadJsonArtifact(resolve(authority.standard.artifactRef)),
     authority.standard.artifactSha256, "Frozen memo standard");
-  const standard = validateMemoStandardV1(standardArtifact.value);
-  if (!standard.ok) throw new Error("Memo standard v1 is invalid.");
+  const standard = validateMemoStandard(standardArtifact.value);
+  if (!standard.ok) throw new Error("Memo standard is invalid.");
   return { build: challenge.build.record, challenge: challenge.record, adjudication: adjudication.value,
     question, standard: standard.value, policy: keyJudgementPolicyFromStandard(standard.value),
     lineage: [challenge.build.envelopeArtifact.binding, challenge.build.policyArtifact.binding,
@@ -103,14 +103,14 @@ export const memoSelectionRequest = (authority: MemoInputBindings, input: MemoIn
   return result.value;
 };
 export const memoWriterRequest = (authority: MemoInputBindings, input: MemoInputs,
-  selection: KeyJudgementRecord, binding: ArtifactBinding, preparedAt: string) => {
+  selection: KeyJudgementRecord, binding: ArtifactBinding, preparedAt: string, wordBudget = true) => {
   const result = createBoundedWriterRequest({
     buildRecord: input.build, buildRecordArtifact: authority.build,
     challengeRecord: input.challenge, challengeRecordArtifact: authority.challenge,
     adjudication: input.adjudication, adjudicationArtifact: authority.adjudication,
     question: input.question, questionArtifact: authority.question,
     standard: input.standard, standardArtifact: authority.standard,
-    keyJudgementRecord: selection, keyJudgementRecordArtifact: binding, preparedAt
+    keyJudgementRecord: selection, keyJudgementRecordArtifact: binding, preparedAt, wordBudget
   });
   if (!result.ok) throw new Error(`Writer inputs rejected: ${JSON.stringify(result.error)}`);
   return result.value;
@@ -128,7 +128,8 @@ export const validateMemoRequest = (stage: MemoStage, value: unknown, authority:
     return parsed.value;
   }
   const parsed = validateBoundedWriterRequest(value);
-  const base = parsed.ok && selection ? memoWriterRequest(authority, input, selection.record, selection.binding, parsed.value.preparedAt) : null;
+  const base = parsed.ok && selection ? memoWriterRequest(authority, input, selection.record, selection.binding,
+    parsed.value.preparedAt, parsed.value.wordBudget !== undefined) : null;
   if (!parsed.ok || !base || !isDeepStrictEqual(parsed.value, revision ? editorialWriterRequest(base, revision) : base)) {
     throw new Error("Writer request no longer matches frozen selection.");
   }

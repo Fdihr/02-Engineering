@@ -81,9 +81,9 @@ export const prepareRssBatch = async (
   return artifactRef(path);
 };
 
-export const admitRss = async (
+export const loadRssAssessment = async (
   root: string, selectionPath: string, assessmentPath: string
-): Promise<{ outcome: string; snapshotRef?: string }> => {
+) => {
   const selectionArtifact = await loadRssRunArtifact(root, selectionPath);
   const selection = selectionArtifact.value;
   if (!rssRecord(selection) || selection.schemaVersion !== "rss-batch-selection-v1" ||
@@ -130,13 +130,23 @@ export const admitRss = async (
     document.value.id, "question-relevance", checked.value.id, "assessments",
     assessed.value.assessment.id, "question-relevance-assessment.json");
   if (resolve(assessmentPath) !== expectedAssessmentPath) throw new Error("RSS admission requires the recorded assessment path.");
+  return { ...verified, selectionArtifact, assessmentArtifact, decisionArtifact, assessed: assessed.value,
+    document: document.value };
+};
+
+export const admitRss = async (
+  root: string, selectionPath: string, assessmentPath: string
+): Promise<{ outcome: string; snapshotRef?: string }> => {
+  const { capture, artifact, policy, policyArtifact, selectionArtifact, assessmentArtifact,
+    decisionArtifact, assessed } = await loadRssAssessment(root, selectionPath, assessmentPath);
+  const a = assessed.assessment;
   const id = `rss-${rssSha256(`${capture.runId}\n${a.sourceItemId}`).slice(0, 40)}`;
   const directory = resolve(root, capture.runId, "rss-admissions", id);
   await mkdir(dirname(directory), { recursive: true });
   await mkdir(directory); // A run/item is consumed once across every batch, including failures.
   const decidedAt = new Date().toISOString();
   const refs = [artifact.binding, policyArtifact.binding, selectionArtifact.binding, assessmentArtifact.binding, decisionArtifact.binding];
-  let outcome: string = assessed.value.assessment.verdict;
+  let outcome: string = assessed.assessment.verdict;
   let snapshotRef: string | undefined;
   if (outcome === "relevant") {
     const rssItem = capture.items.find(item => item.id === a.sourceItemId);
@@ -157,7 +167,7 @@ export const admitRss = async (
         assessmentArtifactSha256: assessmentArtifact.binding.artifactSha256,
         decisionArtifactRef: decisionArtifact.binding.artifactRef,
         decisionArtifactSha256: decisionArtifact.binding.artifactSha256,
-        ...assessed.value
+        ...assessed
       },
       limitations: [...capture.limitations, "Captured feed text, not a complete publisher article.",
         "Article URL is reported by the feed, not fetched or redirect-verified.", "support check: model-only, unvalidated"]
@@ -182,7 +192,7 @@ export const admitRss = async (
     outcome = "approved";
   } else if (outcome !== "not-relevant") {
     let existing = false;
-    if (assessed.value.decision.destination === "human_exception_triage") {
+    if (assessed.decision.destination === "human_exception_triage") {
       const exceptionRoot = resolve(root, capture.runId, "exceptions");
       for (const entry of await readdir(exceptionRoot)) {
         const artifact = await loadRssRunArtifact(root, resolve(exceptionRoot, entry, "exception-item.json"));

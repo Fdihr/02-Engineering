@@ -34,7 +34,8 @@ import {
 import type { BuiltClaim, SynthesisBuildRecord } from "../synthesis/types.js";
 import {
   keyJudgementPolicyFromStandard,
-  type MemoStandardV1
+  validateMemoStandard,
+  type MemoStandard
 } from "./standard-v1.js";
 
 export const MEMO_STANDARD_SCHEMA_VERSION = "memo-standard-pack-v0" as const;
@@ -175,9 +176,15 @@ export type BoundedWriterRequest = {
   requiredOmissions: Array<{ requirementId: string; reason: string }>;
   derivedSourcingSummary: string;
   derivedLimitations: string[];
-  standard: MemoStandardV1;
+  standard: MemoStandard;
   prompt: { system: string; user: string };
   editorialRevision?: EditorialRevision;
+  wordBudget?: {
+    schemaVersion: "rendered-memo-word-budget-v1";
+    fixedWords: number;
+    reservedStatementWords: number;
+    maxProseWords: number;
+  };
 };
 
 export type EditorialRevision = {
@@ -227,7 +234,7 @@ export type MemoDocument = {
   notForPublication: true;
   publicationBlockers: string[];
   memoStandardId: string;
-  memoStandardVersion: 0 | 1;
+  memoStandardVersion: 0 | 1 | 2;
   approvedQuestionId: string;
   approvedScope: ArtifactBinding | null;
   lineage: {
@@ -316,11 +323,12 @@ export type WriterError =
   | "INVALID_WRITER_COVERAGE"
   | "PROHIBITED_MEMO_PATTERN"
   | "MEMO_TOO_LONG"
+  | "MEMO_FIXED_CONTENT_TOO_LONG"
   | "INVALID_INVOCATION_CHRONOLOGY"
   | "FRESH_SESSION_NOT_ATTESTED"
   | "INVALID_ARTIFACT_BINDING";
 
-type WriterStandard = MemoStandardV0 | MemoStandardV1;
+type WriterStandard = MemoStandardV0 | MemoStandard;
 type WriterAdjudication = ProvisionalAdjudication | PerformedAdjudication;
 
 const confidenceRank = { unknown: 0, low: 1, moderate: 2, high: 3 } as const;
@@ -571,11 +579,22 @@ const boundedWriterPrompt = (
   >
 ): BoundedWriterRequest["prompt"] => ({
   system: [
-    "Write optional supporting sections for a very short threat-intelligence memo.",
+    request.standard.version === 2
+      ? "Write supporting sections for an evidence-grounded memo."
+      : "Write optional supporting sections for a very short threat-intelligence memo.",
     "The BLUF and key judgements are fixed controller outputs; do not return or rewrite them.",
     "Return only analysis, uncertainties, or indicators with existing claim aliases.",
     "Do not set confidence, status, challenges, alternatives, gaps, sourcing, limitations, cutoff, citations, or publication state; code derives them.",
     "Do not introduce facts beyond the supplied selected claims.",
+    ...(request.standard.version === 2 ? [
+      "Use the space needed to explain the evidence clearly. A two-page memo is acceptable; there is no word-count target or hard word limit.",
+      "Be concise without omitting material analysis, uncertainties or caveats."
+    ] : []),
+    ...(request.wordBudget && "maxWords" in request.standard.limits ? [
+      `The complete rendered memo is limited to ${request.standard.limits.maxWords} words. Fixed sections already use ${request.wordBudget.fixedWords} words.`,
+      `Across ALL returned statement text, use at most ${request.wordBudget.maxProseWords} whitespace-separated words in total. The controller reserves another ${request.wordBudget.reservedStatementWords} words for citations and status labels.`,
+      "Keep material uncertainty explicit, remove redundant optional prose, and return an empty statements array if no prose fits."
+    ] : []),
     "Return a bare statements array or one object under statements, output, or result. An empty statements array is valid. Unknown fields are rejected."
   ].join("\n"),
   user: JSON.stringify(
@@ -605,6 +624,7 @@ const boundedWriterPrompt = (
       derivedSourcingSummary: request.derivedSourcingSummary,
       derivedLimitations: request.derivedLimitations,
       standard: request.standard,
+      ...(request.wordBudget ? { wordBudget: request.wordBudget } : {}),
       responseShape: {
         statements: [
           {
@@ -631,9 +651,10 @@ export const createBoundedWriterRequest = (input: {
   keyJudgementRecordArtifact: ArtifactBinding;
   question: ApprovedResearchQuestion;
   questionArtifact: ArtifactBinding;
-  standard: MemoStandardV1;
+  standard: MemoStandard;
   standardArtifact: ArtifactBinding;
   preparedAt: string;
+  wordBudget?: boolean;
 }): Result<BoundedWriterRequest, WriterError> => {
   const preparedAt = validTime(input.preparedAt);
   const bindings = [
@@ -866,12 +887,33 @@ export const createBoundedWriterRequest = (input: {
     ],
     standard: input.standard
   };
-  return ok({
+  const request: BoundedWriterRequest = {
     schemaVersion: BOUNDED_WRITER_REQUEST_SCHEMA_VERSION,
     id: `memo-writer-request-${sha256Text(canonicalJson(body)).slice(0, 32)}`,
     ...body,
     prompt: boundedWriterPrompt(body)
-  });
+  };
+  if (input.wordBudget === false || !("maxWords" in input.standard.limits)) return ok(request);
+  const fixed = composeWriterMemo({ ...input, request }, [], preparedAt);
+  const fixedWords = memoWordCount(renderMemoMarkdown(fixed));
+  if (fixedWords > input.standard.limits.maxWords) return err("MEMO_FIXED_CONTENT_TOO_LONG");
+  const statementCount = request.claims.length === 0 ? 0 :
+    input.standard.limits.maxAnalysisStatements + input.standard.limits.maxUncertaintyStatements +
+    input.standard.limits.maxIndicatorStatements;
+  const example = composeWriterMemo({ ...input, request }, [{
+    section: "analysis", text: "word", claimAliases: request.claims.map(claim => claim.alias)
+  }], preparedAt);
+  const statementOverhead = memoWordCount(renderMemoMarkdown(example)) - fixedWords - 1;
+  const reservedStatementWords = statementCount * statementOverhead;
+  const wordBudget = {
+    schemaVersion: "rendered-memo-word-budget-v1" as const, fixedWords, reservedStatementWords,
+    maxProseWords: request.claims.length === 0 ? 0 :
+      Math.max(0, input.standard.limits.maxWords - fixedWords - reservedStatementWords)
+  };
+  const budgeted = { ...body, wordBudget };
+  return ok({ ...request, wordBudget,
+    id: `memo-writer-request-${sha256Text(canonicalJson(budgeted)).slice(0, 32)}`,
+    prompt: boundedWriterPrompt(budgeted) });
 };
 
 export const validateWriterRequest = (value: unknown): Result<WriterRequest, WriterError> => {
@@ -924,7 +966,14 @@ export const validateBoundedWriterRequest = (
     !Array.isArray(value.requiredOmissions) ||
     !Array.isArray(value.derivedLimitations) ||
     !isRecord(value.standard) ||
+    !validateMemoStandard(value.standard).ok ||
     !isRecord(value.prompt) ||
+    (value.wordBudget !== undefined &&
+      (value.standard.version !== 1 || !isRecord(value.wordBudget) || !hasOnlyKeys(value.wordBudget,
+        ["schemaVersion", "fixedWords", "reservedStatementWords", "maxProseWords"]) ||
+       value.wordBudget.schemaVersion !== "rendered-memo-word-budget-v1" ||
+       ![value.wordBudget.fixedWords, value.wordBudget.reservedStatementWords, value.wordBudget.maxProseWords]
+         .every(words => Number.isSafeInteger(words) && Number(words) >= 0))) ||
     (value.editorialRevision !== undefined &&
       (!isRecord(value.editorialRevision) ||
        !hasOnlyKeys(value.editorialRevision, ["parentMemo", "parentMemoId", "parentVersion", "decision", "feedback", "previousDraft"]) ||
@@ -1069,7 +1118,7 @@ export const recordWriterResponse = (input: {
   const modelWords = proposal.value
     .flatMap((entry) => entry.text.trim().split(/\s+/))
     .filter(Boolean).length;
-  if (modelWords > input.standard.limits.maxWords) return err("MEMO_TOO_LONG");
+  if ("maxWords" in input.standard.limits && modelWords > input.standard.limits.maxWords) return err("MEMO_TOO_LONG");
   const prohibited = input.standard.prohibitedPatterns.map((pattern) => pattern.toLowerCase());
   const checkedText = [
     ...proposal.value.map((entry) => entry.text),
@@ -1084,6 +1133,60 @@ export const recordWriterResponse = (input: {
   ) {
     return err("PROHIBITED_MEMO_PATTERN");
   }
+  const memo = composeWriterMemo(input, proposal.value, recordedAt);
+  if ("maxWords" in input.standard.limits && memoWordCount(renderMemoMarkdown(memo)) > input.standard.limits.maxWords) {
+    return err("MEMO_TOO_LONG");
+  }
+  const checks = [
+    "required-sections-present",
+    "bluf-derived-from-evidence-counts",
+    "all-statements-resolve-to-claims",
+    "all-contested-claims-retain-open-challenges",
+    "key-judgment-confidence-bounded",
+    "all-alternatives-preserved",
+    "all-gaps-preserved",
+    "sourcing-summary-derived",
+    "plain-provisional-and-synthetic-limitations",
+    "information-cutoff-present",
+    "maxWords" in input.standard.limits ? "word-limit-and-prohibited-patterns" : "prohibited-patterns"
+  ].map((check) => ({ check, status: "pass" as const }));
+  const verification: MemoVerification = {
+    schemaVersion: MEMO_VERIFICATION_SCHEMA_VERSION,
+    memoId: memo.id,
+    verifiedAt: recordedAt,
+    contentVerdict: "pass",
+    publicationVerdict: "block",
+    checks,
+    blockers: memo.publicationBlockers
+  };
+  const body = {
+    recordedAt,
+    runId: input.request.runId,
+    reviewStatus: input.buildRecord.reviewStatus,
+    limitedEvidence: input.buildRecord.limitedEvidence,
+    request: requestArtifact,
+    response: responseArtifact,
+    ...(revalidationAuthorisation ? { revalidationAuthorisation } : {}),
+    invocation: { id: invocationId, ...identity, startedAt, completedAt, freshSession: true as const, capturedBy },
+    memo,
+    verification
+  };
+  return ok({
+    schemaVersion: WRITER_RECORD_SCHEMA_VERSION,
+    id: `memo-writer-record-${sha256Text(canonicalJson(body)).slice(0, 32)}`,
+    ...body
+  });
+};
+
+const memoWordCount = (text: string): number => text.trim().split(/\s+/).filter(Boolean).length;
+
+const composeWriterMemo = (input: Pick<Parameters<typeof recordWriterResponse>[0],
+  "request" | "buildRecord" | "challengeRecord" | "adjudication" | "question" | "standard" | "supersedesMemoId">,
+  proposal: WriterStatementProposal[], recordedAt: string): MemoDocument => {
+  const boundedRequest = input.request.schemaVersion === BOUNDED_WRITER_REQUEST_SCHEMA_VERSION ? input.request : undefined;
+  const legacyRequest = input.request.schemaVersion === WRITER_REQUEST_SCHEMA_VERSION ? input.request : undefined;
+  const bounded = boundedRequest !== undefined;
+  const claimByAlias = new Map(input.request.claims.map(claim => [claim.alias, claim]));
   const adjudicationByClaim = new Map(input.adjudication.claims.map((claim) => [claim.claimId, claim]));
   const claimSourceCount = new Set(
     input.buildRecord.synthesis.claims.flatMap((claim) => claim.supportingSourceNoteIds)
@@ -1156,7 +1259,7 @@ export const recordWriterResponse = (input: {
       openChallengeChecks
     };
   };
-  const modelStatements = proposal.value.map(makeStatement);
+  const modelStatements = proposal.map(makeStatement);
   const fixedBluf = bounded
     ? makeStatement({
         section: "bluf",
@@ -1315,59 +1418,7 @@ export const recordWriterResponse = (input: {
     id: `memo-${sha256Text(canonicalJson(memoBody)).slice(0, 32)}`,
     ...memoBody
   };
-  const renderedWordCount = renderMemoMarkdown(memo)
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean).length;
-  if (renderedWordCount > input.standard.limits.maxWords) {
-    return err("MEMO_TOO_LONG");
-  }
-  const checks = [
-    "required-sections-present",
-    "bluf-derived-from-evidence-counts",
-    "all-statements-resolve-to-claims",
-    "all-contested-claims-retain-open-challenges",
-    "key-judgment-confidence-bounded",
-    "all-alternatives-preserved",
-    "all-gaps-preserved",
-    "sourcing-summary-derived",
-    "plain-provisional-and-synthetic-limitations",
-    "information-cutoff-present",
-    "word-limit-and-prohibited-patterns"
-  ].map((check) => ({ check, status: "pass" as const }));
-  const verification: MemoVerification = {
-    schemaVersion: MEMO_VERIFICATION_SCHEMA_VERSION,
-    memoId: memo.id,
-    verifiedAt: recordedAt,
-    contentVerdict: "pass",
-    publicationVerdict: "block",
-    checks,
-    blockers
-  };
-  const body = {
-    recordedAt,
-    runId: input.request.runId,
-    reviewStatus: input.buildRecord.reviewStatus,
-    limitedEvidence: input.buildRecord.limitedEvidence,
-    request: requestArtifact,
-    response: responseArtifact,
-    ...(revalidationAuthorisation ? { revalidationAuthorisation } : {}),
-    invocation: {
-      id: invocationId,
-      ...identity,
-      startedAt,
-      completedAt,
-      freshSession: true as const,
-      capturedBy
-    },
-    memo,
-    verification
-  };
-  return ok({
-    schemaVersion: WRITER_RECORD_SCHEMA_VERSION,
-    id: `memo-writer-record-${sha256Text(canonicalJson(body)).slice(0, 32)}`,
-    ...body
-  });
+  return memo;
 };
 
 const renderStatements = (statements: MemoStatement[]): string[] =>
