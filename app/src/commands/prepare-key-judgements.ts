@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { reserveManualMemo } from "./memo-execution-io.js";
 import {
   keyJudgementPolicyFromStandard,
-  validateMemoStandardV1
+  validateMemoStandard
 } from "../modules/memo/standard-v1.js";
 import { validateChallengeRecord } from "../modules/synthesis/challenge.js";
 import {
@@ -24,7 +24,7 @@ import {
 } from "./assurance-io.js";
 
 const usage =
-  "Usage: npm run prepare:key-judgements -- <build-record.json> <challenge-record.json> <performed-adjudication.json> <memo-standard-v1.json>";
+  "Usage: npm run prepare:key-judgements -- <build-record.json> <challenge-record.json> <performed-adjudication.json> <memo-standard.json>";
 
 const describe = (value: unknown): string =>
   typeof value === "string" ? value : JSON.stringify(value);
@@ -84,7 +84,7 @@ const main = async (): Promise<void> => {
       "Adjudication Challenge record"
     );
     const standardArtifact = await loadJsonArtifact(resolve(standardPath));
-    const standard = validateMemoStandardV1(standardArtifact.value);
+    const standard = validateMemoStandard(standardArtifact.value);
     if (!standard.ok) {
       throw new Error(`Memo standard rejected: ${standard.error}`);
     }

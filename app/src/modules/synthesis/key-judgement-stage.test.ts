@@ -5,11 +5,14 @@ import test from "node:test";
 import type { ArtifactBinding } from "../assurance/types.js";
 import {
   keyJudgementPolicyFromStandard,
+  DEFAULT_MEMO_STANDARD_PATH,
+  validateMemoStandard,
   validateMemoStandardV1,
   type MemoStandardV1
 } from "../memo/standard-v1.js";
 import {
   createBoundedWriterRequest,
+  validateBoundedWriterRequest,
   recordWriterResponse,
   renderMemoMarkdown
 } from "../memo/writer.js";
@@ -360,6 +363,23 @@ test("memo standard v1 owns the provisional key-judgement policy", async () => {
   assert.deepEqual(keyJudgementPolicyFromStandard(standard.value), policy);
 });
 
+test("memo standard v2 removes only the word ceiling and rejects invented limits", async () => {
+  const value = JSON.parse(await readFile(resolve(DEFAULT_MEMO_STANDARD_PATH), "utf8"));
+  const standard = validateMemoStandard(value);
+  assert.ok(standard.ok);
+  assert.equal(standard.value.version, 2);
+  assert.equal("maxWords" in standard.value.limits, false);
+  assert.deepEqual(keyJudgementPolicyFromStandard(standard.value), policy);
+  assert.equal(validateMemoStandardV1(value).ok, false);
+  for (const maxWords of [350, 1_000_000, null]) {
+    assert.equal(validateMemoStandard({ ...value, limits: { ...value.limits, maxWords } }).ok, false);
+  }
+  assert.equal(validateMemoStandard({ ...value, version: 1 }).ok, false);
+  const old = JSON.parse(await readFile(resolve("src/modules/memo/standards/memo-standard-v1.json"), "utf8"));
+  delete old.limits.maxWords;
+  assert.equal(validateMemoStandard(old).ok, false);
+});
+
 test("writer v2 consumes bounded selected judgements without model rewriting", async () => {
   const standardValue: unknown = JSON.parse(
     await readFile(
@@ -497,6 +517,75 @@ test("writer v2 consumes bounded selected judgements without model rewriting", a
   if (sdkRecorded.ok) assert.equal(sdkRecorded.value.invocation.model, "test-model-1");
   assert.equal(recorded.ok, true);
   if (!recorded.ok) return;
+  const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+  const budget = writerRequest.value.wordBudget;
+  assert.ok(budget);
+  assert.equal(budget.fixedWords, countWords(renderMemoMarkdown(recorded.value.memo)));
+  assert.equal(budget.fixedWords + budget.reservedStatementWords + budget.maxProseWords, standard.limits.maxWords);
+  assert.match(writerRequest.value.prompt.system, new RegExp(`at most ${budget.maxProseWords} whitespace-separated words`));
+  const sections = [
+    ...Array<string>(standard.limits.maxAnalysisStatements).fill("analysis"),
+    ...Array<string>(standard.limits.maxUncertaintyStatements).fill("uncertainties"),
+    ...Array<string>(standard.limits.maxIndicatorStatements).fill("indicators")
+  ];
+  assert.ok(budget.maxProseWords >= sections.length);
+  const statements = sections.map((section, index) => ({
+    section, text: Array<string>(index === 0 ? budget.maxProseWords - sections.length + 1 : 1).fill("word").join(" "),
+    claims: writerRequest.value.claims.map(claim => claim.alias)
+  }));
+  const atLimit = recordWriterResponse({ ...recordInput,
+    responseValue: { ...response, proposal: { statements } } });
+  assert.ok(atLimit.ok);
+  assert.equal(countWords(renderMemoMarkdown(atLimit.value.memo)), standard.limits.maxWords);
+  const tooLongStatements = structuredClone(statements);
+  tooLongStatements[0]!.text += " word";
+  assert.deepEqual(recordWriterResponse({ ...recordInput,
+    responseValue: { ...response, proposal: { statements: tooLongStatements } } }),
+    { ok: false, error: "MEMO_TOO_LONG" });
+  const writerInputs = {
+    buildRecord, buildRecordArtifact: buildArtifact, challengeRecord, challengeRecordArtifact: challengeArtifact,
+    adjudication, adjudicationArtifact, keyJudgementRecord: keyRecord.value,
+    keyJudgementRecordArtifact: binding(keyRecord.value.id), question, questionArtifact: binding("question"),
+    standard, standardArtifact, preparedAt: writerRequest.value.preparedAt
+  };
+  const historical = createBoundedWriterRequest({ ...writerInputs, wordBudget: false });
+  assert.ok(historical.ok);
+  assert.equal(historical.value.wordBudget, undefined);
+  assert.doesNotMatch(historical.value.prompt.system, /Fixed sections already use/);
+  const historicalRecord = recordWriterResponse({ ...recordInput, request: historical.value,
+    responseValue: { ...response, requestId: historical.value.id } });
+  assert.ok(historicalRecord.ok);
+  assert.deepEqual(historicalRecord.value.memo, recorded.value.memo);
+  assert.deepEqual(createBoundedWriterRequest({ ...writerInputs,
+    standard: { ...standard, limits: { ...standard.limits, maxWords: budget.fixedWords - 1 } } }),
+    { ok: false, error: "MEMO_FIXED_CONTENT_TOO_LONG" });
+  const fixedOnly = createBoundedWriterRequest({ ...writerInputs,
+    standard: { ...standard, limits: { ...standard.limits, maxWords: budget.fixedWords } } });
+  assert.ok(fixedOnly.ok);
+  assert.equal(fixedOnly.value.wordBudget?.maxProseWords, 0);
+  const uncappedStandard = validateMemoStandard(JSON.parse(await readFile(resolve(DEFAULT_MEMO_STANDARD_PATH), "utf8")));
+  assert.ok(uncappedStandard.ok);
+  const uncappedArtifact = binding("memo-standard-v2");
+  const uncappedKeyRecord = { ...keyRecord.value, memoStandard: uncappedArtifact };
+  const uncappedRequest = createBoundedWriterRequest({ ...writerInputs,
+    standard: uncappedStandard.value, standardArtifact: uncappedArtifact, keyJudgementRecord: uncappedKeyRecord });
+  assert.ok(uncappedRequest.ok);
+  assert.equal(uncappedRequest.value.wordBudget, undefined);
+  assert.match(uncappedRequest.value.prompt.system, /no word-count target or hard word limit/);
+  assert.doesNotMatch(uncappedRequest.value.prompt.system, /very short|whitespace-separated words/);
+  const longMemo = recordWriterResponse({ ...recordInput,
+    request: uncappedRequest.value, standard: uncappedStandard.value, keyJudgementRecord: uncappedKeyRecord,
+    responseValue: { ...response, requestId: uncappedRequest.value.id, proposal: { statements: [
+      { section: "analysis", text: Array<string>(450).fill("x").join(" "), claims: ["c01"] },
+      { section: "analysis", text: Array<string>(450).fill("x").join(" "), claims: ["c02"] }
+    ] } } });
+  assert.ok(longMemo.ok);
+  assert.ok(countWords(renderMemoMarkdown(longMemo.value.memo)) > 1_000);
+  assert.equal(longMemo.value.memo.memoStandardVersion, 2);
+  assert.ok(longMemo.value.verification.checks.some(check => check.check === "prohibited-patterns"));
+  assert.equal(longMemo.value.verification.checks.some(check => check.check === "word-limit-and-prohibited-patterns"), false);
+  assert.ok(validateBoundedWriterRequest(uncappedRequest.value).ok);
+  assert.equal(validateBoundedWriterRequest({ ...uncappedRequest.value, wordBudget: budget }).ok, false);
   assert.deepEqual(
     recorded.value.memo.keyJudgments.map((entry) => entry.statement.text),
     [

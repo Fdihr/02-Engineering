@@ -474,7 +474,7 @@ def _handle_assurance_review(runs_root: Path, payload: dict[str, Any]) -> tuple[
     return (200 if succeeded else 400), {"ok": succeeded, "runId": run_id, "steps": steps, "error": "" if succeeded else steps[-1]["stderr"]}
 
 
-MEMO_STANDARD_V1 = "src/modules/memo/standards/memo-standard-v1.json"
+MEMO_STANDARD = "src/modules/memo/standards/memo-standard-v2.json"
 ASSURANCE_POLICY = "src/modules/assurance/policies/geopolitical-source-assurance-v4.json"
 SYNTHESIS_POLICY = "src/modules/synthesis/policies/geopolitical-synthesis-v1.json"
 OUTLET_TABLE = "src/modules/synthesis/policies/geopolitical-outlets-v1.json"
@@ -567,7 +567,8 @@ def _chain_after_stage(runs_root: Path, run_id: str, stage: str, recorded: dict[
         return [_run_npm_script("prepare:memo-writer", [
             record["buildRecord"]["artifactRef"], record["challengeRecord"]["artifactRef"],
             record["adjudication"]["artifactRef"], output,
-            f"runs/{run_id}/research-questions/{questions[0].parent.name}/approved-research-question.json", MEMO_STANDARD_V1,
+            f"runs/{run_id}/research-questions/{questions[0].parent.name}/approved-research-question.json",
+            record["memoStandard"]["artifactRef"],
         ], runs_root=runs_root)]
     return []
 
@@ -943,7 +944,7 @@ def _handle_prepare_stage(runs_root: Path, payload: dict[str, Any]) -> tuple[int
             return 400, {"ok": False, "error": "An adjudicated challenge record in this run is required."}
         record = json.loads(Path(_fs_path(run_dir / rel_path)).read_text(encoding="utf-8"))
         build_ref = str(record.get("buildRecord", {}).get("artifactRef", ""))
-        steps = [_run_npm_script("prepare:key-judgements", [build_ref, f"runs/{run_id}/{rel_path}", f"runs/{run_id}/{adjudication_rel}", MEMO_STANDARD_V1], runs_root=runs_root)]
+        steps = [_run_npm_script("prepare:key-judgements", [build_ref, f"runs/{run_id}/{rel_path}", f"runs/{run_id}/{adjudication_rel}", MEMO_STANDARD], runs_root=runs_root)]
     else:
         rel_path = str(payload.get("keyJudgementRecordPath") or "")
         if not (run_dir and KJ_RECORD_REL.match(rel_path) and Path(_fs_path(run_dir / rel_path)).is_file()):
@@ -1035,7 +1036,7 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
         "ok": True, "command": "adjudication:record", "exitCode": 0, "stderr": "",
         "stdout": f"Accepted: {counts['accepted']}\nContested: {counts['contested']}\nRejected: {counts['rejected']}\nReviewer: {reviewer_id}\nOutput: {adjudication_ref}",
     }]
-    steps.append(_run_npm_script("prepare:key-judgements", [build_ref, f"runs/{run_id}/{rel_path}", adjudication_ref, MEMO_STANDARD_V1], runs_root=runs_root))
+    steps.append(_run_npm_script("prepare:key-judgements", [build_ref, f"runs/{run_id}/{rel_path}", adjudication_ref, MEMO_STANDARD], runs_root=runs_root))
     succeeded = all(step["ok"] for step in steps)
     return (200 if succeeded else 400), {"ok": succeeded, "runId": run_id, "steps": steps, "error": "" if succeeded else steps[-1]["stderr"]}
 

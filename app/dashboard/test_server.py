@@ -658,6 +658,7 @@ C.panes.settings();
             status, result = _handle_analyst_action(runs_root, run_dir, base)
             self.assertEqual(status, 200, result)
             self.assertEqual(runner.call_args.args[0], "prepare:key-judgements")
+            self.assertEqual(runner.call_args.args[1][-1], "src/modules/memo/standards/memo-standard-v2.json")
             self.assertEqual(runner.call_args.kwargs["runs_root"], runs_root)
             self.assertEqual(_handle_analyst_action(runs_root, run_dir, base)[0], 409)
         out = run_dir / "synthesis" / "adjudication" / "synthesis-challenge-record-abc"
@@ -667,6 +668,30 @@ C.panes.settings();
         self.assertEqual(adjudication["adjudicationStatus"], "performed")
         decision = json.loads((out / "adjudication-decision.json").read_text(encoding="utf-8"))
         self.assertEqual(decision["reviewerId"], "FDIHR")
+
+    def test_writer_chain_preserves_the_recorded_selection_standard(self):
+        from dashboard.server import _chain_after_stage
+
+        root = self.run_dir / "chain-root"
+        run = root / "run-chain"
+        question = run / "research-questions" / "rq-1" / "approved-research-question.json"
+        question.parent.mkdir(parents=True)
+        question.write_text("{}", encoding="utf-8")
+        record = run / "synthesis" / "key-judgements" / "key-judgement-record.json"
+        record.parent.mkdir(parents=True)
+        recorded = {"ok": True, "stdout": f"Output: {record}", "stderr": ""}
+        for version in (1, 2):
+            standard = f"src/modules/memo/standards/memo-standard-v{version}.json"
+            record.write_text(json.dumps({
+                "buildRecord": {"artifactRef": "build.json"},
+                "challengeRecord": {"artifactRef": "challenge.json"},
+                "adjudication": {"artifactRef": "adjudication.json"},
+                "memoStandard": {"artifactRef": standard},
+            }), encoding="utf-8")
+            with patch("dashboard.server._run_npm_script", return_value={"ok": True}) as command:
+                _chain_after_stage(root, run.name, "key-judgements", recorded)
+                self.assertEqual(command.call_args.args[0], "prepare:memo-writer")
+                self.assertEqual(command.call_args.args[1][-1], standard)
 
     def test_isolated_adjudication_preserves_local_bindings_and_selection_root(self):
         from dashboard.server import APP_DIR

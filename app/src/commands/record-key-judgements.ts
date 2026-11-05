@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { reserveManualMemo } from "./memo-execution-io.js";
 import {
   keyJudgementPolicyFromStandard,
-  validateMemoStandardV1
+  validateMemoStandard
 } from "../modules/memo/standard-v1.js";
 import { canonicalJson } from "../modules/assurance/validators.js";
 import { validateChallengeRecord } from "../modules/synthesis/challenge.js";
@@ -98,7 +98,7 @@ const main = async (): Promise<void> => {
       request.value.memoStandard.artifactSha256,
       "Memo standard"
     );
-    const standard = validateMemoStandardV1(standardArtifact.value);
+    const standard = validateMemoStandard(standardArtifact.value);
     if (!standard.ok) {
       throw new Error(`Memo standard rejected: ${standard.error}`);
     }

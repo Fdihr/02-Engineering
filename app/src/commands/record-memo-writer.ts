@@ -25,8 +25,8 @@ import {
   type MemoStandardV0
 } from "../modules/memo/writer.js";
 import {
-  validateMemoStandardV1,
-  type MemoStandardV1
+  validateMemoStandard,
+  type MemoStandard
 } from "../modules/memo/standard-v1.js";
 import type { ProvisionalAdjudication } from "../modules/synthesis/challenge.js";
 import { canonicalJson } from "../modules/assurance/validators.js";
@@ -159,9 +159,9 @@ const main = async (): Promise<void> => {
       request.memoStandard.artifactSha256,
       "Memo standard"
     );
-    let standard: MemoStandardV0 | MemoStandardV1;
+    let standard: MemoStandardV0 | MemoStandard;
     if (isBounded) {
-      const validated = validateMemoStandardV1(standardArtifact.value);
+      const validated = validateMemoStandard(standardArtifact.value);
       if (!validated.ok) {
         throw new Error(`Memo standard rejected: ${validated.error}`);
       }
@@ -185,9 +185,10 @@ const main = async (): Promise<void> => {
           keyJudgementRecordArtifact: keyJudgementArtifact!.binding,
           question: question.value,
           questionArtifact: questionArtifact.binding,
-          standard: standard as MemoStandardV1,
+          standard: standard as MemoStandard,
           standardArtifact: standardArtifact.binding,
-          preparedAt: request.preparedAt
+          preparedAt: request.preparedAt,
+          wordBudget: boundedRequest.value.wordBudget !== undefined
         })
       : createWriterRequest({
           buildRecord: build.value,

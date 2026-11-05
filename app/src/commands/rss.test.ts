@@ -15,6 +15,10 @@ import { admitRss, prepareRssBatch } from "./rss-batch.js";
 import { readRssBatchPolicy } from "../workflow/admit-rss-evidence.js";
 import { loadRssCapture } from "./rss-io.js";
 import { isPublicRssAddress, readRssBytes, rssRedirect } from "./rss-http.js";
+import { validateExceptionItem } from "../modules/exceptions/exception-item.js";
+import { memoRelevanceExceptionScope } from "./memo-exception-scope.js";
+import { createSourceDocument } from "../modules/source/source-document.js";
+import { checkMemoExceptions } from "./bounded-memo.js";
 
 test("RSS HTTP guards reject reserved addresses, unsafe redirects, oversized and truncated bodies", async () => {
   for (const ip of ["127.0.0.1", "10.1.2.3", "172.16.0.1", "192.168.1.1", "169.254.169.254", "100.64.0.1", "192.0.2.1", "224.1.1.1", "::1", "::ffff:127.0.0.1", "fe80::1", "fc00::1", "2001:db8::1", "2002:7f00:1::"]) {
@@ -275,7 +279,46 @@ for (const verdict of ["partially-relevant", "uncertain", "not-relevant"] as con
         await assert.rejects(readFile(resolve(f.run, "rss-admissions", id, "approved-evidence-snapshot.json")), /ENOENT/);
       }
       if (verdict !== "not-relevant") {
-        assert.equal((await readdir(resolve(f.run, "exceptions"))).length, 1, "Do not duplicate the recorder's relevance exception");
+        const exceptions = await readdir(resolve(f.run, "exceptions"));
+        assert.equal(exceptions.length, 1, "Do not duplicate the recorder's relevance exception");
+        const exceptionPath = resolve(f.run, "exceptions", exceptions[0]!, "exception-item.json");
+        const before = await readFile(exceptionPath, "utf8");
+        const exception = validateExceptionItem(JSON.parse(before));
+        assert.ok(exception.ok);
+        const document = JSON.parse(await readFile(documentPath, "utf8"));
+        const otherDocument = createSourceDocument({
+          runId: document.runId, sourceItemId: "another-memo-source", sourceKind: document.sourceKind,
+          contentFormat: document.normalization.inputFormat, body: document.normalizedText,
+          sourceArtifactRef: document.sourceArtifactRef, sourceArtifactSha256: document.sourceArtifactSha256,
+          lineageArtifactRefs: document.lineageArtifactRefs
+        });
+        assert.ok(otherDocument.ok);
+        const otherPath = resolve(f.run, "other-memo-source.json");
+        await writeFile(otherPath, JSON.stringify(otherDocument.value));
+        const otherBinding = (await loadJsonArtifact(otherPath)).binding;
+        const scope = (documents: Parameters<typeof memoRelevanceExceptionScope>[2] = [otherBinding],
+          participants = new Set<string>()) =>
+          memoRelevanceExceptionScope(f.runRoot, exception.value, documents, [], participants);
+        // Recorder-only uncertain verdicts have no complete batch receipt in their exception refs.
+        assert.equal(await scope(), verdict === "partially-relevant" ? "unrelated" : null);
+        const notePath = resolve(f.run, "memo-source-note.json");
+        await writeFile(notePath, JSON.stringify({ lineage: { sourceDocument: otherBinding } }));
+        const authority = {
+          runId: "rss-test", build: otherBinding, challenge: otherBinding, adjudication: otherBinding,
+          question: otherBinding, standard: otherBinding, lineage: [(await loadJsonArtifact(notePath)).binding]
+        };
+        if (verdict === "partially-relevant") await checkMemoExceptions(f.runRoot, authority);
+        else await assert.rejects(checkMemoExceptions(f.runRoot, authority), /affects memo inputs/);
+        assert.equal(await scope([(await loadJsonArtifact(documentPath)).binding]), null);
+        assert.equal(await scope([otherBinding], new Set([resolve(assessmentPath)])), null);
+        assert.equal(await scope([]), null);
+        assert.equal(await memoRelevanceExceptionScope(f.runRoot,
+          { ...exception.value, refs: [...exception.value.refs, (await loadJsonArtifact(f.questionPath)).binding] },
+          [otherBinding], [], new Set()), null);
+        await assert.rejects(memoRelevanceExceptionScope(f.runRoot, {
+          ...exception.value, refs: [{ ...exception.value.refs[0]!, artifactSha256: "f".repeat(64) }]
+        }, [otherBinding], [], new Set()), /checksum/i);
+        assert.equal(await readFile(exceptionPath, "utf8"), before, "Scoping never rewrites an exception.");
       }
     } finally { await rm(root, { recursive: true, force: true }); }
   });

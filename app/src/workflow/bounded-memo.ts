@@ -10,7 +10,13 @@ export type MemoAuthorization = {
   runId: string;
   approvedBy: string;
   approvedAt: string;
-  decision: "bounded-selection-writing-authorized";
+  decision: "bounded-selection-writing-authorized" | "bounded-length-repair-authorized";
+  lengthRepair?: {
+    authorization: ArtifactBinding;
+    request: ArtifactBinding;
+    response: ArtifactBinding;
+    failure: ArtifactBinding;
+  };
   build: ArtifactBinding;
   challenge: ArtifactBinding;
   adjudication: ArtifactBinding;
@@ -29,10 +35,11 @@ export type MemoAuthorization = {
 
 export const validateMemoAuthorization = (value: unknown): Result<MemoAuthorization, "INVALID_MEMO_AUTHORIZATION"> => {
   if (!isRecord(value) || !hasOnlyKeys(value, ["schemaVersion", "id", "runId", "approvedBy", "approvedAt",
-    "decision", "build", "challenge", "adjudication", "question", "standard", "lineage", "stages", "maxCalls"]) ||
+    "decision", ...(value.lengthRepair !== undefined ? ["lengthRepair"] : []),
+    "build", "challenge", "adjudication", "question", "standard", "lineage", "stages", "maxCalls"]) ||
       value.schemaVersion !== "bounded-memo-authorization-v1" || !pathSafeId(value.id) ||
       !pathSafeId(value.runId) || !pathSafeId(value.approvedBy) || !validTime(value.approvedAt) ||
-      value.decision !== "bounded-selection-writing-authorized" ||
+      !["bounded-selection-writing-authorized", "bounded-length-repair-authorized"].includes(String(value.decision)) ||
       !["build", "challenge", "adjudication", "question", "standard"].every(key => readArtifactBinding(value[key])) ||
       !Array.isArray(value.lineage) || !value.lineage.length || !value.lineage.every(readArtifactBinding) ||
       !isRecord(value.stages) || !hasOnlyKeys(value.stages, [...MEMO_STAGES])) return err("INVALID_MEMO_AUTHORIZATION");
@@ -49,6 +56,13 @@ export const validateMemoAuthorization = (value: unknown): Result<MemoAuthorizat
     calls += Number(entry.record === null);
   }
   const stages = value.stages as MemoAuthorization["stages"];
+  if (value.decision === "bounded-length-repair-authorized") {
+    if (!isRecord(value.lengthRepair) || !hasOnlyKeys(value.lengthRepair, ["authorization", "request", "response", "failure"]) ||
+        ![value.lengthRepair.authorization, value.lengthRepair.request, value.lengthRepair.response, value.lengthRepair.failure]
+          .every(readArtifactBinding) ||
+        stages["key-judgements"].record === null || stages.writer.record !== null ||
+        stages.writer.request === null || value.maxCalls !== 1) return err("INVALID_MEMO_AUTHORIZATION");
+  } else if (value.lengthRepair !== undefined) return err("INVALID_MEMO_AUTHORIZATION");
   if (value.maxCalls !== calls || (stages.writer.record !== null &&
       stages["key-judgements"].record === null)) return err("INVALID_MEMO_AUTHORIZATION");
   return ok(value as MemoAuthorization);

@@ -9,6 +9,8 @@ import {
 import type { KeyJudgementPolicy } from "../synthesis/key-judgements.js";
 
 export const MEMO_STANDARD_V1_SCHEMA_VERSION = "memo-standard-pack-v1" as const;
+export const MEMO_STANDARD_V2_SCHEMA_VERSION = "memo-standard-pack-v2" as const;
+export const DEFAULT_MEMO_STANDARD_PATH = "src/modules/memo/standards/memo-standard-v2.json";
 
 export type MemoStandardV1 = {
   schemaVersion: typeof MEMO_STANDARD_V1_SCHEMA_VERSION;
@@ -34,9 +36,16 @@ export type MemoStandardV1 = {
 };
 
 export type MemoStandardV1Error = "INVALID_MEMO_STANDARD_V1";
+export type MemoStandardV2 = Omit<MemoStandardV1, "schemaVersion" | "id" | "version" | "limits"> & {
+  schemaVersion: typeof MEMO_STANDARD_V2_SCHEMA_VERSION;
+  id: "memo-standard-v2";
+  version: 2;
+  limits: Omit<MemoStandardV1["limits"], "maxWords">;
+};
+export type MemoStandard = MemoStandardV1 | MemoStandardV2;
 
 export const keyJudgementPolicyFromStandard = (
-  standard: MemoStandardV1
+  standard: MemoStandard
 ): KeyJudgementPolicy => ({
   policyId: standard.keyJudgementPolicy.policyId,
   maxKeyJudgements: standard.keyJudgementPolicy.maxKeyJudgements,
@@ -44,9 +53,9 @@ export const keyJudgementPolicyFromStandard = (
   judgementTextMaxChars: standard.keyJudgementPolicy.judgementTextMaxChars
 });
 
-export const validateMemoStandardV1 = (
+export const validateMemoStandard = (
   value: unknown
-): Result<MemoStandardV1, MemoStandardV1Error> => {
+): Result<MemoStandard, "INVALID_MEMO_STANDARD"> => {
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, [
@@ -63,9 +72,8 @@ export const validateMemoStandardV1 = (
       "limits",
       "keyJudgementPolicy"
     ]) ||
-    value.schemaVersion !== MEMO_STANDARD_V1_SCHEMA_VERSION ||
-    value.id !== "memo-standard-v1" ||
-    value.version !== 1 ||
+    !((value.schemaVersion === MEMO_STANDARD_V1_SCHEMA_VERSION && value.id === "memo-standard-v1" && value.version === 1) ||
+      (value.schemaVersion === MEMO_STANDARD_V2_SCHEMA_VERSION && value.id === "memo-standard-v2" && value.version === 2)) ||
     value.status !== "provisional-standard" ||
     !validTime(value.authoredAt) ||
     !Array.isArray(value.sourceMemoRefs) ||
@@ -85,13 +93,13 @@ export const validateMemoStandardV1 = (
     ) ||
     !isRecord(value.limits) ||
     !hasOnlyKeys(value.limits, [
-      "maxWords",
+      ...(value.version === 1 ? ["maxWords"] : []),
       "blufStatements",
       "maxAnalysisStatements",
       "maxUncertaintyStatements",
       "maxIndicatorStatements"
     ]) ||
-    !positiveInteger(value.limits.maxWords) ||
+    (value.version === 1 && !positiveInteger(value.limits.maxWords)) ||
     value.limits.blufStatements !== 1 ||
     !positiveInteger(value.limits.maxAnalysisStatements) ||
     !positiveInteger(value.limits.maxUncertaintyStatements) ||
@@ -110,7 +118,14 @@ export const validateMemoStandardV1 = (
     typeof value.keyJudgementPolicy.allowContested !== "boolean" ||
     !positiveInteger(value.keyJudgementPolicy.judgementTextMaxChars)
   ) {
-    return err("INVALID_MEMO_STANDARD_V1");
+    return err("INVALID_MEMO_STANDARD");
   }
-  return ok(value as MemoStandardV1);
+  return ok(value as MemoStandard);
+};
+
+export const validateMemoStandardV1 = (
+  value: unknown
+): Result<MemoStandardV1, MemoStandardV1Error> => {
+  const result = validateMemoStandard(value);
+  return result.ok && result.value.version === 1 ? ok(result.value) : err("INVALID_MEMO_STANDARD_V1");
 };

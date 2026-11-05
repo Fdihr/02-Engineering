@@ -9,7 +9,7 @@ import {
 } from "../modules/synthesis/key-judgement-stage.js";
 import { validateSynthesisBuildRecord } from "../modules/synthesis/response.js";
 import { createBoundedWriterRequest } from "../modules/memo/writer.js";
-import { validateMemoStandardV1 } from "../modules/memo/standard-v1.js";
+import { validateMemoStandard } from "../modules/memo/standard-v1.js";
 import {
   assuranceRunRoot,
   commandError,
@@ -23,7 +23,7 @@ import {
 } from "./assurance-io.js";
 
 const usage =
-  "Usage: npm run prepare:memo-writer -- <build-record.json> <challenge-record.json> <performed-adjudication.json> <key-judgement-record.json> <approved-question.json> <memo-standard-v1.json>";
+  "Usage: npm run prepare:memo-writer -- <build-record.json> <challenge-record.json> <performed-adjudication.json> <key-judgement-record.json> <approved-question.json> <memo-standard.json>";
 
 const describe = (value: unknown): string =>
   typeof value === "string" ? value : JSON.stringify(value);
@@ -108,7 +108,7 @@ const main = async (): Promise<void> => {
       );
     }
     const standardArtifact = await loadJsonArtifact(resolve(standardPath));
-    const standard = validateMemoStandardV1(standardArtifact.value);
+    const standard = validateMemoStandard(standardArtifact.value);
     if (!standard.ok) throw new Error(`Memo standard rejected: ${standard.error}`);
     const request = createBoundedWriterRequest({
       buildRecord: build.value,

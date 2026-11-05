@@ -106,6 +106,18 @@ model/paste-back controls cannot add authority. Complete output stops at
 gate. Publication is not authorized by this action. See
 [`bounded-memo-execution.md`](../../02-Contracts/bounded-memo-execution.md).
 
+New starts use `memo-standard-v2`: no hard word limit, with brevity as guidance
+and room for a two-page memo when needed. Historical draft/authority standards
+are preserved, and manual writer preparation uses the selection's bound standard.
+Changing the default never reruns a model or rewrites a draft.
+
+A historical word-limited `MEMO_TOO_LONG` failure can receive exactly one
+separately approved, writer-only repair through
+`npm run run:memo -- repair <run-id> <analyst-id>` from `app/`. It preserves the
+original failure and selection, uses the same frozen writer model, and does not
+relax the word limit. Existing status/resume and memo review follow the separate
+repair authority; repair is never triggered by refresh or ordinary resume.
+
 **Evidence → Collect a bounded batch** selects one of the two observed feeds,
 records a real permission-review reference, and explicitly approves a one-shot
 RSS batch policy under the operator's analyst ID. Choose 1-5 sources/relevance

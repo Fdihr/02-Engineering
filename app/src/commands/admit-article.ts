@@ -13,9 +13,9 @@ import { articleRunRoot } from "./collect-article.js";
 import { persistExceptionItem } from "./exception-io.js";
 import { loadRssRunArtifact } from "./rss-io.js";
 
-export const admitArticle = async (
+export const loadArticleAdmissionInputs = async (
   root: string, capturePath: string, assessmentPath: string, reassessmentPath?: string
-): Promise<{ outcome: string; snapshotRef?: string }> => {
+) => {
   const verified = await loadArticleAssessment(root, capturePath, assessmentPath);
   const { capture, artifact, assessment, decision, assessed } = verified;
   const reassessment = reassessmentPath ? await loadArticleReassessment(root, reassessmentPath) : undefined;
@@ -53,6 +53,14 @@ export const admitArticle = async (
     }
     if (!found) throw new Error("Recorded article relevance exception is missing.");
   }
+  return { ...verified, reassessment };
+};
+
+export const admitArticle = async (
+  root: string, capturePath: string, assessmentPath: string, reassessmentPath?: string
+): Promise<{ outcome: string; snapshotRef?: string }> => {
+  const { capture, artifact, assessment, decision, assessed, reassessment } =
+    await loadArticleAdmissionInputs(root, capturePath, assessmentPath, reassessmentPath);
   const decisionId = reassessment?.authorization.id ?? capture.id;
   const directory = reassessment
     ? resolve(root, capture.runId, "article-admissions", capture.id, "reassessments", decisionId)
