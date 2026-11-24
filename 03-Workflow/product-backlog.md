@@ -1,6 +1,6 @@
 # its Product Backlog
 
-Status: Working plan. Last updated: 2026-11-05.
+Status: Working plan. Last updated: 2026-11-11.
 Target architecture: [memo-workflow.md](memo-workflow.md). Implemented baseline: [first-slice.md](first-slice.md).
 Constraints: [kiss-reset-plan.md](kiss-reset-plan.md), [non-goals-from-poc.md](non-goals-from-poc.md).
 
@@ -27,9 +27,13 @@ Status key: **Done** · **Partial** · **Next** · **Later**
 | M4 Organizational relevance | Optional Vestas profile adds governed relevance without contaminating evidence | E10 |
 | M5 Production hardening | Retention, access control, recovery and bounded concurrency | E11 |
 
-M1 is the nearest finished-product checkpoint. Today, the live memo `analysis-2026-11`
-is blocked by `OPEN_KEY_JUDGEMENT_CONTEST`, `PROVISIONAL_MEMO_STANDARD` and
-`PUBLICATION_GATE_BLOCKED`, and publication delivery is not implemented.
+M1 is the nearest finished-product checkpoint. In `analysis-2026-11`, Round 2's
+bounded memo (`memo-e3610113686290a28b94af7e984a5c33`) now runs under approved
+`memo-standard-v3`, passes all 11 content checks, and clears
+`PROVISIONAL_MEMO_STANDARD`; only `OPEN_KEY_JUDGEMENT_CONTEST` blocks approval
+(with three requirements still silent). Historical Round 1 remains unchanged on
+provisional v2. Eligible drafts can be human-approved and published as local
+immutable Markdown+JSON packages.
 
 ---
 
@@ -71,8 +75,9 @@ Only `GET /v1/wod` collection and discovery are implemented.
 ### F3.4 Pushed exception queue — Partial
 - *As an analyst, I want exceptions pushed to me with a recommended action, so that I never poll per source.*
 - [ ] One queue view for the four kinds: `uncertain-relevance`, `unresolved-reconciliation`, `key-judgement-contest`, `bounded-failure`.
-- [ ] Resolve each exception with a recorded decision that routes to its owning stage.
-- [ ] Clear the two open relevance exceptions in `analysis-2026-11` (M1).
+- [x] Record `exclude` / `accept-gap` decisions as write-once artifacts (CLI `decide:exception` and dashboard Exceptions panel); gates honor them.
+- [ ] Route `resume` / `reject` decisions to their owning stage.
+- [x] Clear the open relevance exceptions in `analysis-2026-11` (M1): RMF excluded as context; two older items accepted as gaps.
 
 ## E4 Source assurance — Partial
 
@@ -91,44 +96,45 @@ Replaces human source-support verdicts once publication calibration meets policy
 
 ### F5.1 Build — Done
 ### F5.2 Challenge — Done
-### F5.3 Adjudicate — Next (M1)
+### F5.3 Adjudicate — Done
 - *As an analyst, I want only contests that could change a key judgement escalated to me, so that I adjudicate what matters.*
-- [ ] Deterministic change check that decides whether a challenge can alter a key judgement.
-- [ ] Record adjudication outcomes and rebuild affected claims.
-- [ ] Adjudicate the two contested judgements in `analysis-2026-11` using admitted, in-window evidence only.
+- [x] Deterministic post-selection check marks challenges that directly target a selected claim; before a matching selection exists, all remain reviewable.
+- [x] Record adjudication outcomes and rebuild affected claims through the existing checksum-bound selection chain.
+- [x] Adjudicate the two contested judgements in `analysis-2026-11` using admitted, in-window evidence only. Both remain low-confidence and contested because the relevant challenges were upheld; the later exception decisions did not admit evidence.
 
 ## E6 Memo composition and standards — Partial
 
 ### F6.1 Key-judgement selection — Done
 ### F6.2 Memo writer and renderer — Done
 ### F6.3 Bounded editorial revision — Done
-### F6.4 Memo standard pack — Next (M1)
-`memo-standard-v2` (uncapped) is provisional, which blocks publication.
+### F6.4 Memo standard pack — Done
+New starts use approved `memo-standard-v3`; the historical `analysis-2026-11`
+draft remains bound to provisional v2 and is not rewritten.
 - *As a governance owner, I want a memo standard curated from approved historical memos, so that quality is consistent without leaking historical facts.*
-- [ ] Select and approve historical memos for curation.
-- [ ] Approve a non-provisional standard version with regression examples.
-- [ ] Merge the uncapped-standard change (currently uncommitted on this branch).
+- [x] Select 23 readable, hash-verified archive memos for style-only curation; exclude 9 files that are unavailable or legacy binary documents.
+- [x] Approve the domain-neutral standard with synthetic regression examples and an approved key-judgement cap of three.
+- [x] Keep v2 unchanged for existing memo bindings; route new starts to the approved standard.
 
 ## E7 Quality assurance and publication — Partial
 
 ### F7.1 Deterministic verification — Done
 ### F7.2 Version-bound memo review — Done
-### F7.3 Human publication gate — Next (M1)
+### F7.3 Human publication gate — Done
 - *As an analyst, I want to approve, reject or request a targeted revision, so that only reviewed memos are published.*
 - *As a reader, I want to drill from any statement to its claim, observation and source, so that I can trust it.*
-- [ ] Enable publication approval once blocking gates clear.
-- [ ] Present a policy-sized random sample of observation rows and record calibration verdicts.
-### F7.4 Publication delivery — Next (M1)
-- [ ] Decide output formats and audience (open decision 8).
-- [ ] Produce an immutable published artifact with lineage.
+- [x] Enable approval only when deterministic blockers clear and the full policy sample is present and supported.
+- [x] Record exact-draft human decisions and sampled evidence verdicts; keep calibration policy governance separate.
+### F7.4 Publication delivery — Done (local package)
+- [x] Use the approved run audience and a Markdown+JSON package; no external distribution.
+- [x] Produce a write-once package with approval binding, review target and memo lineage.
 ### F7.5 Independent semantic verification — Later
 
 ## E8 Model platform — Partial
 
 ### F8.1 Copilot model selector per workflow stage — Done
-### F8.2 Foundry adapter — Next (M2)
-Replaces the manual Copilot bridge.
-- *As an operator, I want to route any AI stage to an approved Foundry deployment, so that production runs do not depend on a local Copilot account.*
+### F8.2 Foundry adapter — Later (optional)
+The current product path uses GitHub Copilot; Foundry is not required for M2.
+- *As an operator, I may want to route AI stages to an approved Foundry deployment, so that deployments can use an organization-managed model endpoint.*
 - [ ] Approve endpoint type, deployment, authentication, API version, region and retention.
 - [ ] Implement the adapter behind the existing per-stage model setting.
 - [ ] Record Foundry invocation provenance identically to SDK provenance.
@@ -136,11 +142,16 @@ Replaces the manual Copilot bridge.
 ## E9 Orchestration and dashboard — Partial
 
 ### F9.1 Shared next-action projection — Done
-### F9.2 `run:next` driver — Next (M2)
+### F9.2 `run:next` driver — Partial (M2)
 Replaces manual command choreography.
 - *As an analyst, I want one action to advance the run to the next human gate, so that I don't run commands step by step.*
-- [ ] Drive every implemented step from its deterministic readiness state.
-- [ ] Stop at the four human surfaces and on bounded failure.
+- [x] Drive the allowlisted research-question, relevance, Extract, and manual/unbounded Build, Challenge, key-judgement and writer recorders for saved responses in sequence, rereading state after each.
+- [x] Resume bounded synthesis, memo and editorial-revision executions through the existing Copilot SDK only when their explicit immutable authorization is already present; consume only its frozen model and call budget.
+- [x] Stop at the four human surfaces and on bounded failure.
+`run:next` never creates or replenishes authorization. Manual/unbounded model
+requests still require explicit transport, and bounded failures remain terminal
+for that authorization. M2 uses the existing Copilot account; the optional
+Foundry adapter is not a prerequisite.
 
 ## E10 Organizational relevance — Later (M4)
 
@@ -156,10 +167,12 @@ Replaces manual command choreography.
 
 ---
 
-## Recommended next sprint (toward M1)
+## Remaining work toward M1
 
-1. Finish the RMF relevance assessment and admission decision already prepared in `analysis-2026-11`.
-2. Resolve the two open relevance exceptions (F3.4).
-3. Adjudicate the two contested key judgements (F5.3).
-4. Approve a non-provisional memo standard and merge the uncapped change (F6.4).
-5. Implement publication approval and delivery (F7.3, F7.4).
+Round 2 of `analysis-2026-11` (`memo-e3610113686290a28b94af7e984a5c33`) is bound
+to approved `memo-standard-v3` and blocked solely by `OPEN_KEY_JUDGEMENT_CONTEST`
+because `ir-04` selected contested single-source claim `c01` (while `ir-02`,
+`ir-03`, and `ir-05` remain explicit evidence gaps). Clearing that contest via
+in-window corroboration or an uncontested selection round unlocks the five-row
+human support sample, publication approval, and creation of the first local
+publication package.

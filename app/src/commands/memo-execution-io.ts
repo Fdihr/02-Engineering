@@ -14,6 +14,31 @@ import { loadJsonArtifact, loadRunArtifact, requireChecksum } from "./assurance-
 import { loadRssQuestion } from "./rss-io.js";
 import { loadChallengeRecordContext, verifySynthesisSourceAuthority } from "./synthesis-io.js";
 
+export const hasBoundedMemoAuthority = async (root: string, runId: string) => {
+  const directory = resolve(root, runId, "memo", "execution");
+  try {
+    await stat(resolve(directory, "authorization.json"));
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  try {
+    for (const entry of await readdir(resolve(directory, "rounds"), { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) return true;
+      if (!entry.isDirectory()) continue;
+      try {
+        await stat(resolve(directory, "rounds", entry.name, "authorization.json"));
+        return true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  return false;
+};
+
 export const reserveManualMemo = async (root: string, runId: string) => {
   const directory = resolve(root, runId, "memo", "execution");
   await mkdir(directory, { recursive: true });
@@ -33,11 +58,7 @@ export const reserveManualMemo = async (root: string, runId: string) => {
         } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
       }
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-    try { await stat(resolve(directory, "authorization.json")); }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return async () => { await unlink(lockPath); };
-      throw error;
-    }
+    if (!(await hasBoundedMemoAuthority(root, runId))) return async () => { await unlink(lockPath); };
     throw new Error("This run has bounded memo authority. Use run:memo status/resume; manual preparation or recording cannot replace its frozen work.");
   } catch (error) { await unlink(lockPath); throw error; }
 };

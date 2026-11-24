@@ -8,6 +8,7 @@ from dashboard.model import (
     failure_counts,
     parse_events,
 )
+from dashboard.journey import _rounds, check_key_judgement_impact
 from dashboard.workflow_projection import project_workflow
 
 
@@ -16,6 +17,96 @@ def file_entry(rel_path, size=100):
 
 
 class ModelTests(unittest.TestCase):
+    def test_key_judgement_change_check_is_exact_and_waits_for_a_bound_selection(self):
+        claims = [
+            {"claimId": "selected", "challenges": [{"id": "ch-1"}, {"id": "ch-2"}]},
+            {"claimId": "other", "challenges": [{"id": "ch-3"}]},
+        ]
+        impact = check_key_judgement_impact(
+            claims,
+            [{"claimId": "selected", "requirementId": "ir-01"}],
+            selection_known=True,
+        )
+        self.assertEqual(impact, {
+            "selectionKnown": True,
+            "selectedClaimCount": 1,
+            "affectedClaimCount": 1,
+            "impactingChallengeCount": 2,
+            "otherChallengeCount": 1,
+        })
+        self.assertTrue(claims[0]["challenges"][0]["changeCheck"]["couldChangeKeyJudgement"])
+        self.assertEqual(claims[0]["challenges"][0]["changeCheck"]["requirementIds"], ["ir-01"])
+        self.assertFalse(claims[1]["challenges"][0]["changeCheck"]["couldChangeKeyJudgement"])
+        self.assertEqual(claims[1]["challenges"][0]["changeCheck"]["reason"], "claim-not-selected")
+
+        pending = [{"claimId": "selected", "challenges": [{"id": "ch-1"}]}]
+        unknown = check_key_judgement_impact(pending, [], selection_known=False)
+        self.assertIsNone(pending[0]["challenges"][0]["changeCheck"]["couldChangeKeyJudgement"])
+        self.assertEqual(pending[0]["challenges"][0]["changeCheck"]["reason"], "selection-not-recorded")
+        self.assertFalse(unknown["selectionKnown"])
+
+    def test_round_change_check_requires_selection_bound_to_its_challenge_and_adjudication(self):
+        run_id = "run-impact"
+        build_path = "synthesis/records/build-1/synthesis-build-record.json"
+        challenge_path = "synthesis/challenge/records/challenge-1/challenge-record.json"
+        adjudication_path = "synthesis/adjudication/challenge-1/performed-adjudication.json"
+        key_judgement_path = "synthesis/key-judgements/records/kj-1/key-judgement-record.json"
+        challenge_ref = f"runs/{run_id}/{challenge_path}"
+        adjudication_ref = f"runs/{run_id}/{adjudication_path}"
+        build_ref = f"runs/{run_id}/{build_path}"
+        full = {
+            build_path: {
+                "id": "build-1", "recordedAt": "2026-11-01T10:00:00Z",
+                "reviewStatus": "reviewed", "limitedEvidence": True,
+                "synthesis": {"sourceNoteIds": ["note-1"], "questionCoverage": [],
+                              "claims": [{"id": "selected", "statement": "Selected claim", "kind": "reported-fact",
+                                          "confidence": {"level": "low", "rationale": "One source"},
+                                          "confidenceCeiling": "low", "singleSourceDependent": True,
+                                          "supportingSourceNoteIds": ["note-1"], "supportingObservationIds": ["obs-1"]},
+                                         {"id": "other", "statement": "Other claim", "kind": "reported-fact",
+                                          "confidence": {"level": "low"}, "supportingSourceNoteIds": ["note-1"],
+                                          "supportingObservationIds": ["obs-2"]}]},
+            },
+            challenge_path: {
+                "id": "challenge-1", "recordedAt": "2026-11-01T11:00:00Z",
+                "buildRecord": {"artifactRef": build_ref},
+                "metrics": {"challengesRaised": 2},
+                "results": [{"id": "ch-selected", "claimId": "selected", "claimAlias": "c01",
+                             "verdict": "challenge", "check": "plausible-alternative", "rationale": "Alternative"},
+                            {"id": "ch-other", "claimId": "other", "claimAlias": "c02",
+                             "verdict": "challenge", "check": "hidden-single-source-dependence", "rationale": "Single source"}],
+            },
+            adjudication_path: {"claims": [{"claimId": "selected", "status": "contested", "openChallengeIds": ["ch-selected"]},
+                                           {"claimId": "other", "status": "contested", "openChallengeIds": ["ch-other"]}]},
+            key_judgement_path: {
+                "recordedAt": "2026-11-01T12:00:00Z",
+                "buildRecord": {"artifactRef": build_ref},
+                "challengeRecord": {"artifactRef": challenge_ref},
+                "adjudication": {"artifactRef": adjudication_ref},
+                "selection": {"selections": [{"requirementId": "ir-01", "claimId": "selected", "judgementText": "Selected",
+                                               "confidence": "low", "status": "contested"}]},
+            },
+        }
+        adjudications = [{
+            "challengeRecordPath": challenge_path, "status": "adjudicated", "adjudicationPath": adjudication_path,
+            "claims": [{"claimId": "selected", "alias": "c01", "status": "contested",
+                        "challenges": [{"id": "ch-selected", "check": "plausible-alternative", "rationale": "Alternative",
+                                        "decision": "uphold"}]},
+                       {"claimId": "other", "alias": "c02", "status": "contested",
+                        "challenges": [{"id": "ch-other", "check": "hidden-single-source-dependence", "rationale": "Single source",
+                                        "decision": "uphold"}]}],
+        }]
+        rounds, _ = _rounds(run_id, full, adjudications, [])
+        self.assertEqual(rounds[0]["keyJudgementImpact"]["impactingChallengeCount"], 1)
+        challenges = [challenge for claim in rounds[0]["claims"] for challenge in claim["challenges"]]
+        self.assertTrue(challenges[0]["changeCheck"]["couldChangeKeyJudgement"])
+        self.assertFalse(challenges[1]["changeCheck"]["couldChangeKeyJudgement"])
+
+        full[key_judgement_path]["adjudication"] = {"artifactRef": "runs/run-impact/synthesis/adjudication/other/performed-adjudication.json"}
+        rounds, _ = _rounds(run_id, full, adjudications, [])
+        self.assertFalse(rounds[0]["keyJudgementImpact"]["selectionKnown"])
+        self.assertIsNone(rounds[0]["claims"][0]["challenges"][0]["changeCheck"]["couldChangeKeyJudgement"])
+
     def test_dashboard_and_runner_share_the_recommended_machine_action(self):
         projection = project_workflow({
             "runId": "run-1",
@@ -105,6 +196,21 @@ class ModelTests(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["snapshotId"], "snapshot-reassessment-1")
             self.assertEqual(next(s for s in rows[0]["steps"] if s["key"] == "relevance")["detail"], "Relevant")
+
+    def test_recorded_exception_decision_closes_the_item_without_a_phantom_entry(self):
+        item = "exceptions/exc-2/exception-item.json"
+        decision = "exceptions/exc-2/exception-decision.json"
+        files = [file_entry(item), file_entry(decision)]
+        jsons = [
+            {"relPath": item, "value": {"id": "exc-2", "kind": "uncertain-relevance", "status": "open", "raisedAt": "2026-11-05T10:00:00Z"}},
+            {"relPath": decision, "value": {"schemaVersion": "exception-decision-v1", "exceptionId": "exc-2", "decision": "exclude",
+                                            "decidedBy": "FDIHR", "decidedAt": "2026-11-05T11:00:00Z", "reason": "Context only"}},
+        ]
+        view = build_run_view("run-dec", files, jsons, [], "2026-11-05T12:00:00Z")
+        self.assertEqual(len(view["exceptions"]), 1)
+        self.assertEqual(view["exceptions"][0]["status"], "decided")
+        self.assertEqual(view["exceptions"][0]["decision"], "exclude")
+        self.assertEqual(view["counts"]["openExceptions"], 0)
 
     def test_empty_run_shows_pending_stages_without_publication_claim(self):
         view = build_run_view("empty", [], [], [], "2026-10-26T00:00:00Z")

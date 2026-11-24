@@ -24,6 +24,7 @@ import {
   type AnyWriterRequest,
   type MemoStandardV0
 } from "../modules/memo/writer.js";
+import { createMemoPublicationGate } from "../modules/memo/publication.js";
 import {
   validateMemoStandard,
   type MemoStandard
@@ -267,14 +268,11 @@ const main = async (): Promise<void> => {
     );
     const publicationGateOutput = await writeJsonOnce(
       resolve(outputDir, "publication-gate.json"),
-      {
-        schemaVersion: "memo-publication-gate-v1",
+      createMemoPublicationGate({
         memoId: record.value.memo.id,
         checkedAt: recordedAt,
-        status: "blocked",
-        reasons: record.value.verification.blockers,
-        humanApprovalAvailable: false
-      }
+        blockers: record.value.verification.blockers
+      })
     );
     await withSyncRetry(() =>
       appendFile(

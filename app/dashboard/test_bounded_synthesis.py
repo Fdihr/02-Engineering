@@ -149,6 +149,15 @@ class BoundedSynthesisTests(unittest.TestCase):
         result = project_workflow(bounded_synthesis.compose_workflow(base, execution))
         self.assertEqual({work["id"] for work in result["readyWork"]}, {"source:a", "bounded:memo"})
 
+        superseded = {
+            **execution,
+            "status": "memo-review",
+            "authority": {"challenge": {"artifactRef": f"runs/{self.run.name}/synthesis/challenge/records/c1/challenge-record.json"}},
+        }
+        round2 = {"adjudicationStatus": "adjudicated", "challengeRecordPath": "synthesis/challenge/records/c2/challenge-record.json"}
+        newer = project_workflow(bounded_synthesis.compose_workflow(base, superseded, round2))
+        self.assertEqual({work["id"] for work in newer["readyWork"]}, {"source:a", "manual:selection", "manual:writer"})
+
     def test_read_only_status_uses_typescript_projection_even_on_blocked_exit(self):
         directory = self.run / "synthesis" / "execution"
         directory.mkdir(parents=True)

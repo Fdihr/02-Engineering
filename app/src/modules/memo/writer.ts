@@ -34,9 +34,13 @@ import {
 import type { BuiltClaim, SynthesisBuildRecord } from "../synthesis/types.js";
 import {
   keyJudgementPolicyFromStandard,
+  memoStandardForWriter,
   validateMemoStandard,
-  type MemoStandard
+  validateMemoStandardForWriter,
+  type MemoStandard,
+  type MemoStandardForWriter
 } from "./standard-v1.js";
+import { createMemoPublicationGate } from "./publication.js";
 
 export const MEMO_STANDARD_SCHEMA_VERSION = "memo-standard-pack-v0" as const;
 export const WRITER_REQUEST_SCHEMA_VERSION = "memo-writer-request-v1" as const;
@@ -176,7 +180,7 @@ export type BoundedWriterRequest = {
   requiredOmissions: Array<{ requirementId: string; reason: string }>;
   derivedSourcingSummary: string;
   derivedLimitations: string[];
-  standard: MemoStandard;
+  standard: MemoStandardForWriter;
   prompt: { system: string; user: string };
   editorialRevision?: EditorialRevision;
   wordBudget?: {
@@ -234,7 +238,7 @@ export type MemoDocument = {
   notForPublication: true;
   publicationBlockers: string[];
   memoStandardId: string;
-  memoStandardVersion: 0 | 1 | 2;
+  memoStandardVersion: MemoStandardV0["version"] | MemoStandard["version"];
   approvedQuestionId: string;
   approvedScope: ArtifactBinding | null;
   lineage: {
@@ -287,7 +291,7 @@ export type MemoVerification = {
   memoId: string;
   verifiedAt: string;
   contentVerdict: "pass";
-  publicationVerdict: "block";
+  publicationVerdict: "eligible" | "block";
   checks: Array<{ check: string; status: "pass" }>;
   blockers: string[];
 };
@@ -579,7 +583,7 @@ const boundedWriterPrompt = (
   >
 ): BoundedWriterRequest["prompt"] => ({
   system: [
-    request.standard.version === 2
+    request.standard.version >= 2
       ? "Write supporting sections for an evidence-grounded memo."
       : "Write optional supporting sections for a very short threat-intelligence memo.",
     "The BLUF and key judgements are fixed controller outputs; do not return or rewrite them.",
@@ -589,7 +593,11 @@ const boundedWriterPrompt = (
     ...(request.standard.version === 2 ? [
       "Use the space needed to explain the evidence clearly. A two-page memo is acceptable; there is no word-count target or hard word limit.",
       "Be concise without omitting material analysis, uncertainties or caveats."
+    ] : request.standard.version === 3 ? [
+      "Use enough space to explain the evidence clearly; there is no overall word-count target or hard word limit.",
+      "Be concise without omitting material analysis, uncertainties or caveats."
     ] : []),
+    ...(request.standard.version === 3 ? request.standard.styleGuidance : []),
     ...(request.wordBudget && "maxWords" in request.standard.limits ? [
       `The complete rendered memo is limited to ${request.standard.limits.maxWords} words. Fixed sections already use ${request.wordBudget.fixedWords} words.`,
       `Across ALL returned statement text, use at most ${request.wordBudget.maxProseWords} whitespace-separated words in total. The controller reserves another ${request.wordBudget.reservedStatementWords} words for citations and status labels.`,
@@ -885,7 +893,7 @@ export const createBoundedWriterRequest = (input: {
           `Key judgement omitted for ${omission.requirementId}: ${omission.reason}`
       )
     ],
-    standard: input.standard
+    standard: memoStandardForWriter(input.standard)
   };
   const request: BoundedWriterRequest = {
     schemaVersion: BOUNDED_WRITER_REQUEST_SCHEMA_VERSION,
@@ -966,7 +974,7 @@ export const validateBoundedWriterRequest = (
     !Array.isArray(value.requiredOmissions) ||
     !Array.isArray(value.derivedLimitations) ||
     !isRecord(value.standard) ||
-    !validateMemoStandard(value.standard).ok ||
+    !validateMemoStandardForWriter(value.standard).ok ||
     !isRecord(value.prompt) ||
     (value.wordBudget !== undefined &&
       (value.standard.version !== 1 || !isRecord(value.wordBudget) || !hasOnlyKeys(value.wordBudget,
@@ -1155,7 +1163,8 @@ export const recordWriterResponse = (input: {
     memoId: memo.id,
     verifiedAt: recordedAt,
     contentVerdict: "pass",
-    publicationVerdict: "block",
+    publicationVerdict: memo.publicationBlockers.length || input.standard.status !== "approved-standard"
+      ? "block" : "eligible",
     checks,
     blockers: memo.publicationBlockers
   };
@@ -1359,7 +1368,7 @@ const composeWriterMemo = (input: Pick<Parameters<typeof recordWriterResponse>[0
     )
       ? ["OPEN_KEY_JUDGEMENT_CONTEST"]
       : []),
-    "PROVISIONAL_MEMO_STANDARD",
+    ...(input.standard.status === "approved-standard" ? [] : ["PROVISIONAL_MEMO_STANDARD"]),
     ...(approvedScope ? [] : ["LEGACY_SCOPE_LINEAGE_UNAVAILABLE"])
   ];
   const memoBody = {

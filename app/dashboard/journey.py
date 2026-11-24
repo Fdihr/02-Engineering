@@ -212,6 +212,46 @@ def _note_index(full: dict[str, Any], candidates: dict[str, dict[str, Any]]) -> 
     return notes
 
 
+def check_key_judgement_impact(
+    claims: list[dict[str, Any]],
+    selections: list[dict[str, Any]],
+    *,
+    selection_known: bool,
+) -> dict[str, Any]:
+    selected: dict[str, list[str]] = defaultdict(list)
+    if selection_known:
+        for item in selections:
+            claim_id = _txt(_rec(item).get("claimId"))
+            requirement_id = _txt(_rec(item).get("requirementId"))
+            if claim_id and requirement_id:
+                selected[claim_id].append(requirement_id)
+
+    impacted_claims: set[str] = set()
+    impacting_challenges = 0
+    for claim in claims:
+        claim_id = _txt(claim.get("claimId"))
+        requirement_ids = selected.get(claim_id, [])
+        for challenge in claim.get("challenges", []):
+            could_change = bool(selection_known and requirement_ids)
+            challenge["changeCheck"] = {
+                "couldChangeKeyJudgement": could_change if selection_known else None,
+                "reason": "selected-claim" if could_change else (
+                    "claim-not-selected" if selection_known else "selection-not-recorded"
+                ),
+                "requirementIds": requirement_ids,
+            }
+            if could_change:
+                impacted_claims.add(claim_id)
+                impacting_challenges += 1
+    return {
+        "selectionKnown": selection_known,
+        "selectedClaimCount": len(selected),
+        "affectedClaimCount": len(impacted_claims),
+        "impactingChallengeCount": impacting_challenges,
+        "otherChallengeCount": sum(len(claim.get("challenges", [])) for claim in claims) - impacting_challenges,
+    }
+
+
 def _rounds(run_id: str, full: dict[str, Any], adjudications: list[dict[str, Any]], ai_queue: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     prefix = f"runs/{run_id}/"
     builds = []
@@ -289,6 +329,13 @@ def _rounds(run_id: str, full: dict[str, Any], adjudications: list[dict[str, Any
 
         kj_rel, kj = key_judgements.get(ref, ("", {}))
         selection = _rec(kj.get("selection"))
+        challenge_record_id = _txt(_rec(challenge).get("id"))
+        selection_known = bool(
+            kj_rel and challenge_rel and
+            _ref(kj, "challengeRecord") == f"runs/{run_id}/{challenge_rel}" and
+            _ref(kj, "adjudication") ==
+            f"runs/{run_id}/synthesis/adjudication/{challenge_record_id}/performed-adjudication.json"
+        )
         if kj_rel:
             steps.append(_step("key-judgements", "Key judgements", "done", f"{len(_arr(selection.get('selections')))} selected · {len(_arr(selection.get('omissions')))} omitted"))
         elif "key-judgements" in waiting:
@@ -326,6 +373,9 @@ def _rounds(run_id: str, full: dict[str, Any], adjudications: list[dict[str, Any
                 "challenges": judged.get("challenges", []),
                 "status": judged.get("status", ""),
             })
+        impact = check_key_judgement_impact(
+            claims, _arr(selection.get("selections")), selection_known=selection_known
+        )
         rounds.append({
             "index": index,
             "id": _txt(record.get("id")),
@@ -356,6 +406,7 @@ def _rounds(run_id: str, full: dict[str, Any], adjudications: list[dict[str, Any
                 "omissions": [{"requirementId": _txt(_rec(o).get("requirementId")), "reason": _txt(_rec(o).get("reason"))} for o in _arr(selection.get("omissions"))],
                 "withoutClaim": [str(r) for r in _arr(selection.get("requirementsWithoutEligibleClaim"))],
             } if kj_rel else None,
+            "keyJudgementImpact": impact,
             "memoPaths": [rel_path for _, rel_path in round_memos],
             "steps": _settle(steps),
             "current": False,

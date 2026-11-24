@@ -89,7 +89,9 @@ def _questions(journey: dict[str, Any]) -> list[dict[str, Any]]:
 def _exceptions(exceptions: list[dict[str, Any]]) -> dict[str, Any]:
     items = [
         {"id": str(e.get("id", "")), "kind": str(e.get("kind", "")), "status": str(e.get("status", "")),
-         "relPath": str(e.get("relPath", ""))}
+         "relPath": str(e.get("relPath", "")),
+         **({key: str(e.get(key, "")) for key in ("decision", "decidedBy", "decidedAt", "reason")}
+            if e.get("status") == "decided" and e.get("decision") else {})}
         for e in exceptions
     ]
     return {"open": sum(1 for item in items if item["status"] == "open"), "items": items}

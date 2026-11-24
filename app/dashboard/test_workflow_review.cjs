@@ -105,9 +105,12 @@ function memoReview() {
 test('memo review requires sample verdict, feedback and explicit exact-draft confirmation', () => {
   const review = memoReview();
   const h = harness(memoJourney(), 'memo', null, {}, null, review);
-  assert.equal(h.button('Approve for publication').disabled, true);
+  assert.equal(h.button('Approve for publication'), undefined);
   assert.equal(h.button('Record decision').disabled, true);
   const selects = h.document.querySelectorAll('select');
+  h.change(selects[0], 'approved');
+  assert.equal(h.button('Approve for publication').disabled, true);
+  h.change(selects[0], 'revision-requested');
   h.change(selects[1], 'evidence-gap');
   h.change(selects[2], 'supported');
   h.change(h.document.querySelector('textarea'), 'Resolve remaining gaps.');
@@ -115,6 +118,9 @@ test('memo review requires sample verdict, feedback and explicit exact-draft con
   confirm.checked = true;
   confirm.dispatchEvent(new h.document.defaultView.Event('change', { bubbles: true }));
   assert.equal(h.button('Record decision').disabled, false);
+  h.change(selects[0], 'approved');
+  assert.equal(h.button('Approve for publication').disabled, true);
+  h.change(selects[0], 'revision-requested');
   h.document.querySelector('form').dispatchEvent(new h.document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
   assert.equal(h.actions.length, 1);
   assert.equal(h.actions[0].action, 'record-memo-review');
@@ -131,7 +137,7 @@ test('memo decisions and stale or unavailable review never expose a writable app
     { error: 'Memo Markdown changed; restore or produce a new draft before review.' }
   ]) {
     const h = harness(memoJourney(), 'memo', null, {}, null, data);
-    assert.equal(h.button('Approve for publication').disabled, true);
+    assert.equal(h.button('Approve for publication'), undefined);
     assert.equal(h.button('Record decision'), undefined);
   }
 });
@@ -151,7 +157,7 @@ test('editorial revision requires separate confirmation and routes other feedbac
   assert.equal(h.actions[0].action, 'start-memo-revision');
   assert.equal(h.actions[0].memoId, 'memo-1');
   assert.equal(h.actions[0].reviewerId, 'TESTER');
-  assert.equal(h.button('Approve for publication').disabled, true);
+  assert.equal(h.button('Approve for publication'), undefined);
   for (const route of ['evidence', 'analysis/findings', 'audit']) {
     const routed = harness(memoJourney(), 'memo', null, {}, null, { ...data,
       revisionRoute: { eligible: false, route, reason: 'Resolve upstream.' } });
@@ -171,7 +177,7 @@ test('editorial recovery cannot offer new calls for terminal receipts and a revi
     const resume = h.button('Resume editorial revision');
     assert.equal(Boolean(resume), status === 'response-saved');
     if (resume) { resume.click(); assert.equal(h.actions[0].action, 'resume-memo-revision'); }
-    assert.equal(h.button('Approve for publication').disabled, true);
+    assert.equal(h.button('Approve for publication'), undefined);
   }
   const j = memoJourney();
   j.memo.id = 'memo-2';
@@ -253,6 +259,14 @@ test('bounded memo exposes resume and recovery without competing model controls'
   complete.button('Review memo draft').click();
   assert.equal(complete.actions[0].route, 'review');
   assert.equal(complete.button('Resume bounded memo work'), undefined);
+  journey.rounds[0].adjudicationPath = 'synthesis/adjudication/c2/performed-adjudication.json';
+  const round2 = harness(journey, 'synthesis', null, {}, {
+    authorized: true, status: 'memo-review', remainingCalls: 0,
+    authority: { adjudication: { artifactRef: 'runs/fixture/synthesis/adjudication/c1/performed-adjudication.json' },
+      stages: { 'key-judgements': { model: 'm1' }, writer: { model: 'm2' } } }
+  });
+  assert.equal(round2.button('Review memo draft'), undefined);
+  assert.ok(round2.button('Start selection and writing'));
 });
 
 test('review compares labelled statements and quotes, and never pre-approves verdicts', () => {

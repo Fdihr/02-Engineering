@@ -16,7 +16,7 @@
  *     the record layer from the claim's id, code-derived IR coverage, adjudicated status,
  *     confidence, ceiling, provisional flag and open challenge ids.
  *   - `KeyJudgementPolicy` values come from the memo standard pack. Until a curated pack
- *     exists, `maxKeyJudgements` is provisional and should be marked so in the pack.
+ *     exists, `maxKeyJudgements` comes from the approved memo standard.
  *   - `CheckFailure` mirrors the assurance module's shape (check, count, rule) so the
  *     existing retry-feedback rendering can be reused unchanged.
  */
@@ -33,7 +33,7 @@ export type CheckFailure = {
 
 export type KeyJudgementPolicy = {
   policyId: string;
-  /** Overall cap on key judgements per memo. Provisional until a memo standard pack sets it. */
+  /** Overall cap on key judgements per memo, taken from the bound memo standard. */
   maxKeyJudgements: number;
   /** Whether contested claims may be key judgements. Their open challenges are attached by code. */
   allowContested: boolean;

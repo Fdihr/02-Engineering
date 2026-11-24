@@ -32,6 +32,12 @@ Controller admission requires exact `relevant` relevance, code-validated anchors
 
 Current emitters exist for uncertain relevance and exhausted Extract attempts. Reconciliation and key-judgment contest remain reserved typed kinds until their stages own an emitter.
 
+### Exception decisions
+
+Because items are write-once, a human decision is a separate write-once `exception-decision.json` (`exception-decision-v1`) beside the item. It records `exceptionId`, the item's exact `ArtifactBinding`, `decision`, a path-safe `decidedBy`, `decidedAt`, and a 3–1,000 character `reason`. Only `exclude` and `accept-gap` are accepted today; `resume` and `reject` stay reserved until an owning stage can route them. Record one with `npm run decide:exception -- <exception-item.json> <exclude|accept-gap> <analyst-id> <reason>` or the dashboard's Exceptions panel.
+
+An item is open until a sibling decision validates against its checksum. A decision that fails validation is an integrity failure: memo and synthesis gates stop rather than treat the item as closed. Decisions never admit evidence.
+
 ## Publication calibration
 
 Publication decisions require sampled observation verdicts and lineage drill-down records. The default policy samples five observations per memo. The initial threshold is 30 sampled verdicts across six memos at no more than 5% disagreement; it is `provisional-untested` and cannot become approved through runtime measurement.
@@ -42,4 +48,15 @@ The calibration record checksum-binds the publication decision and calibration p
 
 ## Driver
 
-`npm run run:next -- <run-id>` reads persisted run state. It executes an allowlisted deterministic recorder when a prepared response is ready, reports Foundry-adapter machine work for a pending model request, or reports one of the four human surfaces and its artifact path. It never labels manual model transport or command execution as a human approval surface.
+`npm run run:next -- <run-id>` reads persisted run state and runs allowlisted
+deterministic recorders for already-saved research-question, relevance, Extract,
+and manual/unbounded Build, Challenge, key-judgement, or writer responses until
+the next human surface or pending manual model request. It rereads state after
+each successful recorder and stops on failure or lack of progress. For bounded
+synthesis, memo, and editorial revision, it may call the existing resume runner
+only under a validated, already-recorded authorization; the runner uses its
+frozen Copilot model and remaining call allowance. `run:next` never creates or
+replenishes authority, and stops at human gates, indeterminate reservations, or
+terminal failures. Manual/unbounded model transport remains an interim machine
+wait, not a human approval surface. The optional Foundry adapter is not
+required.

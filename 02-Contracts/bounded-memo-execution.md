@@ -7,9 +7,12 @@ evidence authority or publication eligibility.
 
 One analyst start in Findings (or `npm run run:memo -- start <run-id>
 <analyst-id> [performed-adjudication.json]`, from `app/`) authorizes one immutable
-`memo/execution/authorization.json` per run. With no explicit path the CLI
+bounded memo execution per performed adjudication: `memo/execution/authorization.json`
+for the run's first round, and `memo/execution/rounds/<adjudication-id>/authorization.json`
+for any later adjudicated synthesis round. With no explicit path the CLI
 requires exactly one performed adjudication. Proposed adjudications and a
-checked-zero Challenge alone are insufficient.
+checked-zero Challenge alone are insufficient. Repeated starts for an already
+authorized adjudication reuse its frozen authorization without adding calls.
 
 The authorization freezes the exact Build/Challenge round, performed
 adjudication, approved question/scope lineage, source-note set, synthesis policy,
@@ -59,14 +62,16 @@ checked; proposals pass the existing key-judgement KJ1–KJ8 and writer v2
 recorders. Models cannot change eligibility, confidence, claim status, BLUF,
 key-judgement rows, gaps, caveats, or publication decisions.
 
-New starts use `memo-standard-v2`, which has no total word limit or prose word
-budget. The writer is asked to be concise while using the space needed for clear
-analysis; a two-page memo is acceptable. Structured statement limits, evidence
-checks, prohibited-pattern checks, model-call allowances and publication blockers
-remain unchanged. A valid draft is not rejected just for exceeding 350 words.
+New starts use approved `memo-standard-v3`, which has no total word limit or
+prose word budget. Its style guidance favors a clear bottom line, flexible
+layout, explicit uncertainty, and depth proportional to the question and
+evidence. The writer receives no archive paths, hashes, or regression examples.
+Structured statement limits, evidence checks, prohibited-pattern checks,
+model-call allowances and other publication blockers remain unchanged. A valid
+draft is not rejected just for exceeding 350 words.
 
-Historical v0/v1 standards remain immutable. Authorizations and drafts bound to
-them still reconstruct under their original policy. Writer v2 requests under
+Historical v0/v1/v2 standards remain immutable. Authorizations and drafts bound
+to them still reconstruct under their original policy. Writer v2 requests under
 standard v1 may carry a `rendered-memo-word-budget-v1` budget derived by the same
 composer/renderer as recording; older requests without a budget retain their
 exact prompt and identity. That historical path still enforces its frozen word
@@ -77,14 +82,17 @@ revisions retain their parent's standard.
 New artifacts use the existing key-judgement request/record and memo request/
 memo-output paths. Memo JSON, rendered Markdown, deterministic verification
 and blocked publication gate are all required before the execution reports
-`memo-review`. The authorization and receipts live under `memo/execution/`.
+`memo-review`. The authorization and receipts live under `memo/execution/`
+(or `memo/execution/rounds/<adjudication-id>/` for subsequent adjudicated rounds),
+serialized by the run-wide `memo/execution/worker.lock`.
 Immutable publication uses flushed temporary files and exclusive hard links;
 the configured filesystem must support local hard links.
 
 ## Recovery and limits
 
-`npm run run:memo -- status <run-id>` is read-only.
-`npm run run:memo -- resume <run-id>` uses the same authority.
+`npm run run:memo -- status <run-id> [performed-adjudication.json]` is read-only
+(defaulting to the latest authorized round).
+`npm run run:memo -- resume <run-id> [performed-adjudication.json]` uses the same authority.
 Dashboard refresh, repeated starts, simultaneous starts, server restarts and
 resume never replenish allowances.
 

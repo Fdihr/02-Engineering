@@ -10,10 +10,10 @@ from typing import Any, Callable
 SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
 
 
-def _result(step: dict[str, Any]) -> dict[str, Any]:
+def _result(step: dict[str, Any], prefix: str = "Review: ") -> dict[str, Any]:
     if not step.get("ok"):
         raise ValueError(step.get("stderr") or "Memo review command failed; inspect the saved draft.")
-    line = next((line[8:] for line in step.get("stdout", "").splitlines() if line.startswith("Review: ")), None)
+    line = next((line[len(prefix):] for line in step.get("stdout", "").splitlines() if line.startswith(prefix)), None)
     if line is None:
         raise ValueError("Memo review returned no receipt. Refresh before retrying.")
     value = json.loads(line)
@@ -41,5 +41,20 @@ def record(root: Path, payload: dict[str, Any], command: Callable[..., dict[str,
             path.write_text(json.dumps(submitted), encoding="utf-8")
             value = _result(command("review:memo", ["record", run_id, memo_id, str(path)], runs_root=root))
         return 200, {"ok": True, **value, "message": "Memo decision recorded. Publication remains blocked; no new model work was authorized."}
+    except (OSError, ValueError) as error:
+        return 409, {"ok": False, "error": str(error)}
+
+
+def publish(root: Path, payload: dict[str, Any], command: Callable[..., dict[str, Any]]) -> tuple[int, dict[str, Any]]:
+    run_id, memo_id, publisher = (payload.get(key) for key in ("runId", "memoId", "publisherId"))
+    if not all(isinstance(value, str) and SAFE_ID.fullmatch(value) for value in (run_id, memo_id, publisher)):
+        return 400, {"ok": False, "error": "A valid run, memo and explicit publisher ID are required."}
+    try:
+        step = command("publish:memo", [run_id, memo_id, publisher], runs_root=root)
+        value = _result(step, "Published: ")
+        artifact = value.get("path")
+        if not isinstance(artifact, str) or not artifact:
+            raise ValueError("Publication returned no artifact path. Inspect the run before retrying.")
+        return 200, {"ok": True, **value, "message": "Immutable local publication package created."}
     except (OSError, ValueError) as error:
         return 409, {"ok": False, "error": str(error)}

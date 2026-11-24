@@ -18,25 +18,42 @@ python -m unittest discover -s dashboard -p "test_*.py" -v
 
 `design_system.css` is the token and base-style source for this dashboard and future server-rendered pages. `run_view.css` contains only dashboard-specific layout and component rules. `run_view.js` holds the shell, Settings and AI execution controls; `run_panes.js` holds the Brief, Sources, Synthesis, Memo and Audit tabs. Vestas Sans fonts and the white Vestas logo are local assets. Rendering needs no external requests or Python packages; explicit Copilot and collection actions require network access.
 
-The workbench is organised around the analyst's job, not the artefact tree. `journey.py` derives, from persisted artefacts only, six phases (frame, collect, admit evidence, assure sources, synthesise, memo), one ordered work queue (each item says whether you decide, run Copilot or execute deterministic work), a lifecycle per source (lead → pending RSS source list → relevance → admitted → extracted → reviewed → in synthesis; historical retrieval artifacts remain readable), synthesis rounds (build → challenge → adjudicate → key judgements → memo, with superseded rounds marked), and the latest memo with claim → source → quote traces and plain-language publication blockers. The Audit tab keeps the file-inferred artefact board, exceptions and events. Nothing in the projection advances the workflow.
+The workbench is organised around the analyst's job, not the artefact tree. `journey.py` derives, from persisted artefacts only, six phases (frame, collect, admit evidence, assure sources, synthesise, memo), one ordered work queue (each item says whether you decide, run Copilot or execute deterministic work), a lifecycle per source (lead → pending RSS source list → relevance → admitted → extracted → reviewed → in synthesis; historical retrieval artifacts remain readable), synthesis rounds (build → challenge → adjudicate → key judgements → memo, with superseded rounds marked), and the latest memo with claim → source → quote traces and plain-language publication blockers. The Audit tab keeps the file-inferred artefact board, exceptions and events. Nothing in the projection advances the workflow. The Evidence Exceptions panel is the one place to record a human `exclude` or `accept-gap` decision on an open exception (`decide-exception` action, write-once, reason required).
 
-`POST /api/action` supports explicit scope approval and question drafting, final question/requirements approval, bounded Seerist discovery, provider item classification, analyst decisions, local Copilot execution or manual paste-back for each AI stage, opt-in RSS batches, re-preparing a key-judgement or memo-writer request when the automatic chain did not, and `run:next`. Publisher retrieval is CLI-first and requires a separately approved exact-URL plan. Existing Seerist leads remain pending; native captured provider content can still be canonicalized and assessed for relevance. Recording relevance alone never admits evidence. These actions delegate validation and approval recording to TypeScript commands; they do not automate the full analysis loop. A scope-approved run can resume question drafting or complete question approval only against the same approved scope. Existing approvals cannot be overwritten. Partial command failures retain completed artifacts and must be inspected before retrying.
+After a key-judgement record is bound to the same Challenge and adjudication
+round, the Findings view marks challenges that directly target selected claims.
+Before that matching selection exists, impact stays unknown and all challenges
+remain reviewable; the projection never changes recorded decisions.
 
-Memo review offers explicit **Request revision** and **Reject memo** decisions
-for reconstructable writer v2 drafts. Reviewers check deterministic observation
-samples, select an issue, give feedback and confirm the exact draft. The
+`POST /api/action` supports explicit scope approval and question drafting, final question/requirements approval, bounded Seerist discovery, provider item classification, analyst decisions, local Copilot execution or manual paste-back for each AI stage, opt-in RSS batches, re-preparing a key-judgement or memo-writer request when the automatic chain did not, and `run:next`. `run:next` records already-saved model responses in sequence and stops at a human gate, pending manual model request, or failure. For bounded synthesis, memo and editorial revision, it can also resume through the existing Copilot SDK when a valid immutable authorization exists, consuming only its frozen model and call budget. It never creates or replenishes authorization. Publisher retrieval is CLI-first and requires a separately approved exact-URL plan. Existing Seerist leads remain pending; native captured provider content can still be canonicalized and assessed for relevance. Recording relevance alone never admits evidence. These actions delegate validation and approval recording to TypeScript commands; they do not automate the full analysis loop. A scope-approved run can resume question drafting or complete question approval only against the same approved scope. Existing approvals cannot be overwritten. Partial command failures retain completed artifacts and must be inspected before retrying.
+
+Memo review offers explicit **Approve for publication**, **Request revision**
+and **Reject memo** decisions for eligible reconstructable bounded drafts.
+Reviewers check deterministic observation samples, provide a rationale and
+confirm the exact draft; non-approval decisions also require an issue category.
+Approval is unavailable when deterministic blockers remain or the full sample
+is missing, and every sampled observation must be marked supported. The
 `record-memo-review` action delegates to `review:memo`, forwarding the active
 run root. Its immutable decision binds the memo JSON, Markdown, writer record,
 verification, publication gate and calibration policy checksums. Changed
 artifacts disable review; stale receipts grant no approval. Historical writer
-v1 drafts remain read-only. Publication approval is still disabled under the
-provisional standard, and revision/rejection does not start another model call.
+v1 drafts remain read-only. Drafts bound to provisional v1/v2 remain blocked;
+approved v3 governs new starts only. Revision/rejection cannot override any
+blocker or start another model call.
 See [the review contract](../../02-Contracts/memo-review-and-publication-decision.md).
 
 CLI from `app/`: `npm run review:memo -- inspect <run-id> <memo-id>` returns the
 exact target and selected samples; `npm run review:memo -- record <run-id>
 <memo-id> <review-input.json>` accepts that target, reviewer ID, decision,
 issue type, feedback, sampled verdicts and drill-down records.
+
+After approval, **Create local publication package** writes the immutable
+Markdown+JSON bundle to `runs/<run-id>/published/<memo-id>/publication.json`,
+bound to the audience in the approved scope and the human approval receipt.
+The dashboard offers a download link. This does not email or upload the memo
+elsewhere. The provisional model-only support calibration remains an explicit
+memo limitation; runtime measurement cannot approve its policy threshold.
+CLI: `npm run publish:memo -- <run-id> <memo-id> <publisher-id>`.
 
 For an eligible editorial request, a separate confirmation enables **Start
 editorial revision**. The launcher calls `revise:memo` with the active run root,
@@ -94,9 +111,15 @@ Adjudication and explicit key-judgement preparation also retain the active run
 root. Build references may be canonical `runs/...`, absolute, or app-relative,
 but must resolve inside that run. Existing lineage is not rewritten; new
 adjudications bind the Challenge using the recorder's app-relative reference
-convention so checksum-bound selection can reopen it consistently.
+convention so checksum-bound selection can reopen it consistently. When bounded
+memo authority already exists in a run, recording adjudication skips legacy
+manual key-judgement preparation so the round can be authorized cleanly through
+**Start selection and writing**.
 
-After performed adjudication, Findings offers **Start selection and writing**.
+After performed adjudication, Findings offers **Start selection and writing**
+for each adjudicated synthesis round (`memo/execution/` for the first round and
+`memo/execution/rounds/<adjudication-id>/` for subsequent rounds, preserving
+earlier rounds and drafts unchanged).
 This explicitly freezes the round, evidence lineage, memo standard and Settings
 models, allowing at most one missing selection call and one writer call. Saved
 responses can finish on resume; ambiguous or failed calls are never retried.
@@ -106,10 +129,11 @@ model/paste-back controls cannot add authority. Complete output stops at
 gate. Publication is not authorized by this action. See
 [`bounded-memo-execution.md`](../../02-Contracts/bounded-memo-execution.md).
 
-New starts use `memo-standard-v2`: no hard word limit, with brevity as guidance
-and room for a two-page memo when needed. Historical draft/authority standards
-are preserved, and manual writer preparation uses the selection's bound standard.
-Changing the default never reruns a model or rewrites a draft.
+New starts use approved `memo-standard-v3`: no hard word limit, with brevity as
+guidance and depth proportional to the question and evidence. Historical
+draft/authority standards are preserved, and manual writer preparation uses the
+selection's bound standard. Changing the default never reruns a model or rewrites
+a draft.
 
 A historical word-limited `MEMO_TOO_LONG` failure can receive exactly one
 separately approved, writer-only repair through

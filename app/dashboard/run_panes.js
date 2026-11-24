@@ -1034,7 +1034,7 @@
       nav.appendChild(b);
     });
     var tools = el('div', 'modes');
-    tools.title = 'Runs run:next, which takes a deterministic step if one exists. It never makes a human or model decision.';
+    tools.title = 'Runs saved-response recorders and resumes bounded work only under existing Copilot authorization. It never creates authority or makes human decisions.';
     add(tools, runNextButton());
     add(bar, nav, tools);
     var out = document.createDocumentFragment();
@@ -1286,6 +1286,22 @@
   function exceptionLabel(kind) {
     return capital(String(kind || '').replace(/[-_]/g, ' '));
   }
+  function exceptionDecision(item) {
+    var box = el('div', 'ev-exception-decision');
+    var reason = C.textInput('exception:' + item.id, '', 'Why? e.g. context only, not admitted as evidence.', true, 2);
+    var problem = el('span', 'meta fail');
+    var row = el('div', 'btn-row');
+    [['exclude', 'Exclude', 'btn-secondary'], ['accept-gap', 'Accept gap', 'btn-secondary']].forEach(function (def) {
+      row.appendChild(C.actButton(def[1], def[2], function () {
+        if (reason.value.trim().length < 3) { problem.textContent = 'Give a short reason first.'; reason.focus(); return; }
+        C.postAction({ action: 'decide-exception', runId: state.runId, exceptionId: item.id, decision: def[0], reviewerId: C.analyst(), reason: reason.value }, def[1] + ': ' + exceptionLabel(item.kind))
+          .then(function (data) { if (data && data.ok) C.dropDrafts('exception:' + item.id); });
+      }, true));
+    });
+    add(row, C.analyst() ? el('span', 'meta', 'Deciding as ' + C.analyst()) : el('span', 'meta', 'Enter your analyst ID in the top bar first.'), problem);
+    add(box, C.field('Decision reason (recorded once, cannot be changed)', reason, true), row);
+    return box;
+  }
   function exceptionsPanel(model) {
     var sec = el('aside', 'ev-exceptions');
     sec.setAttribute('aria-label', 'Exceptions');
@@ -1301,6 +1317,11 @@
       if (item.relPath) add(li, C.artifactLink(item.relPath, 'Open record'));
       var hit = model.explorer.filter(function (e) { return e.entry.rowId === item.id; })[0];
       if (hit) add(li, C.linkButton('Open source', function () { state.evidenceView = 'explorer'; state.sourceFilter = 'all'; state.sourceQuery = ''; state.selectedSource = item.id; C.render(true); }));
+      if (item.status === 'decided' && item.decision) {
+        add(li, el('span', 'ev-reason', capital(humanise(item.decision)) + ' by ' + (item.decidedBy || 'unknown') + (item.reason ? ': ' + item.reason : '')));
+      } else if (item.status === 'open' && /(^|\/)exceptions\/[^/]+\/exception-item\.json$/.test(item.relPath || '')) {
+        add(li, exceptionDecision(item));
+      }
       list.appendChild(li);
     });
     add(sec, list);
@@ -1543,16 +1564,38 @@
       claim.challenges.forEach(function (ch) {
         var box = el('div', 'challenge');
         add(box, el('div', 'meta', capital(humanise(ch.check)) + ': ' + ch.rationale));
+        if (ch.changeCheck) {
+          var impact = ch.changeCheck;
+          var label = impact.couldChangeKeyJudgement === null
+            ? 'Key-judgement impact not yet known'
+            : impact.couldChangeKeyJudgement
+              ? 'Could change selected key judgement' + (impact.requirementIds.length ? ' · ' + impact.requirementIds.join(', ') : '')
+              : 'Does not affect a selected key judgement';
+          add(box, el('div', 'meta', label + (ch.decision ? ' · recorded ' + ch.decision : '')));
+        }
         li.appendChild(box);
       });
       list.appendChild(li);
     });
     return list;
   }
-  function boundedMemoPanel(round) {
+  function boundedMemoForRound(round) {
     var execution = state.view.boundedMemo;
+    if (!execution) return null;
+    var ref = execution.authority && execution.authority.adjudication && execution.authority.adjudication.artifactRef;
+    if (ref && round.adjudicationPath) {
+      var normalized = String(ref).replace(/\\/g, '/');
+      var suffix = '/' + state.runId + '/' + round.adjudicationPath;
+      if (normalized !== 'runs' + suffix && normalized.slice(-suffix.length) !== suffix) return null;
+    }
+    return execution;
+  }
+  function boundedMemoPanel(round) {
+    var execution = boundedMemoForRound(round);
+    var anyMemo = state.view.boundedMemo;
     var authorized = execution && (execution.authorized === true || execution.authority);
-    var running = execution && (execution.workerActive || execution.status === 'starting' || execution.status === 'running');
+    var running = (execution && (execution.workerActive || execution.status === 'starting' || execution.status === 'running')) ||
+      (anyMemo && (anyMemo.workerActive || anyMemo.status === 'starting' || anyMemo.status === 'running'));
     var finished = execution && execution.status === 'memo-review';
     var terminal = execution && (execution.status === 'blocked' || execution.status === 'indeterminate') && authorized;
     var parts = [
@@ -1573,6 +1616,10 @@
         parts.push(el('p', 'meta', 'Frozen models: selection ' + execution.authority.stages['key-judgements'].model +
           ' · writer ' + execution.authority.stages.writer.model));
       }
+    } else if (anyMemo && anyMemo.launcherError) {
+      var launchErr = el('p', 'meta fail', anyMemo.launcherError);
+      launchErr.setAttribute('role', 'alert');
+      parts.push(launchErr);
     }
     if (finished) {
       parts.push(add(el('div', 'btn-row'), C.linkButton('Review memo draft', function () { C.navigate('review'); })));
@@ -1696,6 +1743,15 @@
     var placed = {};
     var sec = el('section', 'finding-section');
     add(sec, C.sectionHead(round.keyJudgements ? 'Selected findings by question' : 'Claims by evidence link', 'h3'));
+    var impact = round.keyJudgementImpact;
+    if (impact && impact.selectionKnown) {
+      add(sec, el('p', 'meta prose', impact.impactingChallengeCount + ' of ' +
+        (impact.impactingChallengeCount + impact.otherChallengeCount) +
+        ' raised challenges directly affect ' + impact.affectedClaimCount +
+        ' selected key judgement(s). Challenges on other claims remain visible for audit.'));
+    } else if (impact) {
+      add(sec, el('p', 'meta prose', 'Key-judgement impact will be checked after selection; all raised challenges remain reviewable.'));
+    }
     if (!round.keyJudgements) add(sec, el('p', 'meta prose', 'Links below come from the recorded supporting observations. They are not selected key judgements or a claim that the question is fully answered.'));
     j.brief.requirements.forEach(function (req) {
       var entry = coverage[req.irId];
@@ -2210,13 +2266,6 @@
     var gate = el('div', 'panel-sec');
     var data = state.view.memoReview;
     add(gate, el('h3', null, 'Publication decision'));
-    var approve = el('button', 'btn-primary', 'Approve for publication');
-    approve.type = 'button';
-    approve.disabled = true;
-    approve.setAttribute('aria-describedby', 'approve-reason');
-    var reason = el('p', 'meta', 'Publication remains blocked by the recorded verification and provisional standard. A review decision cannot override those checks.');
-    reason.id = 'approve-reason';
-    add(gate, approve, reason);
     if (m.supersedesMemoId) add(gate, el('p', 'meta', 'Version ' + m.version +
       ' supersedes ' + m.supersedesMemoId + '. This draft requires its own review decision.'));
     if (!data || data.error || !data.target || data.target.memoId !== m.id) {
@@ -2229,8 +2278,33 @@
     }
     if (data.decision) {
       add(gate, el('p', null, capital(humanise(data.decision.decision)) + ' by ' + data.decision.reviewerId),
-        el('p', 'meta', when(data.decision.decidedAt)), el('p', 'prose', data.decision.feedback),
-        el('p', 'meta', 'This decision is bound to the reviewed artifacts. A revision requires a new draft; no model work or publication was authorized.'));
+        el('p', 'meta', when(data.decision.decidedAt)), el('p', 'prose', data.decision.feedback));
+      if (data.decision.decision === 'approved') {
+        add(gate, el('p', 'meta', 'Approved audience: ' + (data.audience || 'unavailable') +
+          '. Support-check calibration remains unvalidated and is retained as a memo limitation.'));
+        if (data.publishedArtifactRef) {
+          var download = el('a', 'btn-link', 'Download immutable Markdown + JSON package');
+          download.href = '/api/published-memo?run=' + encodeURIComponent(state.runId) + '&memo=' + encodeURIComponent(m.id);
+          add(gate, el('p', 'meta', 'Published locally by ' + data.publishedBy + ' · ' + when(data.publishedAt)), download);
+        } else {
+          var confirmPublish = el('input');
+          confirmPublish.type = 'checkbox';
+          add(gate, add(el('label', 'check'), confirmPublish,
+            el('span', null, 'Create the immutable package for this audience in the run folder.')));
+          var publish = C.actButton('Create local publication package', 'btn-primary', function () {
+            C.postAction({ action: 'publish-memo', runId: state.runId, memoId: m.id,
+              publisherId: C.analyst() }, 'Publishing memo');
+          }, true, !C.analyst() || !confirmPublish.checked);
+          confirmPublish.addEventListener('change', function () {
+            var blocked = !confirmPublish.checked || !C.analyst();
+            publish.setAttribute('data-blocked', blocked ? '1' : '');
+            publish.disabled = Boolean(state.busy) || blocked;
+          });
+          add(gate, add(el('div', 'btn-row'), publish));
+        }
+        return gate;
+      }
+      add(gate, el('p', 'meta', 'This decision is bound to the reviewed artifacts. A revision requires a new draft; no model work or publication was authorized.'));
       return add(gate, memoRevisionPanel(m, data));
     }
     var target = data.target;
@@ -2238,16 +2312,22 @@
       [target.memo, target.markdown, target.writer, target.verification, target.gate, target.calibrationPolicy]
         .map(function (binding) { return binding.artifactSha256; }).join(':') + ':';
     var form = el('form');
-    var decision = C.selectInput([['revision-requested', 'Request revision'], ['rejected', 'Reject memo']], key + 'decision', 'revision-requested');
+    var decision = C.selectInput([['revision-requested', 'Request revision'], ['rejected', 'Reject memo'],
+      ['approved', 'Approve for publication']], key + 'decision', 'revision-requested');
     var issue = C.selectInput([['', 'Choose an issue'], ['editorial', 'Editorial'], ['external-judgment', 'External judgement'],
       ['source-analysis', 'Source analysis'], ['organizational-relevance', 'Organizational relevance'],
       ['evidence-gap', 'Evidence gap'], ['standard-policy', 'Standard or policy']], key + 'issue', '');
-    var feedback = C.textInput(key + 'feedback', '', 'Explain what should change', true);
+    var issueField = C.field('Issue', issue);
+    var feedback = C.textInput(key + 'feedback', '', 'Record the decision rationale', true);
     feedback.maxLength = 2000;
     feedback.required = true;
     feedback.minLength = 3;
     add(form, el('p', 'meta', 'Reviewing draft version ' + target.memoVersion + '. Check each sampled statement against its quote before recording a decision.'),
-      add(el('div', 'form-grid'), C.field('Decision', decision), C.field('Issue', issue), C.field('Feedback', feedback, true)));
+      el('p', 'meta', 'Approval requires every policy sample to be supported and every deterministic blocker to be clear.'),
+      add(el('div', 'form-grid'), C.field('Decision', decision), issueField, C.field('Rationale', feedback, true)));
+    if (data.approvalBlockers && data.approvalBlockers.length) {
+      add(form, el('p', 'meta fail', 'Approval blocked: ' + data.approvalBlockers.join(', ')));
+    }
     var verdicts = [];
     if (!state.memoReviewClicks) state.memoReviewClicks = {};
     var clicks = state.memoReviewClicks[key] || (state.memoReviewClicks[key] = {});
@@ -2282,10 +2362,14 @@
     var save = C.actButton('Record decision', 'btn-primary', function () {}, true, true);
     save.type = 'submit';
     function update() {
-      var blocked = !C.analyst() || !confirm.checked || !issue.value || feedback.value.trim().length < 3 ||
-        verdicts.some(function (row) { return !row.input.value; });
+      var approving = decision.value === 'approved';
+      issueField.hidden = approving;
+      var blocked = !C.analyst() || !confirm.checked || (!approving && !issue.value) || feedback.value.trim().length < 3 ||
+        verdicts.some(function (row) { return !row.input.value; }) ||
+        (approving && (!data.approvalAvailable || verdicts.some(function (row) { return row.input.value !== 'supported'; })));
       save.setAttribute('data-blocked', blocked ? '1' : '');
       save.disabled = Boolean(state.busy) || blocked;
+      save.textContent = approving ? 'Approve for publication' : 'Record decision';
     }
     form.addEventListener('input', update);
     form.addEventListener('change', update);
@@ -2295,7 +2379,8 @@
       if (save.disabled) return;
       save.disabled = true;
       C.postAction({ action: 'record-memo-review', runId: state.runId, memoId: m.id, reviewerId: C.analyst(),
-        target: target, decision: decision.value, issueType: issue.value, feedback: feedback.value.trim(),
+        target: target, decision: decision.value, issueType: decision.value === 'approved' ? undefined : issue.value,
+        feedback: feedback.value.trim(),
         sampledVerdicts: verdicts.map(function (row) { return { observationId: row.sample.observationId, verdict: row.input.value }; }),
         drillDownVerdicts: Object.keys(clicks).map(function (id) { return clicks[id]; }) }).then(function (result) {
         if (result && result.ok) { C.dropDrafts(key); delete state.memoReviewClicks[key]; }
