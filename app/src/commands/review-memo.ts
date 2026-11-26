@@ -16,13 +16,30 @@ import { assuranceRunRoot, artifactRef, commandError, ensureDirectory, loadJsonA
 import { isWriterRecord, loadMemoInputs, reopenMemoRecord } from "./memo-execution-io.js";
 import { memoRevisionRoute } from "../workflow/memo-revision.js";
 
-const policyPath = resolve("src/modules/memo/standards/support-calibration-policy-v1.json");
+export const LEGACY_CALIBRATION_POLICY_PATH = resolve("src/modules/memo/standards/support-calibration-policy-v1.json");
+export const DEFAULT_CALIBRATION_POLICY_PATH = resolve("src/modules/memo/standards/support-calibration-policy-v2.json");
+const KNOWN_CALIBRATION_POLICY_PATHS = [DEFAULT_CALIBRATION_POLICY_PATH, LEGACY_CALIBRATION_POLICY_PATH];
 const optional = async (path: string) => {
   try { return await loadJsonArtifact(path); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }
 };
 
-export const loadMemoDraft = async (root: string, runId: string, memoId: string, depth = 0) => {
+const resolveCalibrationPolicyPath = async (root: string, runId: string, memoId: string, overridePath?: string) => {
+  if (overridePath) return resolve(overridePath);
+  const existing = await optional(resolve(root, runId, "memo", memoId, "review", "decision.json"));
+  if (existing && isRecord(existing.value) && isRecord(existing.value.target)) {
+    const binding = readArtifactBinding(existing.value.target.calibrationPolicy);
+    if (binding) {
+      const candidate = resolve(binding.artifactRef);
+      if (KNOWN_CALIBRATION_POLICY_PATHS.some((known) => known === candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return DEFAULT_CALIBRATION_POLICY_PATH;
+};
+
+export const loadMemoDraft = async (root: string, runId: string, memoId: string, depth = 0, policyPathOverride?: string) => {
   if (depth > 16) throw new Error("Memo revision lineage exceeds the supported depth.");
   if (!pathSafeId(runId) || !pathSafeId(memoId)) throw new Error("Valid run and memo IDs are required.");
   const run = resolve(root, runId);
@@ -97,7 +114,8 @@ export const loadMemoDraft = async (root: string, runId: string, memoId: string,
     if (!scope.ok) throw new Error("Approved memo audience is invalid.");
     audience = scope.value.audience.value;
   }
-  const policyArtifact = await loadJsonArtifact(policyPath);
+  const resolvedPolicyPath = await resolveCalibrationPolicyPath(root, runId, memoId, policyPathOverride);
+  const policyArtifact = await loadJsonArtifact(resolvedPolicyPath);
   const policy = validateSupportCalibrationPolicy(policyArtifact.value);
   if (!policy.ok) throw new Error("Invalid support calibration policy.");
   const target: MemoReviewTarget = { runId, memoId, memoVersion: record.memo.version,
@@ -105,7 +123,7 @@ export const loadMemoDraft = async (root: string, runId: string, memoId: string,
     writer: writer.binding, verification: verification.binding, gate: gate.binding,
     calibrationPolicy: policyArtifact.binding };
   return { target, record, authority, input, selection: { record: selected.value, binding: selection.binding },
-    markdown: markdown.toString("utf8"), audience, gate: gate.value };
+    markdown: markdown.toString("utf8"), audience, gate: gate.value, policy: policy.value };
 };
 
 type MemoReviewInspection = {
@@ -118,11 +136,9 @@ type MemoReviewInspection = {
   revisionRoute: ReturnType<typeof memoRevisionRoute>;
 };
 
-export const inspectMemoReview = async (root: string, runId: string, memoId: string, depth = 0): Promise<MemoReviewInspection> => {
-  const { target, record, input, audience, gate } = await loadMemoDraft(root, runId, memoId, depth);
+export const inspectMemoReview = async (root: string, runId: string, memoId: string, depth = 0, policyPathOverride?: string): Promise<MemoReviewInspection> => {
+  const { target, record, input, audience, gate, policy } = await loadMemoDraft(root, runId, memoId, depth, policyPathOverride);
   const directory = resolve(root, runId, "memo", memoId);
-  const policy = validateSupportCalibrationPolicy((await loadJsonArtifact(policyPath)).value);
-  if (!policy.ok) throw new Error("Invalid support calibration policy.");
   const samples: Array<{ observationId: string; text: string; quote: string; sourceNoteId: string }> = [];
   for (const binding of input.lineage.slice(3)) {
     const note = validateSynthesisSourceNote(requireChecksum(
@@ -136,10 +152,10 @@ export const inspectMemoReview = async (root: string, runId: string, memoId: str
   if (new Set(samples.map(row => row.observationId)).size !== samples.length) throw new Error("Sample observation IDs are ambiguous.");
   samples.sort((a, b) => sha256Text(`${target.memo.artifactSha256}:${a.observationId}`)
     .localeCompare(sha256Text(`${target.memo.artifactSha256}:${b.observationId}`)));
-  const selectedSamples = samples.slice(0, policy.value.sampleSizePerMemo);
+  const selectedSamples = samples.slice(0, policy.sampleSizePerMemo);
   const approvalBlockers = [...record.verification.blockers];
   if (!isRecord(gate) || gate.humanApprovalAvailable !== true) approvalBlockers.push("PUBLICATION_GATE_BLOCKED");
-  if (selectedSamples.length < policy.value.sampleSizePerMemo) approvalBlockers.push("INSUFFICIENT_CALIBRATION_SAMPLE");
+  if (selectedSamples.length < policy.sampleSizePerMemo) approvalBlockers.push("INSUFFICIENT_CALIBRATION_SAMPLE");
   const existing = await optional(resolve(directory, "review", "decision.json"));
   let decision = null;
   let decisionStatus = "pending";
@@ -186,24 +202,48 @@ export const inspectMemoReview = async (root: string, runId: string, memoId: str
     publishedAt = checkedPackage.value.publishedAt;
     publishedBy = checkedPackage.value.publishedBy;
   }
-  return { target, draftCreatedAt: record.memo.createdAt, sampleSize: policy.value.sampleSizePerMemo,
+  return { target, draftCreatedAt: record.memo.createdAt, sampleSize: policy.sampleSizePerMemo,
     samples: selectedSamples, approvalBlockers,
-    approvalAvailable: approvalBlockers.length === 0 && selectedSamples.length === policy.value.sampleSizePerMemo,
+    approvalAvailable: approvalBlockers.length === 0 && selectedSamples.length === policy.sampleSizePerMemo,
     decisionStatus, decision, decisionPath: existing ? artifactRef(existing.path) : null,
     audience, publishedArtifactRef, publishedAt, publishedBy, revisionRoute: memoRevisionRoute(decision) };
 };
 
-export const recordMemoReview = async (root: string, runId: string, memoId: string, submitted: unknown) => {
-  const review = await inspectMemoReview(root, runId, memoId);
+export const recordMemoReview = async (root: string, runId: string, memoId: string, submitted: unknown, policyPathOverride?: string) => {
+  const review = await inspectMemoReview(root, runId, memoId, 0, policyPathOverride);
   const result = createBoundMemoDecision({ submitted, target: review.target,
     selectedObservationIds: review.samples.map(row => row.observationId),
     approvalBlockers: review.approvalBlockers, decidedAt: new Date().toISOString() });
   if (!result.ok) throw new Error(`Memo review rejected: ${result.error}`);
-  const validTargets = new Set(review.samples.map(row => row.observationId));
   const value = result.value;
-  if (value.drillDownVerdicts.some(row => row.targetType !== "observation" || !validTargets.has(row.targetId) ||
-      Date.parse(row.clickedAt) < Date.parse(review.draftCreatedAt))) {
-    throw new Error("Drill-down verdicts must reference selected observations and follow draft creation.");
+  if (review.sampleSize > 0) {
+    const validTargets = new Set(review.samples.map(row => row.observationId));
+    if (value.drillDownVerdicts.some(row => row.targetType !== "observation" || !validTargets.has(row.targetId) ||
+        Date.parse(row.clickedAt) < Date.parse(review.draftCreatedAt))) {
+      throw new Error("Drill-down verdicts must reference selected observations and follow draft creation.");
+    }
+  } else if (value.drillDownVerdicts.length > 0) {
+    const draft = await loadMemoDraft(root, runId, memoId, 0, policyPathOverride);
+    const validClaims = new Set(draft.input.build.synthesis.claims.map((claim) => claim.id));
+    const validObservations = new Set<string>();
+    const validSources = new Set<string>();
+    for (const binding of draft.input.lineage.slice(3)) {
+      const note = validateSynthesisSourceNote(requireChecksum(
+        await loadRunArtifact(root, binding.artifactRef, "Source note"), binding.artifactSha256, "Source note").value);
+      if (!note.ok) throw new Error("Invalid source note.");
+      validSources.add(note.value.id);
+      validSources.add(note.value.sourceDocumentId);
+      for (const obs of note.value.inScopeObservations) validObservations.add(obs.observationId);
+    }
+    const invalidDrillDown = value.drillDownVerdicts.some((row) =>
+      Date.parse(row.clickedAt) < Date.parse(review.draftCreatedAt) ||
+      (row.targetType === "claim" && !validClaims.has(row.targetId)) ||
+      (row.targetType === "observation" && !validObservations.has(row.targetId)) ||
+      (row.targetType === "source" && !validSources.has(row.targetId))
+    );
+    if (invalidDrillDown) {
+      throw new Error("Drill-down verdicts must reference memo lineage items and follow draft creation.");
+    }
   }
   if (review.decisionStatus !== "pending") throw new Error("This memo already has an immutable decision. A revision requires a new draft, not an overwritten decision.");
   const directory = resolve(root, runId, "memo", memoId, "review");
@@ -218,7 +258,7 @@ export const recordMemoReview = async (root: string, runId: string, memoId: stri
       await file.writeFile(`${JSON.stringify(value, null, 2)}\n`);
       await file.sync();
     } finally { await file.close(); }
-    const current = await inspectMemoReview(root, runId, memoId);
+    const current = await inspectMemoReview(root, runId, memoId, 0, policyPathOverride);
     if (!isDeepStrictEqual(current.target, review.target)) throw new Error("STALE_MEMO_REVIEW");
     await link(longPath(temporary), longPath(destination));
   } finally { await unlink(longPath(temporary)); }
@@ -275,19 +315,47 @@ export const publishMemo = async (root: string, runId: string, memoId: string, p
   return { path: saved.publishedArtifactRef, publishedAt: saved.publishedAt, publishedBy: saved.publishedBy };
 };
 
+export const approveAndPublishMemo = async (
+  root: string,
+  runId: string,
+  memoId: string,
+  reviewerId: string,
+  feedback = "Approved for publication.",
+  drillDownVerdicts: import("../modules/memo/publication.js").DrillDownVerdict[] = []
+) => {
+  const review = await inspectMemoReview(root, runId, memoId);
+  if (review.decisionStatus === "pending") {
+    await recordMemoReview(root, runId, memoId, {
+      target: review.target,
+      reviewerId,
+      decision: "approved",
+      feedback: feedback.trim().length >= 3 ? feedback.trim() : "Approved for publication.",
+      sampledVerdicts: review.samples.map((row) => ({
+        observationId: row.observationId,
+        verdict: "supported" as const
+      })),
+      drillDownVerdicts
+    });
+  }
+  return publishMemo(root, runId, memoId, reviewerId);
+};
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
     const [mode, runId, memoId, payloadPath, ...extra] = process.argv.slice(2);
-    if (!runId || !memoId || extra.length || !["inspect", "record", "publish"].includes(mode ?? "") ||
-        (mode === "record" ? !payloadPath : mode === "publish" ? !payloadPath : !!payloadPath)) {
-      throw new Error("Usage: npm run review:memo -- inspect <run-id> <memo-id> | record <run-id> <memo-id> <review-input.json> | publish <run-id> <memo-id> <publisher-id>");
+    const invalidExtra = mode === "approve-and-publish" ? extra.length > 1 : extra.length > 0;
+    if (!runId || !memoId || invalidExtra || !["inspect", "record", "publish", "approve-and-publish"].includes(mode ?? "") ||
+        (mode === "record" ? !payloadPath : (mode === "publish" || mode === "approve-and-publish") ? !payloadPath : !!payloadPath)) {
+      throw new Error("Usage: npm run review:memo -- inspect <run-id> <memo-id> | record <run-id> <memo-id> <review-input.json> | publish <run-id> <memo-id> <publisher-id> | approve-and-publish <run-id> <memo-id> <reviewer-id> [feedback]");
     }
     const result = mode === "record"
       ? await recordMemoReview(assuranceRunRoot(), runId, memoId, (await loadJsonArtifact(resolve(payloadPath!))).value)
       : mode === "publish"
         ? await publishMemo(assuranceRunRoot(), runId, memoId, payloadPath!)
-        : await inspectMemoReview(assuranceRunRoot(), runId, memoId);
-    console.log(`${mode === "publish" ? "Published" : "Review"}: ${JSON.stringify(result)}`);
+        : mode === "approve-and-publish"
+          ? await approveAndPublishMemo(assuranceRunRoot(), runId, memoId, payloadPath!, extra[0])
+          : await inspectMemoReview(assuranceRunRoot(), runId, memoId);
+    console.log(`${mode === "publish" || mode === "approve-and-publish" ? "Published" : "Review"}: ${JSON.stringify(result)}`);
   } catch (error) {
     console.error(`Memo review failed: ${commandError(error)}`);
     process.exitCode = 1;

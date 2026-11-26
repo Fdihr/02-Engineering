@@ -165,6 +165,13 @@ C.panes.settings();
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
+    def test_two_gate_memo_review_frontend(self):
+        result = subprocess.run(
+            ["node", str(Path(__file__).parent / "test_workflow_review.cjs")],
+            capture_output=True, text=True, timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_artifacts_are_confined_and_server_rejects_writes(self):
         with urlopen(self.base + "/api/artifact?" + urlencode({"path": "note.json"})) as response:
             self.assertEqual(json.loads(response.read()), {"safe": True})
@@ -698,7 +705,7 @@ C.panes.settings();
             status, result = _handle_analyst_action(runs_root, run_dir, base)
             self.assertEqual(status, 200, result)
             self.assertEqual(runner.call_args.args[0], "prepare:key-judgements")
-            self.assertEqual(runner.call_args.args[1][-1], "src/modules/memo/standards/memo-standard-v2.json")
+            self.assertEqual(runner.call_args.args[1][-1], "src/modules/memo/standards/memo-standard-v3.json")
             self.assertEqual(runner.call_args.kwargs["runs_root"], runs_root)
             self.assertEqual(_handle_analyst_action(runs_root, run_dir, base)[0], 409)
         out = run_dir / "synthesis" / "adjudication" / "synthesis-challenge-record-abc"
@@ -868,6 +875,72 @@ C.panes.settings();
         self.assertIsNone(read_lead(self.run_dir, "test-run", "discoveries/../raw-pages/x.json", "cr-1"))
         with urlopen(self.base + "/api/lead?" + urlencode({"path": ref, "id": "42"})) as response:
             self.assertEqual(json.loads(response.read())["summary"], "Plain summary.")
+
+    def test_pipeline_status_normalizes_ts_schema_and_detects_interruption(self):
+        from dashboard import pipeline_runner
+        from dashboard.scan import list_available_runs
+
+        with tempfile.TemporaryDirectory() as tmp_root:
+            runs_root = Path(tmp_root)
+            target_dir = runs_root / "test-run"
+            pipe_dir = target_dir / "pipeline"
+            pipe_dir.mkdir(parents=True, exist_ok=True)
+            status_file = pipe_dir / "status.json"
+            status_file.write_text(json.dumps({
+                "schemaVersion": "pipeline-status-v1",
+                "runId": "test-run",
+                "state": "running",
+                "currentStage": "adjudication",
+                "stageDetail": "Adjudicating adversarial challenges...",
+                "counts": {
+                    "discoveredCandidates": 14,
+                    "seeristAnalysisFound": 2,
+                    "externalArticlesCaptured": 4,
+                    "sourcesAssured": 5,
+                    "claimsBuilt": 6,
+                },
+                "sources": [],
+            }), encoding="utf-8")
+
+            # When worker is active, status stays running and maps adjudication -> synthesis
+            pipeline_runner.ACTIVE.add(target_dir.resolve())
+            try:
+                live = pipeline_runner.status(runs_root, "test-run")
+                self.assertEqual(live["status"], "running")
+                self.assertEqual(live["stage"], "synthesis")
+                self.assertEqual(live["message"], "Adjudicating adversarial challenges...")
+                self.assertEqual(live["counts"]["leads"], 14)
+                self.assertEqual(live["counts"]["capturedSources"], 6)
+                self.assertEqual(live["counts"]["assuredSources"], 5)
+                self.assertEqual(live["counts"]["claims"], 6)
+                runs = list_available_runs(runs_root, active_runs=pipeline_runner.ACTIVE)
+                row = next(r for r in runs if r["runId"] == "test-run")
+                self.assertEqual(row["status"], "running")
+                self.assertEqual(row["sourceCount"], 5)
+            finally:
+                pipeline_runner.ACTIVE.discard(target_dir.resolve())
+
+            # When worker stops without writing terminal state, status reports interrupted
+            stopped = pipeline_runner.status(runs_root, "test-run")
+            self.assertEqual(stopped["status"], "interrupted")
+            self.assertIn("stopped before finishing", stopped["error"])
+            runs_after = list_available_runs(runs_root, active_runs=pipeline_runner.ACTIVE)
+            row_after = next(r for r in runs_after if r["runId"] == "test-run")
+            self.assertEqual(row_after["status"], "interrupted")
+
+            # When pipeline finishes into memo-review, status maps to ready-for-review
+            status_file.write_text(json.dumps({
+                "schemaVersion": "pipeline-status-v1",
+                "runId": "test-run",
+                "state": "memo-review",
+                "currentStage": "complete",
+                "stageDetail": "Memo draft verified and ready for review.",
+                "counts": {"sourcesAssured": 5},
+                "sources": [],
+            }), encoding="utf-8")
+            done = pipeline_runner.status(runs_root, "test-run")
+            self.assertEqual(done["status"], "ready-for-review")
+            self.assertEqual(done["stage"], "completed")
 
 
 if __name__ == "__main__":

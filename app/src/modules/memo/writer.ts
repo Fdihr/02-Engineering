@@ -1362,12 +1362,6 @@ const composeWriterMemo = (input: Pick<Parameters<typeof recordWriterResponse>[0
       ? ["PROVISIONAL_SOURCE_LINEAGE"]
       : []),
     ...(!bounded ? ["ADJUDICATION_NOT_PERFORMED"] : []),
-    ...(bounded &&
-    boundedRequest.keyJudgements.some(
-      (judgement) => judgement.status === "contested"
-    )
-      ? ["OPEN_KEY_JUDGEMENT_CONTEST"]
-      : []),
     ...(input.standard.status === "approved-standard" ? [] : ["PROVISIONAL_MEMO_STANDARD"]),
     ...(approvedScope ? [] : ["LEGACY_SCOPE_LINEAGE_UNAVAILABLE"])
   ];

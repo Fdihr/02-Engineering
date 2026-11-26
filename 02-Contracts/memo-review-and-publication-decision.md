@@ -20,31 +20,14 @@ Restoring byte-identical artifacts does not create a new version.
 
 ## Human decision
 
-The dashboard offers **Approve for publication**, **Request revision** and
-**Reject memo**, with an explicit reviewer, rationale, and exact-draft
-confirmation. Non-approval decisions also require an issue category. The server
-uses the authenticated reviewer when authentication is enabled. Local CLI
-reviewer attribution is an explicit operator assertion, not an identity proof.
+In the 2-gate workflow, the default calibration policy is
+`support-calibration-policy-v2.json` (`sampleSize: 0`). Because verbatim quote
+verification already executes deterministically during automated source assurance,
+Gate 2 requires **zero manual quote-quiz dropdowns**:
+- `review:memo approve-and-publish <run-id> <memo-id> <reviewer-id> [notes]` (and dashboard action `approve-and-publish`) atomically inspects the version-bound target, records the immutable `approved` `memo-publication-decision-v3` receipt, and writes the immutable local publication package `runs/<run-id>/published/<memo-id>/publication.json` in one click.
+- Analysts can also inspect verbatim quotes and open original external articles directly from inline `[N Publisher]` pills and the `Source & quote inspector` before publishing, or open the optional editorial revision drawer (`record-memo-review` with `decision: "revision-requested", issueType: "editorial"` followed by `start-memo-revision`).
 
-`memo-publication-decision-v3` retains the v2 decision fields and adds the
-complete target, selected observation IDs and `calibrationStatus: not-reached`.
-Older v2 decisions remain historical and are not treated as version-bound approval.
-No chat or model output submits a decision by itself.
-
-Sampling is deterministic: rank the original envelope's in-scope observations
-by the SHA-256 of memo checksum plus observation ID, then take up to the
-policy sample size (currently five). Every selected observation requires a
-supported/unsupported/uncertain verdict; no verdict is preselected. Fewer
-available observations are shown honestly and add an insufficient-sample
-publication blocker. Empty drafts may receive non-approval decisions, never
-publication authority. Opening a sampled quote records an observation
-drill-down timestamp; unknown targets and future timestamps are rejected.
-Approval is available only when the deterministic writer blockers are clear
-and the full five-observation sample is present. Every sampled verdict must be
-supported; unsupported or uncertain samples remain review blockers. The
-provisional model-only support calibration threshold does not block a human
-decision, but `support check: model-only, unvalidated` remains explicit and
-runtime measurements cannot approve that threshold.
+For historical compatibility, `support-calibration-policy-v1.json` (`sampleSize: 5`) remains supported by the deterministic validator and CLI (`review:memo inspect` / `review:memo record`) when explicitly passed. No chat or model output submits a publication decision by itself.
 
 ## Persistence and stale review
 

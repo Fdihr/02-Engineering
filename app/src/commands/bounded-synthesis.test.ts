@@ -24,7 +24,7 @@ import { validateChallengeRequest, type ChallengeRequest } from "../modules/synt
 import type { SynthesisBuildRequest } from "../modules/synthesis/types.js";
 import { inspectBoundedMemo, runBoundedMemo, type MemoEffects } from "./bounded-memo.js";
 import { validateMemoAuthorization, type MemoAuthorization } from "../workflow/bounded-memo.js";
-import { inspectMemoReview, publishMemo, recordMemoReview } from "./review-memo.js";
+import { approveAndPublishMemo, inspectMemoReview, LEGACY_CALIBRATION_POLICY_PATH, publishMemo, recordMemoReview } from "./review-memo.js";
 import { createBoundMemoDecision } from "../modules/memo/publication.js";
 import { inspectMemoRevision, runMemoRevision, type RevisionEffects } from "./revise-memo.js";
 import { reserveManualMemo, loadMemoInputs } from "./memo-execution-io.js";
@@ -336,7 +336,8 @@ test("new bounded memo permits a long draft without word budgeting or another ca
     assert.ok(markdown.trim().split(/\s+/).length > 1_000);
     assert.equal(record.memo.memoStandardVersion, 3);
     assert.ok(!record.memo.publicationBlockers.includes("PROVISIONAL_MEMO_STANDARD"));
-    assert.equal((await inspectMemoReview(f.root, f.runId, record.memo.id)).approvalAvailable, false);
+    assert.equal((await inspectMemoReview(f.root, f.runId, record.memo.id)).approvalAvailable, true);
+    assert.equal((await inspectMemoReview(f.root, f.runId, record.memo.id, 0, LEGACY_CALIBRATION_POLICY_PATH)).approvalAvailable, false);
     await runBoundedMemo(f.root, f.runId, "resume", undefined, undefined, runner);
     assert.deepEqual(runner.calls, ["key-judgements", "writer"]);
   } finally { await rm(f.root, { recursive: true, force: true }); }
@@ -464,7 +465,7 @@ test("editorial revision freezes one writer call and preserves originals with fr
     const review = await inspectMemoReview(f.root, f.runId, execution.memoId!);
     assert.equal(review.decisionStatus, "pending");
     assert.equal(review.target.memoVersion, 2);
-    assert.equal(review.approvalAvailable, false);
+    assert.equal(review.approvalAvailable, true);
     await json(resolve(f.root, ".copilot-settings.json"), { model: "changed-later" });
     await runMemoRevision(f.root, f.runId, f.original.memo.id, "start", "LATER", { runModel: f.runModel });
     await runMemoRevision(f.root, f.runId, f.original.memo.id, "resume", undefined, { runModel: f.runModel });
@@ -579,7 +580,7 @@ test("memo review binds exact handoff, blocks approval and records one immutable
     const execution = await inspectBoundedMemo(f.root, f.runId);
     const writerPath = execution.stages.writer.record!.artifactRef;
     const writer = await read(writerPath);
-    const review = await inspectMemoReview(f.root, f.runId, writer.memo.id);
+    const review = await inspectMemoReview(f.root, f.runId, writer.memo.id, 0, LEGACY_CALIBRATION_POLICY_PATH);
     assert.equal(review.approvalAvailable, false);
     assert.ok(review.samples.length > 0);
     const submitted = { target: review.target, reviewerId: "REVIEWER", decision: "revision-requested",
@@ -587,13 +588,13 @@ test("memo review binds exact handoff, blocks approval and records one immutable
       sampledVerdicts: review.samples.map(row => ({ observationId: row.observationId, verdict: "supported" })),
       drillDownVerdicts: review.samples.map(row => ({ targetType: "observation", targetId: row.observationId, clickedAt: now() })) };
     await assert.rejects(recordMemoReview(f.root, f.runId, writer.memo.id,
-      { ...submitted, decision: "approved" }), /PUBLICATION_BLOCKED/);
+      { ...submitted, decision: "approved" }, LEGACY_CALIBRATION_POLICY_PATH), /PUBLICATION_BLOCKED/);
     await assert.rejects(recordMemoReview(f.root, f.runId, writer.memo.id,
-      { ...submitted, target: { ...review.target, markdown: { ...review.target.markdown, artifactSha256: "a".repeat(64) } } }), /STALE_MEMO_REVIEW/);
+      { ...submitted, target: { ...review.target, markdown: { ...review.target.markdown, artifactSha256: "a".repeat(64) } } }, LEGACY_CALIBRATION_POLICY_PATH), /STALE_MEMO_REVIEW/);
     await assert.rejects(recordMemoReview(f.root, f.runId, writer.memo.id,
-      { ...submitted, sampledVerdicts: [] }), /INCOMPLETE_MEMO_SAMPLE/);
-    const recorded = await Promise.allSettled([recordMemoReview(f.root, f.runId, writer.memo.id, submitted),
-      recordMemoReview(f.root, f.runId, writer.memo.id, submitted)]);
+      { ...submitted, sampledVerdicts: [] }, LEGACY_CALIBRATION_POLICY_PATH), /INCOMPLETE_MEMO_SAMPLE/);
+    const recorded = await Promise.allSettled([recordMemoReview(f.root, f.runId, writer.memo.id, submitted, LEGACY_CALIBRATION_POLICY_PATH),
+      recordMemoReview(f.root, f.runId, writer.memo.id, submitted, LEGACY_CALIBRATION_POLICY_PATH)]);
     assert.equal(recorded.filter(result => result.status === "fulfilled").length, 1);
     const after = await inspectMemoReview(f.root, f.runId, writer.memo.id);
     assert.equal(after.decisionStatus, "recorded");
@@ -658,7 +659,10 @@ test("bounded memo freezes authority and stops at memo review when the policy sa
     const gate = await read(resolve(dirname(execution.stages.writer.record!.artifactRef), "publication-gate.json"));
     assert.equal(gate.status, "ready");
     assert.equal(gate.humanApprovalAvailable, true);
-    const review = await inspectMemoReview(f.root, f.runId, record.memo.id);
+    const zeroQuizReview = await inspectMemoReview(f.root, f.runId, record.memo.id);
+    assert.equal(zeroQuizReview.sampleSize, 0);
+    assert.equal(zeroQuizReview.approvalAvailable, true);
+    const review = await inspectMemoReview(f.root, f.runId, record.memo.id, 0, LEGACY_CALIBRATION_POLICY_PATH);
     assert.equal(review.approvalAvailable, false);
     assert.ok(review.approvalBlockers.includes("INSUFFICIENT_CALIBRATION_SAMPLE"));
     await json(resolve(f.root, ".copilot-settings.json"), { model: "different-later-model" });
@@ -721,7 +725,7 @@ test("approved memo is published once as an immutable local Markdown and JSON pa
   } finally { await rm(f.root, { recursive: true, force: true }); }
 });
 
-test("bounded memo preserves contested claims and publication blockers", async () => {
+test("bounded memo preserves contested claims as non-blocking caveats and supports one-click publish", async () => {
   const f = await memoFixture(true);
   try {
     const runner = memoRunner(f);
@@ -731,7 +735,10 @@ test("bounded memo preserves contested claims and publication blockers", async (
     const record = await read(execution.stages.writer.record!.artifactRef);
     assert.equal(record.memo.keyJudgments[0].statement.status, "contested");
     assert.ok(record.memo.keyJudgments[0].statement.openChallengeIds.length);
-    assert.ok(record.memo.publicationBlockers.includes("OPEN_KEY_JUDGEMENT_CONTEST"));
+    assert.ok(!record.memo.publicationBlockers.includes("OPEN_KEY_JUDGEMENT_CONTEST"));
+    const published = await approveAndPublishMemo(f.root, f.runId, record.memo.id, "ANALYST");
+    assert.ok(published.path);
+    assert.equal(published.publishedBy, "ANALYST");
   } finally { await rm(f.root, { recursive: true, force: true }); }
 });
 
@@ -1279,7 +1286,8 @@ test("a later adjudicated synthesis round authorizes its own bounded memo round 
     const round1AuthBytes = await readFile(resolve(f.memoDirectory, "authorization.json"), "utf8");
     const round1Exec = await inspectBoundedMemo(f.root, f.runId);
     const round1Memo = await read(round1Exec.stages.writer.record!.artifactRef);
-    assert.ok(round1Memo.memo.publicationBlockers.includes("OPEN_KEY_JUDGEMENT_CONTEST"));
+    assert.equal(round1Memo.memo.keyJudgments[0]?.statement.status, "contested");
+    assert.deepEqual(round1Memo.memo.publicationBlockers, []);
 
     await new Promise(resolveDelay => setTimeout(resolveDelay, 15));
     const policyArtifact = await loadJsonArtifact(resolve("src/modules/synthesis/policies/geopolitical-synthesis-v1.json"));

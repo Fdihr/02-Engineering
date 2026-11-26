@@ -200,6 +200,7 @@ const freezeAuthorization = async (root: string, runId: string, analyst: string,
         outletIdentityTable: checkedOutlets.value, outletIdentityArtifact: outlets, createdAt: approvedAt
       });
       if (!envelope.ok) throw new Error(`Build envelope rejected before authorization: ${envelope.error}`);
+      sources = envelope.value.sourceNotes;
       buildEnvelopeId = envelope.value.id;
     }
   }

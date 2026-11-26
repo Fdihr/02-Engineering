@@ -1,23 +1,27 @@
 # Implemented Workflow Baseline
 
-Status: Historical Firecrawl retrieval is retired. Bounded RSS batches and a
-separate local exact-URL article adapter now reach canonicalization, relevance
-and explicitly governed relevant-only admission. Historical leads remain
-pending; neither adapter automatically resolves them. Panel 2 exercised
-provisional review and then completed a human rows-only support pass. Panel 3
-has a bounded key-judgement selection contract and writer v2 path; the reviewed
-Build request still needs a fresh response, Challenge, and performed adjudication.
-The bounded execution path below is implemented and synthetically verified;
-it has not been run against that existing analysis.
+Status: CTI Bench now operates on a **two-gate human operating model**:
+- **Gate 1 (`#/new`)**: Human approves the AI-drafted research plan (scope, research question, information requirements, Seerist search queries, and an external publisher article budget defaulting to 6).
+- **Automated pipeline (`npm run pipeline:run` / `dashboard/pipeline_runner.py`)**: Runs end to end without mid-run human stops — Seerist `/v1/wod` collection, provider-item triage, native Seerist `analysis` full-text admission plus bounded local exact-URL publisher capture, question relevance (`v2`), deterministic verbatim-quote source assurance (`auto-assure:source`), synthesis `Build` + adversarial `Challenge`, deterministic challenge adjudication (surfacing contested claims as explicit caveats and capping confidence to `low` without halting), key-judgement selection, and `memo-standard-v3` writing + 11 deterministic verification checks.
+- **Gate 2 (`#/review`)**: Human reads the finished executive memo with clickable inline `[N Publisher]` pills, `Caveat` badges, verbatim-quote inspection, direct external source links, optional editorial revision, and 1-click publication (`approve-and-publish` under `support-calibration-policy-v2`, `sampleSize: 0`).
 
-The local adapter uses Node HTTPS, Readability and a non-executing jsdom
-document. It needs no scraping service, MCP or key. Its one-source approval,
-network limits, immutable artifacts, trust boundary and separate source
-identity are defined in [the active contract](../02-Contracts/local-article-retrieval.md).
-Admission does not claim completed source assurance. RSS remains the first
-live-validated acquisition path; see persisted run receipts for actual outcomes.
+The local article adapter uses Node HTTPS, Readability and a non-executing jsdom
+document. It needs no scraping service, MCP or key. Its network limits,
+immutable artifacts, trust boundary and separate source identity are defined in
+[the active contract](../02-Contracts/local-article-retrieval.md).
 
-Human references below are either one of the four target surfaces (intent, publication, pushed exceptions, governance), compatibility history, or an interim stand-in named in `memo-workflow.md`. Per-source review and manual model transport are not additional permanent human surfaces.
+## Implemented two-gate automated pipeline (2026-11-24)
+
+`npm run pipeline:run -- <run-id> [reviewer-id] [max-external-articles]` and the
+dashboard background runner (`POST /api/action` with `action: "run-pipeline"`,
+or `runPipeline: true` on Gate 1 plan approval) execute the complete post-plan
+workflow idempotently from persisted run artifacts:
+
+1. **Collection & capture**: Executes unrun approved Seerist discovery queries, classifies provider items, canonicalizes full-text Seerist `analysis` reports directly, and fetches up to `maxExternalArticles` (default `6`) external publisher leads via the safe local Readability adapter. Failed or unreachable URLs are skipped cleanly without stopping the run.
+2. **Relevance & extraction**: Runs `relevance-v2` screening, admits relevant sources under policy, and extracts structured observations with verbatim quotes.
+3. **Automated source assurance (`auto-assure:source`)**: Deterministically verifies that each extracted quote appears in the canonical source snapshot (`supported` vs `unsupported`), classifies outlet credibility via `geopolitical-outlets-v1.json`, and emits non-provisional `source-note` artifacts.
+4. **Synthesis, challenge & caveat preservation**: Runs bounded `Build` and adversarial `Challenge`, then records deterministic adjudication (`autoAdjudicateChallengeRecord`) where `high`/`moderate` challenges mark claims `contested` (retaining open caveats and capping key-judgement confidence at `low`) and `low` challenges remain `accepted`. Open challenges surface visibly in the memo rather than blocking `OPEN_KEY_JUDGEMENT_CONTEST`.
+5. **Memo writing & Gate 2 readiness**: Runs bounded key-judgement selection and `memo-standard-v3` writing, passes deterministic verification, and prepares Gate 2 review under `support-calibration-policy-v2.json` (`sampleSize: 0`).
 
 ## Implemented shared next-action projection (2026-11-04)
 

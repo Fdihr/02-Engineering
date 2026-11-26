@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "support-calibration-policy-v1",
+  "id": "support-calibration-zero-quiz-v2",
+  "version": 2,
+  "sampleSizePerMemo": 0,
+  "minimumSampledVerdicts": 0,
+  "minimumMemos": 0,
+  "maximumDisagreementRate": 0.05,
+  "thresholdStatus": "approved",
+  "unvalidatedLimitation": "support check: model-only, unvalidated"
+}

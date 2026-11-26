@@ -58,3 +58,22 @@ def publish(root: Path, payload: dict[str, Any], command: Callable[..., dict[str
         return 200, {"ok": True, **value, "message": "Immutable local publication package created."}
     except (OSError, ValueError) as error:
         return 409, {"ok": False, "error": str(error)}
+
+
+def approve_and_publish(root: Path, payload: dict[str, Any], command: Callable[..., dict[str, Any]]) -> tuple[int, dict[str, Any]]:
+    run_id, memo_id, reviewer = (payload.get(key) for key in ("runId", "memoId", "reviewerId"))
+    if not all(isinstance(value, str) and SAFE_ID.fullmatch(value) for value in (run_id, memo_id, reviewer)):
+        return 400, {"ok": False, "error": "A valid run, memo and explicit analyst ID are required."}
+    feedback = str(payload.get("feedback") or "Reviewed and approved for publication.").strip()
+    if len(feedback) < 3:
+        feedback = "Reviewed and approved for publication."
+    try:
+        step = command("review:memo", ["approve-and-publish", run_id, memo_id, reviewer, feedback[:2000]], runs_root=root)
+        value = _result(step, "Published: ")
+        artifact = value.get("path")
+        if not isinstance(artifact, str) or not artifact:
+            raise ValueError("Publication returned no artifact path. Inspect the run before retrying.")
+        return 200, {"ok": True, "runId": run_id, **value, "message": "Memo approved and published."}
+    except (OSError, ValueError) as error:
+        return 409, {"ok": False, "error": str(error)}
+

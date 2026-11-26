@@ -197,7 +197,14 @@ def _note_index(full: dict[str, Any], candidates: dict[str, dict[str, Any]]) -> 
             for obs in _arr(value.get(group)):
                 obs = _rec(obs)
                 if _txt(obs.get("observationId")):
-                    observations[obs["observationId"]] = {"text": _txt(obs.get("text")), "quote": _txt(obs.get("quote"))}
+                    observations[obs["observationId"]] = {
+                        "observationId": _txt(obs.get("observationId")),
+                        "text": _txt(obs.get("text")),
+                        "quote": _txt(obs.get("quote")),
+                        "claimKind": _txt(obs.get("claimKind")),
+                        "attribution": _txt(obs.get("attribution")),
+                        "attributedTo": _txt(obs.get("attributedTo")),
+                    }
         notes[note_id] = {
             "noteId": note_id,
             "relPath": rel,
@@ -457,7 +464,21 @@ def _memo_view(run_id: str, full: dict[str, Any], rounds: list[dict[str, Any]], 
             quotes = [note["observations"][o] for o in claim["observationIds"] if o in note["observations"]]
             sources.append({"noteId": note_id, "title": note["title"], "url": note["url"], "publisher": note["publisher"],
                             "reviewStatus": note["reviewStatus"], "quotes": quotes})
-        claims[claim["claimId"]] = {**{k: claim[k] for k in ("statement", "kind", "confidence", "status", "singleSource", "alias")}, "sources": sources}
+        claims[claim["claimId"]] = {
+            **{k: claim[k] for k in ("statement", "kind", "confidence", "status", "singleSource", "alias")},
+            "ceiling": _txt(claim.get("ceiling")),
+            "challenges": [
+                {
+                    "id": _txt(ch.get("id")),
+                    "check": _txt(ch.get("check")),
+                    "rationale": _txt(ch.get("rationale")),
+                    "hypothesis": _txt(ch.get("hypothesis")),
+                    "decision": _txt(ch.get("decision")),
+                }
+                for ch in _arr(claim.get("challenges"))
+            ],
+            "sources": sources,
+        }
 
     verification = _rec(full.get(f"{folder}/verification.json"))
     gate = _rec(full.get(f"{folder}/publication-gate.json"))

@@ -18,6 +18,7 @@ import {
 } from "../memo/writer.js";
 import type { ChallengeRecord } from "./challenge.js";
 import {
+  createAutomatedAdjudication,
   createKeyJudgementRequest,
   projectClaimsForKeyJudgementSelection,
   recordKeyJudgementResponse,
@@ -681,7 +682,7 @@ test("writer v2 consumes bounded selected judgements without model rewriting", a
     )
   );
   assert.ok(
-    recorded.value.memo.publicationBlockers.includes(
+    !recorded.value.memo.publicationBlockers.includes(
       "OPEN_KEY_JUDGEMENT_CONTEST"
     )
   );
@@ -771,5 +772,20 @@ test("writer v2 consumes bounded selected judgements without model rewriting", a
   assert.deepEqual(scopedRecorded.value.memo.approvedScope, scopedRequest.value.approvedScope);
   assert.deepEqual(scopedRecorded.value.memo.sourcingSummary.reportingDependencies, [
     "Reporting dependency is mixed: NCSC-NL, Modat."
+  ]);
+
+  const automated = createAutomatedAdjudication({
+    buildRecord,
+    buildRecordArtifact: buildArtifact,
+    challengeRecord,
+    challengeRecordArtifact: challengeArtifact,
+    createdAt: "2026-09-03T10:09:00.000Z"
+  });
+  assert.equal(automated.ok, true);
+  if (!automated.ok) return;
+  assert.equal(validatePerformedAdjudication(automated.value).ok, true);
+  assert.deepEqual(automated.value.claims, [
+    { claimId: "claim-a", status: "accepted", openChallengeIds: [] },
+    { claimId: "claim-b", status: "contested", openChallengeIds: ["challenge-b"] }
   ]);
 });

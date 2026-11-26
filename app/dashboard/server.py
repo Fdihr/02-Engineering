@@ -21,7 +21,7 @@ from string import Template
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from . import auth, settings, rss, bounded_synthesis, memo_review
+from . import auth, settings, rss, bounded_synthesis, memo_review, pipeline_runner
 from .model import RELEVANCE_REQUEST_PATH, ai_stage_for, build_run_view
 from .relevance_bridge import build_relevance_prompt, build_response, parse_model_answer
 from .scan import _fs_path, list_available_runs, read_artifact_text, resolve_inside_run, scan_run_directory
@@ -474,7 +474,7 @@ def _handle_assurance_review(runs_root: Path, payload: dict[str, Any]) -> tuple[
     return (200 if succeeded else 400), {"ok": succeeded, "runId": run_id, "steps": steps, "error": "" if succeeded else steps[-1]["stderr"]}
 
 
-MEMO_STANDARD = "src/modules/memo/standards/memo-standard-v2.json"
+MEMO_STANDARD = "src/modules/memo/standards/memo-standard-v3.json"
 ASSURANCE_POLICY = "src/modules/assurance/policies/geopolitical-source-assurance-v4.json"
 SYNTHESIS_POLICY = "src/modules/synthesis/policies/geopolitical-synthesis-v1.json"
 OUTLET_TABLE = "src/modules/synthesis/policies/geopolitical-outlets-v1.json"
@@ -1045,6 +1045,10 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
 
 def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     action = payload.get("action")
+    if action == "approve-and-publish":
+        return memo_review.approve_and_publish(runs_root, payload, _run_npm_script)
+    if action in ("run-pipeline", "resume-pipeline"):
+        return pipeline_runner.start(runs_root, payload, _run_npm_script, COPILOT_LOCK)
     if action == "record-memo-review":
         return memo_review.record(runs_root, payload, _run_npm_script)
     if action == "publish-memo":
@@ -1169,6 +1173,14 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
                 return 400, {"ok": False, "error": "Minimum lead score must be an integer from 1 to 20."}
             if not 1 <= min_score <= 20:
                 return 400, {"ok": False, "error": "Minimum lead score must be an integer from 1 to 20."}
+        max_external = pipeline_runner.DEFAULT_MAX_EXTERNAL_ARTICLES
+        if payload.get("runPipeline") is True or "maxExternalArticles" in payload:
+            try:
+                max_external = int(payload.get("maxExternalArticles", pipeline_runner.DEFAULT_MAX_EXTERNAL_ARTICLES))
+            except (ValueError, TypeError):
+                return 400, {"ok": False, "error": "External source budget must be an integer from 1 to 20."}
+            if not 1 <= max_external <= 20:
+                return 400, {"ok": False, "error": "External source budget must be from 1 to 20."}
 
         target_run_dir = (runs_root / run_id).resolve()
         proposals_dir = target_run_dir / "proposals"
@@ -1264,10 +1276,26 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
                     "maxResults": 50,
                     "minimumScore": max(1, min_score),
                 })
-                step4 = _run_npm_script("discover:seerist", [f"runs/{run_id}/proposals/{plan_id}.json", rel_approved_rq], timeout_sec=120)
-                steps.append(step4)
-                if not step4["ok"]:
-                    return 400, {"ok": False, "runId": run_id, "steps": steps, "error": step4["stderr"] or step4["stdout"]}
+                if payload.get("runPipeline") is not True:
+                    step4 = _run_npm_script("discover:seerist", [f"runs/{run_id}/proposals/{plan_id}.json", rel_approved_rq], timeout_sec=120, runs_root=runs_root)
+                    steps.append(step4)
+                    if not step4["ok"]:
+                        return 400, {"ok": False, "runId": run_id, "steps": steps, "error": step4["stderr"] or step4["stdout"]}
+
+        if payload.get("runPipeline") is True:
+            pipe_code, pipe_body = pipeline_runner.start(
+                runs_root,
+                {"runId": run_id, "reviewerId": reviewer_id, "maxExternalArticles": max_external},
+                _run_npm_script,
+                COPILOT_LOCK,
+            )
+            return 200, {
+                "ok": True,
+                "runId": run_id,
+                "steps": steps,
+                "pipelineStarted": pipe_code in (200, 202),
+                "pipeline": pipe_body,
+            }
 
         return 200, {"ok": True, "runId": run_id, "steps": steps}
 
@@ -1441,11 +1469,12 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
                                        memo_execution if memo_execution and memo_execution.get("authorized") else execution)
                 view = build_run_view(target_id, scan["files"], scan["jsons"], scan["events"], scanned_at, projected_execution, str(target_dir))
                 view["truncated"] = scan["truncated"]
-                view["availableRuns"] = list_available_runs(runs_root)
+                view["availableRuns"] = list_available_runs(runs_root, active_runs=pipeline_runner.ACTIVE)
                 view["rss"]["feeds"] = rss.feeds()
                 view["boundedSynthesis"] = execution
                 view["boundedMemo"] = memo_execution
                 view["memoRevision"] = revision_execution
+                view["pipeline"] = pipeline_runner.status(runs_root, target_id)
                 memo = view["journey"].get("memo")
                 view["memoReview"] = memo_review.status(runs_root, target_id, memo["id"], _run_npm_script) if memo else None
                 for batch in view["rss"]["batches"]:
@@ -1583,7 +1612,7 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
                 self._send(200, "text/html; charset=utf-8", render_page(target_id))
                 return
             if parsed.path == "/api/runs":
-                self._send(200, "application/json; charset=utf-8", json.dumps({"runs": list_available_runs(runs_root), "defaultRunId": run_id}, ensure_ascii=False))
+                self._send(200, "application/json; charset=utf-8", json.dumps({"runs": list_available_runs(runs_root, active_runs=pipeline_runner.ACTIVE), "defaultRunId": run_id}, ensure_ascii=False))
                 return
             if parsed.path == "/api/settings":
                 self._send(200, "application/json; charset=utf-8", json.dumps({

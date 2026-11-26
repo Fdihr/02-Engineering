@@ -239,101 +239,18 @@ test('explorer rowIds keep the journey row identity used by the existing drilldo
   assert.equal(only.row.id, 'row-keep');
 });
 
-test('run_panes registers the sources pane and the evidence helpers', () => {
-  assert.equal(typeof C.panes.sources, 'function');
+test('run_panes registers only the 2-gate panes and keeps evidence projection helpers', () => {
+  assert.equal(typeof C.panes.brief, 'function');
+  assert.equal(typeof C.panes.memo, 'function');
+  assert.equal(typeof C.panes.audit, 'function');
+  assert.equal(typeof C.panes.settings, 'function');
+  assert.equal(C.panes.sources, undefined);
+  assert.equal(C.panes.synthesis, undefined);
   assert.equal(typeof ev.model, 'function');
-});
-
-function nodes(node) {
-  return [node, ...node.children.flatMap(nodes)];
-}
-
-test('RSS form requires permission, explicit policy approval and a measured budget; approvals do not cross runs', () => {
-  C.state.runId = 'rss-run-1';
-  C.state.rssOpen = true;
-  C.state.evidenceView = 'coverage';
-  C.state.view = { rss: { feeds: [{ id: 'industrial-cyber', name: 'Industrial Cyber' }], batches: [] } };
-  C.journey = () => journey({ brief: { question: { id: 'rq-1' }, requirements: [] }, evidenceWorkspace: projected() });
-  C.panes.sources();
-  let all = nodes(C.rendered);
-  const permission = all.find(n => n.id === 'rss-permission');
-  const budget = all.find(n => n.id === 'rss-budget');
-  const approval = all.find(n => n.id === 'rss-policy-approval');
-  let submit = all.find(n => n.textContent === 'Capture and process RSS');
-  assert.equal(submit.disabled, true);
-  assert.equal(String(budget.value), '1');
-  permission.value = 'permission-review-ref';
-  approval.checked = true;
-  budget.value = '6';
-  budget.events.input();
-  assert.equal(submit.disabled, true);
-  budget.value = '2';
-  budget.events.input();
-  assert.equal(submit.disabled, false);
-  C.state.view.rss.batches = [{ id: 'b-1', feedId: 'industrial-cyber', status: 'running', maxItems: 2 }];
-  C.panes.sources();
-  submit = nodes(C.rendered).find(n => n.textContent === 'Capture and process RSS');
-  assert.equal(submit.disabled, true);
-  C.state.view.rss.batches = [];
-  C.state.runId = 'rss-run-2';
-  C.panes.sources();
-  all = nodes(C.rendered);
-  assert.equal(all.find(n => n.id === 'rss-policy-approval').checked, false);
-  assert.equal(all.find(n => n.id === 'rss-permission').value, '');
-  C.state.rssOpen = false;
-  C.state.view = {};
-});
-
-test('rendered coverage is primary and null links do not claim an evidence gap', () => {
-  C.state.evidenceView = 'coverage';
-  C.journey = () => journey({ evidenceWorkspace: projected({
-    questions: [{ id: 'IR1', text: 'Which incidents?', coverage: 'unassessed', sourceNoteIds: null, observationIds: null }]
-  }) });
-  C.panes.sources();
-  const all = nodes(C.rendered);
-  const text = all.map(n => n.textContent).join(' ');
-  assert.match(text, /Question-level evidence links are not projected/);
-  assert.doesNotMatch(text, /Gap: no observation/);
-  assert.equal(all.some(n => n.id === 'source-search'), false);
-  assert.equal(all.filter(n => n.tagName === 'select').length, 1);
-  const explorer = all.find(n => n.tagName === 'button' && n.textContent === 'Source explorer');
-  explorer.events.click();
-  assert.equal(C.state.evidenceView, 'explorer');
-  C.panes.sources();
-  assert.equal(nodes(C.rendered).some(n => n.id === 'source-search'), true);
-});
-
-test('no search matches clears the selected source and its drilldown', () => {
-  C.state.evidenceView = 'explorer';
-  C.state.sourceFilter = 'all';
-  C.state.sourceQuery = 'does-not-exist';
-  C.state.selectedSource = 'row-a';
-  C.journey = () => journey({ sources: [row({ id: 'row-a' })] });
-  C.panes.sources();
-  assert.equal(C.state.selectedSource, '');
-  assert.match(nodes(C.rendered).map(n => n.textContent).join(' '), /No sources match/);
 });
 
 test('fallback never treats legacy coverage as a projected assessment', () => {
   const model = ev.model(journey({ brief: { requirements: [{ irId: 'IR1', text: 'Question', coverage: 'supported' }] } }));
   assert.equal(model.projected, false);
   assert.equal(model.questions[0].coverage, 'unassessed');
-});
-
-test('linked observations expose persisted text and source navigation, not an inferred verdict', () => {
-  C.state.evidenceView = 'coverage';
-  C.journey = () => journey({
-    sources: [row({ review: { observations: [{ observationId: 'obs-1', text: 'Persisted observation', quote: 'Exact passage' }] } })],
-    evidenceWorkspace: projected({
-      questions: [{ id: 'IR1', text: 'Question', coverage: 'unassessed', sourceNoteIds: [], observationIds: ['obs-1'] }],
-      sourceExplorer: [{ rowId: 'row-a', title: 'Source A', disposition: 'admitted' }]
-    })
-  });
-  C.panes.sources();
-  const all = nodes(C.rendered);
-  assert.ok(all.some(n => n.textContent === 'Persisted observation'));
-  assert.ok(all.some(n => n.tagName === 'blockquote' && n.textContent === 'Exact passage'));
-  all.find(n => n.textContent === 'Inspect source: Source A').events.click();
-  assert.equal(C.state.evidenceView, 'explorer');
-  assert.equal(C.state.selectedSource, 'row-a');
 });

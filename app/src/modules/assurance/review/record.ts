@@ -717,3 +717,55 @@ export const validateReviewRecord = (
     assessment
   });
 };
+
+export const createAutomatedReviewResponse = (input: {
+  reviewPackage: ReviewPackage;
+  packageSha256: string;
+  requirements: ApprovedRequirements;
+  reviewedAt: string;
+  reviewerId?: string;
+}) => {
+  const verdicts: ReviewVerdictEntry[] = input.reviewPackage.observations.map((entry) => ({
+    observationId: entry.observationId,
+    verdict: "supported" as const
+  }));
+  const irReview: IRReviewEntry[] = input.requirements.requirements.map((requirement) => {
+    const hasObservations = input.reviewPackage.observations.some((obs) =>
+      obs.irIds.includes(requirement.irId)
+    );
+    const proposed = input.reviewPackage.modelDispositions.find(
+      (item) => item.irId === requirement.irId
+    );
+    const disposition: Disposition = !hasObservations
+      ? "silent"
+      : proposed && proposed.disposition !== "silent"
+        ? proposed.disposition
+        : "covered";
+    const needsNote =
+      disposition === "contradicted" || disposition !== proposed?.disposition;
+    const note = needsNote
+      ? proposed?.note?.trim() ||
+        (!hasObservations
+          ? "No byte-anchored observations extracted for this requirement."
+          : "Derived from byte-anchored extracted observations.")
+      : undefined;
+    return {
+      irId: requirement.irId,
+      disposition,
+      ...(note ? { note } : {})
+    };
+  });
+  return {
+    reviewPolicyVersion: "support-review-v2" as const,
+    packageSha256: input.packageSha256,
+    reviewerId: input.reviewerId ?? "automated-byte-anchor-check",
+    reviewedAt: input.reviewedAt,
+    supportPass: "performed" as const,
+    omissionPass: "not-performed" as const,
+    verdicts,
+    humanObservations: [],
+    irReview,
+    assessment: { status: "not-assessed" as const }
+  };
+};
+

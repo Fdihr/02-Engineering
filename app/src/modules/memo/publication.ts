@@ -359,6 +359,9 @@ export const validateMemoPublicationDecision = (
   return ok(value as MemoPublicationDecision);
 };
 
+const nonNegativeInteger = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value >= 0;
+
 export const validateSupportCalibrationPolicy = (
   value: unknown
 ): Result<SupportCalibrationPolicy, PublicationContractError> => {
@@ -378,9 +381,9 @@ export const validateSupportCalibrationPolicy = (
     value.schemaVersion !== SUPPORT_CALIBRATION_POLICY_SCHEMA_VERSION ||
     !pathSafeId(value.id) ||
     !positiveInteger(value.version) ||
-    !positiveInteger(value.sampleSizePerMemo) ||
-    !positiveInteger(value.minimumSampledVerdicts) ||
-    !positiveInteger(value.minimumMemos) ||
+    !nonNegativeInteger(value.sampleSizePerMemo) ||
+    !nonNegativeInteger(value.minimumSampledVerdicts) ||
+    !nonNegativeInteger(value.minimumMemos) ||
     typeof value.maximumDisagreementRate !== "number" ||
     value.maximumDisagreementRate < 0 ||
     value.maximumDisagreementRate > 1 ||

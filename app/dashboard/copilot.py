@@ -12,20 +12,17 @@ APP_DIR = Path(__file__).resolve().parent.parent
 SETTINGS_NAME = ".copilot-settings.json"
 COPILOT_PROVIDER = "github-copilot-sdk"
 WORKFLOW_STEPS = [
-    {"kind": "ai", "id": "research-question", "label": "Draft research plan", "description": "Turn a thesis into proposed research questions and Seerist searches. No approval or collection."},
-    {"kind": "human", "label": "Approve scope, question and requirements", "description": "Review the proposed plan and approve the research intent before collection."},
-    {"kind": "system", "label": "Collect and canonicalize", "description": "Bounded Seerist collection and captured-content preparation. Collection leads wait for RSS."},
-    {"kind": "ai", "id": "relevance", "label": "Assess question relevance", "description": "Assess each canonical source against the approved question."},
-    {"kind": "human", "label": "Admit evidence", "description": "Current compatibility review; an AI proposal cannot approve evidence."},
-    {"kind": "ai", "id": "extract", "label": "Extract source observations", "description": "Find requirement-linked observations with exact source anchors."},
-    {"kind": "human", "label": "Review source support", "description": "Current interim source-assurance review before synthesis."},
-    {"kind": "ai", "id": "build", "label": "Build synthesis", "description": "Propose cross-source claims from source notes."},
-    {"kind": "ai", "id": "challenge", "label": "Challenge synthesis", "description": "Test claims for gaps, contradictions and alternative explanations."},
-    {"kind": "human", "label": "Adjudicate challenges", "description": "Decide which claims stand before key-judgement selection."},
-    {"kind": "ai", "id": "key-judgements", "label": "Select key judgements", "description": "Select bounded judgements from adjudicated claims."},
-    {"kind": "ai", "id": "memo-writer", "label": "Write memo", "description": "Write the memo from selected judgements and traceable evidence."},
-    {"kind": "system", "label": "Verify output", "description": "Deterministic validation and publication-blocker checks; no model selector."},
-    {"kind": "human", "label": "Approve publication", "description": "Publication remains an explicit human decision."},
+    {"kind": "ai", "id": "research-question", "label": "Draft research plan", "description": "Turns your thesis and scope into research questions, rationale, and Seerist search terms."},
+    {"kind": "human", "label": "Gate 1: Approve research plan", "description": "Your first human checkpoint: approve the scope, research questions, and external source budget."},
+    {"kind": "system", "label": "Collect & capture sources", "description": "Runs Seerist discovery, retains full-text Seerist analyses, and captures external articles up to your budget."},
+    {"kind": "ai", "id": "relevance", "label": "Assess question relevance", "description": "Screens each captured source against the approved research questions with verbatim quotes."},
+    {"kind": "ai", "id": "extract", "label": "Extract & assure observations", "description": "Extracts dated, attributed observations and verifies byte-anchored source quotes deterministically."},
+    {"kind": "ai", "id": "build", "label": "Build cross-source synthesis", "description": "Synthesises atomic claims across assured source notes within deterministic confidence ceilings."},
+    {"kind": "ai", "id": "challenge", "label": "Challenge claims", "description": "Tests every claim for single-source dependence, overreach, and competing explanations; caveats carry into the memo."},
+    {"kind": "ai", "id": "key-judgements", "label": "Select key judgements", "description": "Selects at most one bounded key judgement per research question or records an explicit evidence gap."},
+    {"kind": "ai", "id": "memo-writer", "label": "Draft intelligence memo", "description": "Writes the memo from verified claims, preserving verbatim source links and open caveats."},
+    {"kind": "system", "label": "Verify citations & policy", "description": "Deterministic claim-lineage, confidence-ceiling, and section verification before review."},
+    {"kind": "human", "label": "Gate 2: Review & publish memo", "description": "Your second human checkpoint: inspect verbatim source quotes inline and publish in one click."},
 ]
 STAGE_IDS = {step["id"] for step in WORKFLOW_STEPS if step["kind"] == "ai"}
 
