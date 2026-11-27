@@ -14,7 +14,6 @@
     expanded: {},
     openRounds: {},
     drafts: {},
-    promptAt: {},
     sourceFilter: '',
     sourceQuery: '',
     evidenceQuestion: '',
@@ -36,7 +35,7 @@
     settingsLoaded: false
   };
   var pollMs = Math.max(1000, Number(body.getAttribute('data-poll-ms')) || 2000);
-  var TABS = ['now', 'brief', 'sources', 'synthesis', 'memo', 'audit', 'settings'];
+  var TABS = ['now', 'brief', 'memo', 'audit', 'settings'];
 
   /* ---------- DOM helpers ---------- */
   function el(tag, cls, text) {
@@ -57,7 +56,11 @@
   function replace(node, fragment) { clear(node); node.appendChild(fragment); }
   function humanise(value) { return String(value || '').replace(/[_-]+/g, ' ').trim(); }
   function capital(value) { var s = String(value || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
-  function when(iso) { return iso ? String(iso).slice(0, 16).replace('T', ' ') : ''; }
+  function when(iso) {
+    if (!iso) return '';
+    if (typeof iso === 'number') return new Date(iso).toISOString().slice(0, 16).replace('T', ' ');
+    return String(iso).slice(0, 16).replace('T', ' ');
+  }
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
   function analyst() { return (document.getElementById('analyst-id').value || '').trim(); }
   function journey() { return (state.view && state.view.journey) || null; }
@@ -199,23 +202,16 @@
 
   /* ---------- Actions ---------- */
   var ACTION_TITLES = {
-    'approve-intent': 'Approving the analysis',
+    'approve-intent': 'Approving research plan',
+    'run-pipeline': 'Starting automated memo pipeline',
+    'resume-pipeline': 'Resuming automated memo pipeline',
+    'approve-and-publish': 'Publishing memo',
+    'record-memo-review': 'Recording editorial feedback',
+    'start-memo-revision': 'Running editorial revision',
+    'resume-memo-revision': 'Resuming editorial revision',
     'discover-seerist': 'Collecting Seerist leads',
-    'intake-candidate': 'Classifying the provider item',
-    'review-evidence': 'Recording your admission decision',
-    'record-relevance': 'Recording the AI relevance check',
-    'record-assurance-review': 'Recording your source review',
-    'record-adjudication': 'Recording your adjudication',
-    'record-ai-stage': 'Recording the AI answer',
-    'run-ai-stage': 'Running local Copilot',
-    'draft-research-question': 'Approving scope and drafting the research question',
-    'save-copilot-settings': 'Saving the Copilot model',
-    'prepare-synthesis': 'Preparing the synthesis Build',
-    'start-bounded-synthesis': 'Starting bounded Build and Challenge',
-    'resume-bounded-synthesis': 'Resuming unused bounded synthesis work',
-    'prepare-key-judgements': 'Preparing the key-judgement selection',
-    'prepare-memo-writer': 'Preparing the memo writer',
-    'run-next': 'Checking the next deterministic step'
+    'save-copilot-settings': 'Saving workflow models',
+    'run-next': 'Checking next step'
   };
   function readStepFields(text) {
     var fields = {};
@@ -340,142 +336,19 @@
     });
   }
 
-  /* ---------- AI task ---------- */
-  var STAGE_INFO = {
-    relevance: ['AI relevance check', 'The AI judges whether this article helps answer the approved question and quotes the passages that support its verdict. Every quote is checked against the article text.'],
-    extract: ['AI extraction', 'The AI extracts dated, attributed observations from the admitted article and maps them to the information requirements. Every quote must match the article.'],
-    build: ['AI synthesis Build', 'The AI proposes atomic claims from the reviewed observations. Confidence is capped by how many independent sources support each claim.'],
-    challenge: ['AI Challenge', 'The AI tests every claim against a fixed checklist (independence, alternative explanations, overreach) so you can decide what stands.'],
-    'key-judgements': ['AI key-judgement selection', 'The AI selects at most one key judgement per requirement from the claims you accepted, or explains why none qualifies.'],
-    'memo-writer': ['AI memo writer', 'The AI writes the memo using only the selected judgements and claims. The workflow verifies every citation before committing it.']
-  };
-  function parseAnswer(text) {
-    var cleaned = String(text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-    var starts = [cleaned.indexOf('{'), cleaned.indexOf('[')].filter(function (i) { return i >= 0; });
-    if (!starts.length) return { error: 'No JSON found yet.' };
-    var body = cleaned.slice(Math.min.apply(null, starts));
-    var ends = [body.length, body.lastIndexOf('}') + 1, body.lastIndexOf(']') + 1];
-    for (var i = 0; i < ends.length; i++) {
-      if (ends[i] <= 0) continue;
-      try { return { value: JSON.parse(body.slice(0, ends[i])) }; } catch (e) { /* try a shorter slice */ }
-    }
-    try { JSON.parse(body); } catch (e2) { return { error: 'Not valid JSON yet: ' + e2.message }; }
-    return { error: 'Not valid JSON yet.' };
-  }
-  function describeJson(value, expected) {
-    if (Array.isArray(value)) return { ok: true, text: 'Valid JSON · list of ' + plural(value.length, 'item') };
-    var keys = Object.keys(value || {});
-    var parts = keys.slice(0, 6).map(function (k) { return Array.isArray(value[k]) ? k + ' (' + value[k].length + ')' : k; });
-    var missing = (expected || []).filter(function (k) { return keys.indexOf(k) < 0; });
-    return {
-      ok: missing.length === 0,
-      text: 'Valid JSON · ' + parts.join(', ') + (keys.length > 6 ? ' …' : '') + (missing.length ? ' · missing: ' + missing.join(', ') : '')
-    };
-  }
-  function aiTask(kind, item) {
-    var stage = kind === 'relevance' ? 'relevance' : item.stage;
-    var info = STAGE_INFO[stage] || [item.label || 'AI step', ''];
-    var path = item.requestPath;
-    var wrap = el('div');
-    add(wrap, el('p', 'meta prose', info[1]));
-    var selectedModel = modelForStage(stage);
-    add(wrap, el('p', 'meta', selectedModel ? 'Model: ' + selectedModel + (state.stageModels[stage] ? ' (stage override)' : ' (default)') + '. Fresh session, no tools. The answer is validated before recording.' : 'Choose a model in Settings before running Copilot.'));
-    var autoRow = el('div', 'btn-row');
-    add(autoRow, actButton('Run with Copilot', 'btn-primary', function () {
-      postAction({ action: 'run-ai-stage', runId: state.runId, requestPath: path, reviewerId: analyst() }, info[0] + ' with Copilot');
-    }, true, !selectedModel), linkButton('Model settings', function () { selectTab('settings', true); }));
-    wrap.appendChild(autoRow);
-    var manual = el('details', 'drawer');
-    manual.appendChild(el('summary', null, 'Manual copy/paste fallback'));
-    var steps = el('ol', 'ai-task');
-
-    var s1 = el('li', state.promptAt[path] ? 'done' : '');
-    add(s1, el('div', 'step-title', 'Copy the prompt'), el('div', 'meta', 'Open a new Copilot chat and paste it there. A fresh chat keeps earlier context out of the answer.'));
-    var copyRow = el('div', 'btn-row');
-    var copyStatus = el('span', 'meta', state.promptAt[path] ? 'Copied at ' + when(state.promptAt[path]) : '');
-    add(copyRow, actButton('Copy prompt', 'btn-secondary', function () {
-      copyStatus.textContent = 'Preparing…';
-      var endpoint = kind === 'relevance' ? '/api/relevance-prompt' : '/api/stage-prompt';
-      fetch(endpoint + '?run=' + encodeURIComponent(state.runId) + '&path=' + encodeURIComponent(path)).then(function (res) {
-        if (!res.ok) throw new Error('Prompt not available (' + res.status + ')');
-        return res.json();
-      }).then(function (data) {
-        state.promptAt[path] = new Date().toISOString();
-        s1.className = 'done';
-        return navigator.clipboard.writeText(data.prompt).then(function () {
-          copyStatus.textContent = 'Copied (' + Math.round(data.prompt.length / 1000) + 'k characters). Paste it into a new Copilot chat.';
-        }, function () {
-          openSheet(info[0] + ' prompt — select all and copy', data.prompt);
-          copyStatus.textContent = 'Clipboard blocked: the prompt is open on the right for manual copying.';
-        });
-      }).catch(function (err) { copyStatus.textContent = err.message; });
-    }), copyStatus, artifactLink(path, 'Inspect request', true));
-    s1.appendChild(copyRow);
-    steps.appendChild(s1);
-
-    var s2 = el('li');
-    add(s2, el('div', 'step-title', 'Paste the JSON answer'));
-    var answer = textInput('ans:' + path, '', '{ … }', true, 6);
-    answer.className = 'answer-box';
-    var check = el('div', 'json-check');
-    var expected = kind === 'relevance' ? ['verdict', 'rationale', 'support', 'limitations'] : [];
-    function runCheck() {
-      if (!answer.value.trim()) { check.className = 'json-check'; check.textContent = ''; s2.className = ''; return; }
-      var parsed = parseAnswer(answer.value);
-      if (parsed.error) { check.className = 'json-check bad'; check.textContent = parsed.error; s2.className = ''; return; }
-      var summary = describeJson(parsed.value, expected);
-      check.className = 'json-check ' + (summary.ok ? 'ok' : 'bad');
-      check.textContent = summary.text;
-      s2.className = summary.ok ? 'done' : '';
-    }
-    answer.addEventListener('input', runCheck);
-    add(s2, field('Copilot answer', answer, true), check);
-    runCheck();
-    steps.appendChild(s2);
-
-    var s3 = el('li');
-    add(s3, el('div', 'step-title', 'Record the answer'));
-    var freshLabel = el('label', 'check');
-    var fresh = el('input');
-    fresh.type = 'checkbox';
-    bindDraft(fresh, 'fresh:' + path, false);
-    add(freshLabel, fresh, 'I pasted this prompt into a fresh Copilot chat');
-    var problem = el('span', 'meta fail');
-    var needsAnalyst = kind !== 'relevance';
-    var record = actButton('Record answer', 'btn-primary', function () {
-      var parsed = parseAnswer(answer.value);
-      if (parsed.error) { problem.textContent = 'Paste a valid JSON answer first.'; answer.focus(); return; }
-      if (!fresh.checked) { problem.textContent = 'Confirm the answer came from a fresh Copilot chat.'; return; }
-      problem.textContent = '';
-      var payload = kind === 'relevance'
-        ? { action: 'record-relevance', runId: state.runId, requestPath: path, answer: answer.value, promptCopiedAt: state.promptAt[path] || '' }
-        : { action: 'record-ai-stage', runId: state.runId, requestPath: path, reviewerId: analyst(), freshSession: true, answer: answer.value, promptCopiedAt: state.promptAt[path] || '' };
-      postAction(payload, info[0]).then(function (data) {
-        if (data && data.ok) { dropDrafts('ans:' + path); dropDrafts('fresh:' + path); }
-      });
-    }, needsAnalyst);
-    var row = el('div', 'btn-row');
-    add(row, record, needsAnalyst && !analyst() ? el('span', 'meta', 'Enter your analyst ID in the top bar first.') : null, problem);
-    add(s3, freshLabel, row);
-    steps.appendChild(s3);
-    manual.appendChild(steps);
-    wrap.appendChild(manual);
-    return wrap;
-  }
-
   /* ---------- Navigation ---------- */
   var ROUTES = {
     'home': { pane: 'now' },
-    'new': { pane: 'brief', title: 'New analysis', sub: 'From a thesis to a research plan. You decide when collection starts.' },
-    'intent': { pane: 'brief', title: 'Intent review', run: true },
-    'analysis/evidence': { pane: 'sources', title: 'Evidence', run: true },
-    'analysis/findings': { pane: 'synthesis', title: 'Findings', run: true },
-    'review': { pane: 'memo', title: 'Publication review', run: true },
-    'output': { pane: 'memo', title: 'Output', run: true },
+    'new': { pane: 'brief', title: 'New analysis', sub: 'Gate 1 — Approve a research plan once; collection, quote verification and memo drafting run automatically.' },
+    'intent': { pane: 'brief', title: 'Approved research plan', run: true },
+    'analysis/evidence': { pane: 'memo', title: 'Memo', run: true },
+    'analysis/findings': { pane: 'memo', title: 'Memo', run: true },
+    'review': { pane: 'memo', title: 'Memo', run: true },
+    'output': { pane: 'memo', title: 'Memo', run: true },
     'audit': { pane: 'audit', title: 'Audit', run: true },
     'settings': { pane: 'settings', title: 'Settings', sub: 'Workflow models, keys and connections. Model choices are shared across analyses in this run folder.' }
   };
-  var TAB_ROUTE = { now: 'home', brief: 'intent', sources: 'analysis/evidence', synthesis: 'analysis/findings', memo: 'review', audit: 'audit' };
+  var TAB_ROUTE = { now: 'home', brief: 'intent', sources: 'review', synthesis: 'review', memo: 'review', audit: 'audit' };
   function currentRoute() {
     var route = (window.location.hash || '').replace(/^#\/?/, '');
     return ROUTES[route] ? route : 'home';
@@ -487,8 +360,14 @@
     state.newMode = route === 'new';
     if (route !== 'new' && route !== 'intent') state.draft = false;
     state.tab = ROUTES[route].pane;
-    TABS.forEach(function (name) { document.getElementById('pane-' + name).hidden = name !== state.tab; });
+    TABS.forEach(function (name) {
+      var node = document.getElementById('pane-' + name);
+      if (node) node.hidden = name !== state.tab;
+    });
+    var onMemo = state.tab === 'memo' || route === 'intent';
     document.getElementById('nav-home').setAttribute('aria-current', route === 'home' ? 'page' : 'false');
+    var navReview = document.getElementById('nav-review');
+    if (navReview) navReview.setAttribute('aria-current', onMemo ? 'page' : 'false');
     document.getElementById('nav-audit').setAttribute('aria-current', route === 'audit' ? 'page' : 'false');
     document.getElementById('nav-settings').setAttribute('aria-current', route === 'settings' ? 'page' : 'false');
     document.getElementById('nav-new').setAttribute('aria-current', route === 'new' ? 'page' : 'false');
@@ -533,100 +412,57 @@
     refresh();
   }
 
-  /* ---------- Run window header and activity strip ---------- */
-  var PHASE_LABEL = { frame: 'Intent', collect: 'Evidence', evidence: 'Evidence', assure: 'Evidence', synthesise: 'Findings', memo: 'Writing' };
-  var STAGES = [
-    { label: 'Intent', phases: ['frame'] },
-    { label: 'Evidence', phases: ['collect', 'evidence', 'assure'] },
-    { label: 'Findings', phases: ['synthesise'] },
-    { label: 'Writing', phases: ['memo'] },
-    { label: 'Publication', phases: [] }
-  ];
-  var LIVE = { active: 1, ready: 1, stale: 1, attention: 1 };
-  function stageStates(j) {
-    var byKey = {};
-    j.phases.forEach(function (p) { byKey[p.key] = p.state; });
-    return STAGES.map(function (stage) {
-      var states = stage.phases.map(function (k) { return byKey[k] || 'todo'; });
-      if (!stage.phases.length) {
-        var gate = j.memo && j.memo.gate;
-        if (!gate) return 'todo';
-        return gate.humanApprovalAvailable ? 'ready' : 'attention';
-      }
-      if (states.every(function (s) { return s === 'done'; })) return 'done';
-      return states.some(function (s) { return LIVE[s]; }) ? 'ready' : 'todo';
-    });
-  }
-  function projectedStageIndex(j) {
-    var stage = j.workflow && j.workflow.currentStage;
-    if (stage === 'collect' || stage === 'evidence' || stage === 'assure') stage = 'collect';
-    if (stage === 'synthesise') stage = 'synthesise';
-    if (stage === 'intent') stage = 'frame';
-    if (stage === 'publication') return STAGES.length - 1;
-    return STAGES.findIndex(function (item) { return item.phases.indexOf(stage) >= 0; });
-  }
+  /* ---------- Run window header and 2-gate activity strip ---------- */
   function renderStrip(j) {
     var strip = el('div', 'activity-strip');
     strip.setAttribute('role', 'group');
     strip.setAttribute('aria-label', 'Analysis progress');
-    var states = stageStates(j);
-    var projected = projectedStageIndex(j);
-    var current = projected >= 0 ? projected : states.findIndex(function (s) { return s !== 'done'; });
+    var v = state.view || {};
+    var pipe = v.pipeline || null;
+    var pStat = pipe ? (pipe.status || (pipe.state === 'memo-review' ? 'ready-for-review' : pipe.state) || '') : '';
+    var pMsg = pipe ? (pipe.message || pipe.stageDetail || pipe.detail || '') : '';
+    var mr = v.memoReview || null;
+    var memo = j && j.memo;
+    var intentDone = Boolean(j && j.brief && j.brief.scope && j.brief.question && j.brief.requirements && j.brief.requirements.length);
+    var published = Boolean((mr && mr.publishedArtifactRef) || (memo && memo.gate && memo.gate.status === 'published'));
+    var running = Boolean(pipe && (pipe.workerActive || pStat === 'running'));
+    var failed = Boolean(pipe && (pStat === 'failed' || pStat === 'interrupted'));
+
     var now = el('span', 'now');
-    var recommendation = j.workflow && j.workflow.recommendedNextAction;
-    var next = recommendation && (recommendation.work || null);
-    if (recommendation && recommendation.kind === 'blocked') {
-      add(now, el('span', 'mark attention',
-        recommendation.blocker.scope === 'publication' ? 'Publication blocked' : 'Workflow paused'),
-        recommendation.blocker.title, recommendation.blocker.detail);
-    } else if (recommendation && recommendation.kind === 'machine') {
-      add(now, el('span', 'ai-mark', 'Machine work ready'), next.title);
-    } else if (recommendation && recommendation.kind === 'human') {
-      var label = recommendation.surface === 'publication' ? 'Publication decision' :
-        recommendation.surface === 'intent' ? 'Waiting for intent approval' :
-        recommendation.surface === 'collection' ? 'Collection is next' : 'Next human step';
-      add(now, el('span', 'mark attention', label), (next && next.title) || 'No usable evidence is committed yet.');
-    } else if (!next && j.pendingRssLeadCount) {
-      add(now, el('span', 'mark attention', 'Source acquisition blocked'));
+    if (published) {
+      add(now, el('span', 'mark done', 'Published'), 'Gate 2 complete — published memo package on disk.');
+    } else if (running) {
+      add(now, el('span', 'ai-mark', 'Running pipeline'), pMsg || 'Gathering sources, checking quotes, and drafting memo.');
+    } else if (memo) {
+      add(now, el('span', 'mark covered', 'Ready for review'), 'Gate 2 — check inline source quotes and publish.');
+    } else if (failed) {
+      add(now, el('span', 'mark failed', 'Pipeline paused'), (pipe && pipe.error) || pMsg || 'Resume the automated pipeline from Memo.');
+    } else if (intentDone) {
+      add(now, el('span', 'mark attention', 'Plan approved'), 'Ready to run the automated memo pipeline.');
     } else {
-      add(now, el('span', 'mark done', 'Nothing is waiting'));
+      add(now, el('span', 'mark attention', 'Gate 1 pending'), 'Start or approve a research plan first.');
     }
+
+    var steps = [
+      { label: 'Gate 1: Plan', cls: intentDone ? 'mark done' : 'mark attention', cur: !intentDone },
+      { label: 'Automated pipeline', cls: memo ? 'mark done' : running ? 'mark running' : failed ? 'mark failed' : null, cur: intentDone && !memo },
+      { label: 'Gate 2: Publish', cls: published ? 'mark done' : memo ? 'mark covered' : null, cur: Boolean(memo && !published) }
+    ];
     var list = el('ol', 'stages');
-    STAGES.forEach(function (stage, i) {
+    steps.forEach(function (step) {
       var li = el('li');
-      if (i === current) li.setAttribute('aria-current', 'step');
-      var cls = states[i] === 'done' ? 'mark done' : states[i] === 'attention' ? 'mark attention' : i === current ? 'mark running' : null;
-      add(li, el('span', cls, stage.label));
+      if (step.cur) li.setAttribute('aria-current', 'step');
+      add(li, el('span', step.cls, step.label));
       list.appendChild(li);
     });
     add(strip, now, list);
-    var target = next && next.target;
-    if (!target && recommendation && recommendation.kind === 'human') {
-      target = recommendation.surface === 'publication' ? { tab: 'memo' } :
-        recommendation.surface === 'collection' ? { tab: 'brief', focus: 'collect' } :
-        recommendation.surface === 'intent' ? { tab: 'brief' } : null;
-    } else if (!target && recommendation && recommendation.kind === 'blocked') {
-      target = recommendation.blocker.scope === 'publication' ? { tab: 'memo' } : { tab: 'audit' };
+
+    var route = state.route || currentRoute();
+    if (route === 'intent') {
+      add(strip, add(el('span', 'yours'), linkButton('Open Memo', function () { navigate('review'); })));
+    } else if (intentDone) {
+      add(strip, add(el('span', 'yours'), linkButton('Approved plan', function () { navigate('intent'); })));
     }
-    if (target) add(strip, add(el('span', 'yours'), linkButton(
-      recommendation.kind === 'machine' ? 'Open the machine step' : 'Open the next step',
-      function () { go(target); }
-    )));
-    return strip;
-  }
-  function renderDraftStrip() {
-    var strip = el('div', 'activity-strip');
-    strip.setAttribute('role', 'group');
-    strip.setAttribute('aria-label', 'Analysis progress');
-    add(strip, add(el('span', 'now'), el('span', 'mark attention', 'Waiting for you'), 'Research plan drafted. Nothing has been collected.'));
-    var list = el('ol', 'stages');
-    STAGES.forEach(function (stage, i) {
-      var li = el('li');
-      if (i === 0) li.setAttribute('aria-current', 'step');
-      add(li, el('span', i === 0 ? 'mark attention' : null, stage.label));
-      list.appendChild(li);
-    });
-    add(strip, list, add(el('span', 'yours'), linkButton('Edit the question', function () { navigate('new'); })));
     return strip;
   }
   function renderHead() {
@@ -634,20 +470,12 @@
     var route = state.route || currentRoute();
     var def = ROUTES[route];
     var head = document.createDocumentFragment();
-    if (route === 'home' || route === 'new') return replace(document.getElementById('run-head'), head);
-    var crumb = el('a', 'parent-link', 'Home');
+    if (route === 'home' || route === 'new' || route === 'settings') return replace(document.getElementById('run-head'), head);
+    var crumb = el('a', 'parent-link', 'Analyses');
     crumb.href = '#/home';
     var title = el('div', 'page-head');
     add(title, crumb, el('h2', null, def.title));
     if (def.sub) add(title, el('div', 'meta', def.sub));
-    if (route === 'intent' && state.draft) {
-      var dq = document.getElementById('in-question').value.trim();
-      var dg = document.getElementById('in-geo').value.trim();
-      add(title, el('div', 'meta', ['Draft analysis ' + document.getElementById('in-run-id').value.trim(), dg, document.getElementById('in-audience').value.trim()].filter(Boolean).join(' · ') + '. Nothing has been collected.'));
-      head.appendChild(title);
-      add(head, el('p', 'question-line', dq || 'No question yet'), renderDraftStrip());
-      return replace(document.getElementById('run-head'), head);
-    }
     var scope = j && j.brief.scope;
     var q = j && j.brief.question;
     if (def.run) {
@@ -655,7 +483,7 @@
       if (scope) bits.push((scope.geographies || []).join(', '), (scope.from || '').slice(0, 10) + ' → ' + (scope.to || '').slice(0, 10), scope.audience);
       add(title, el('div', 'meta', bits.filter(Boolean).join(' · ')));
     }
-    if (route === 'review' && j && j.memo) {
+    if (state.tab === 'memo' && j && j.memo) {
       var keys = el('div', 'keys');
       keys.setAttribute('aria-label', 'Keyboard shortcuts');
       add(keys, add(el('span'), el('kbd', null, 'J'), el('kbd', null, 'K'), ' next, previous claim'), add(el('span'), el('kbd', null, 'Esc'), ' deselect'));
@@ -668,175 +496,113 @@
     }
     replace(document.getElementById('run-head'), head);
   }
-  function renderCounts() {
-    var j = journey();
-    if (!j) return;
-    function count(id, n) { document.getElementById(id).textContent = n ? String(n) : ''; }
-    count('count-home', j.queue.filter(function (q) { return q.actor === 'you'; }).length);
-    count('count-audit', (state.view.counts && state.view.counts.openExceptions) || 0);
-  }
+  function renderCounts() {}
 
-  /* ---------- Home ---------- */
-  var HOME_FILTERS = [['all', 'All'], ['decision', 'Decisions'], ['ai', 'AI steps'], ['option', 'Next options']];
-  var KIND_LABEL = { decision: 'Decision for you', ai: 'AI step', option: 'Next option' };
-  var WINDOW_LABEL = { now: 'Home', brief: 'Intent', sources: 'Evidence', synthesis: 'Findings', memo: 'Publication review', audit: 'Audit' };
-  function homeItems(j) {
-    var items = [];
-    j.queue.forEach(function (q, i) {
-      var kind = q.actor === 'you' ? 'decision' : 'ai';
-      items.push({ id: kind + ':' + i + ':' + q.title, kind: kind, title: q.title, detail: q.detail, phase: q.phase, target: q.target });
-    });
-    j.suggestions.forEach(function (s, i) {
-      items.push({ id: 'option:' + i + ':' + s.title, kind: 'option', title: s.title, detail: s.detail, phase: '', target: s.target });
-    });
-    return items;
+  /* ---------- Analyses overview (#/home) ---------- */
+  function isReadyStatus(st) {
+    return st === 'review' || st === 'ready-for-review';
   }
-  function itemMark(item) {
-    if (item.kind === 'decision') return el('span', 'mark attention', 'Waiting for you');
-    if (item.kind === 'ai') return el('span', 'ai-mark', 'AI step ready');
-    return el('span', 'mark', 'Suggested');
+  function isApprovedStatus(st) {
+    return st === 'intent-approved' || st === 'approved';
   }
-  function queueRow(id, title, age, meta, mark, selected, onClick) {
-    var li = el('li');
-    var b = el('button', 'queue-item');
-    b.type = 'button';
-    b.setAttribute('data-id', id);
-    b.setAttribute('aria-current', selected ? 'true' : 'false');
-    add(b, el('span', 'q-title', title), age ? el('span', 'q-age', age) : null, el('span', 'q-meta', meta || ''), add(el('span', 'q-state'), mark));
-    b.addEventListener('click', onClick);
-    li.appendChild(b);
-    return li;
+  function isDraftStatus(st) {
+    return !st || st === 'empty' || st === 'draft';
   }
-  function factList(pairs) {
-    var dl = el('dl', 'facts');
-    pairs.forEach(function (pair) {
-      if (pair[1] === undefined || pair[1] === null || pair[1] === '') return;
-      add(dl, el('dt', null, pair[0]), add(el('dd'), pair[1]));
-    });
-    return dl;
+  function runStatusMark(r) {
+    var st = r.status || 'empty';
+    if (st === 'published') return el('span', 'mark done', 'Published');
+    if (isReadyStatus(st)) return el('span', 'mark covered', 'Ready for review');
+    if (st === 'running') return el('span', 'ai-mark', 'Running pipeline');
+    if (st === 'failed' || st === 'interrupted') return el('span', 'mark failed', st === 'interrupted' ? 'Interrupted' : 'Failed');
+    if (st === 'in-progress') return el('span', 'mark attention', 'In progress');
+    if (isApprovedStatus(st)) return el('span', 'mark attention', 'Plan approved');
+    return el('span', 'mark', 'Draft');
   }
-  function homeVisible(j) {
-    var all = homeItems(j);
-    return all.filter(function (i) { return state.homeFilter === 'all' || i.kind === state.homeFilter; });
+  function openRunMemo(id, status) {
+    if (id !== state.runId) switchRun(id);
+    if (isDraftStatus(status)) navigate('new');
+    else navigate('review');
   }
-  function homeSelect(id) {
-    state.homeSel = id;
-    renderNow();
-    var btn = document.querySelector('#pane-now .queue-item[data-id="' + id.replace(/"/g, '\\"') + '"]');
-    if (btn) btn.focus();
-  }
-  function homeMove(step) {
-    var j = journey();
-    if (!j) return;
-    var list = homeVisible(j);
-    if (!list.length) return;
-    var idx = list.map(function (i) { return i.id; }).indexOf(state.homeSel);
-    homeSelect(list[Math.max(0, Math.min(list.length - 1, idx + step))].id);
-  }
-  function homeDetail(item, j) {
-    var box = el('div', 'detail-body');
-    if (!item) {
-      add(box, add(el('div', 'empty-state'), el('h3', null, j.queue.length || j.suggestions.length ? 'Choose an item' : 'Nothing is waiting'), el('p', null, j.queue.length || j.suggestions.length ? 'Select a row on the left, or press J.' : 'Every started step is complete. Open an analysis step or start a new analysis.')));
-      return box;
-    }
-    var plate = el('div', 'plate');
-    var kicker = el('div', 'plate-kicker');
-    add(kicker, itemMark(item), el('span', null, KIND_LABEL[item.kind] + (item.phase ? ' · ' + (PHASE_LABEL[item.phase] || '') : '')));
-    var title = el('h3', 'plate-title', item.title);
-    title.id = 'detail-title';
-    var open = el('button', 'btn-primary', item.kind === 'ai' ? 'Open the AI step' : 'Open');
-    open.type = 'button';
-    open.addEventListener('click', function () { go(item.target); });
-    var actions = el('div', 'btn-row');
-    add(actions, open);
-    if (item.kind === 'ai') {
-      add(actions, actButton('Check next step', 'btn-inverse', function () { postAction({ action: 'run-next', runId: state.runId }); }));
-    }
-    add(plate, kicker, title, el('p', 'plate-confirm', item.detail), actions);
-    box.appendChild(plate);
-
-    var row = item.target && item.target.row ? j.sources.filter(function (r) { return r.id === item.target.row; })[0] : null;
-    var lead = row && row.lead;
-    var facts = factList([
-      ['Kind', KIND_LABEL[item.kind]],
-      ['Phase', PHASE_LABEL[item.phase] || ''],
-      ['Opens', item.target ? WINDOW_LABEL[item.target.tab || 'now'] || '' : ''],
-      ['Source', row ? row.title : ''],
-      ['Article', row && row.url ? externalLink(row.url) : ''],
-      ['Publisher', row ? row.publisher : ''],
-      ['Seerist score', lead ? String(lead.score) : ''],
-      ['Published', lead && lead.providerTimestamp ? lead.providerTimestamp.slice(0, 10) : '']
-    ]);
-    add(box, add(el('section'), sectionHead('Facts', 'h3'), facts));
-    return box;
-  }
+  function homeMove() {}
   function renderNow() {
     var j = journey();
     var pane = document.createDocumentFragment();
     var host = document.getElementById('pane-now');
-    if (!j) { add(pane, el('div', 'empty', 'Loading…')); return replace(host, pane); }
-    var q = j.brief.question;
-    var all = homeItems(j);
-    var waiting = all.filter(function (i) { return i.kind === 'decision'; }).length;
+    if (!j) { add(pane, el('div', 'empty', 'Loading analyses…')); return replace(host, pane); }
+
     var head = el('div', 'page-head home-head');
     var titleBox = el('div');
-    add(titleBox, el('h2', null, 'Home'), el('p', 'meta', plural(waiting, 'decision') + ' waiting. The workflow moves only when you decide.'),
-      el('p', 'meta', 'Analysis ' + state.runId + (q ? ' · ' + q.question : '')));
-    var keys = el('div', 'keys');
-    keys.setAttribute('aria-label', 'Keyboard shortcuts');
-    add(keys, add(el('span'), el('kbd', null, 'J'), el('kbd', null, 'K'), ' next, previous'));
+    add(titleBox,
+      el('h2', null, 'Analyses'),
+      el('p', 'meta', 'Approve a research plan once (Gate 1), let the pipeline gather and verify sources automatically, and publish the finished memo (Gate 2).'));
     var newBtn = el('button', 'btn-primary', 'New analysis');
     newBtn.type = 'button';
     newBtn.addEventListener('click', function () { navigate('new'); });
-    add(head, titleBox, add(el('div', 'head-actions'), keys, newBtn));
+    add(head, titleBox, add(el('div', 'head-actions'), newBtn));
     pane.appendChild(head);
 
-    var visible = homeVisible(j);
-    var selected = visible.filter(function (i) { return i.id === state.homeSel; })[0] || visible[0] || null;
-    state.homeSel = selected ? selected.id : '';
-
-    var inbox = el('div', 'inbox');
-    var listCol = el('div');
-    var filters = el('div', 'filters');
-    filters.setAttribute('role', 'group');
-    filters.setAttribute('aria-label', 'Filter the list');
-    HOME_FILTERS.forEach(function (def) {
-      var n = def[0] === 'all' ? all.length : all.filter(function (i) { return i.kind === def[0]; }).length;
-      var b = el('button', 'chip-btn', def[1]);
-      b.type = 'button';
-      b.setAttribute('aria-pressed', state.homeFilter === def[0] ? 'true' : 'false');
-      add(b, el('span', 'n', n));
-      b.addEventListener('click', function () { state.homeFilter = def[0]; renderNow(); });
-      filters.appendChild(b);
-    });
-    listCol.appendChild(filters);
-    if (visible.length) {
-      var list = el('ul', 'queue');
-      list.setAttribute('aria-label', 'Decisions, AI steps and next options');
-      visible.forEach(function (item) {
-        list.appendChild(queueRow(item.id, item.title, PHASE_LABEL[item.phase] || '', item.detail, itemMark(item), selected && item.id === selected.id, function () { homeSelect(item.id); }));
+    var runs = (state.view && state.view.availableRuns) ? state.view.availableRuns.slice() : [];
+    if (!runs.some(function (r) { return r.runId === state.runId; }) && state.runId) {
+      runs.unshift({
+        runId: state.runId,
+        question: (j.brief && j.brief.question && j.brief.question.question) || '',
+        scopeSummary: '',
+        status: j.memo ? 'ready-for-review' : 'draft',
+        sourceCount: (state.view.counts && state.view.counts.assuredSources) || 0,
+        updatedAt: state.view.generatedAt || ''
       });
-      listCol.appendChild(list);
-    } else {
-      add(listCol, add(el('div', 'empty-state'), el('h3', null, 'Nothing in this view'), el('p', null, 'Nothing of this kind is waiting. Choose another filter or All.')));
     }
 
-    var runs = (state.view.availableRuns || []).map(function (r) { return r.runId; });
-    if (runs.indexOf(state.runId) < 0) runs.unshift(state.runId);
-    add(listCol, add(el('h3', 'group-head'), 'Your analyses ', el('span', 'meta', String(runs.length))));
-    var rl = el('ul', 'queue');
-    rl.setAttribute('aria-label', 'Your analyses');
-    runs.forEach(function (id) {
-      var cur = id === state.runId;
-      rl.appendChild(queueRow('run:' + id, id, '', cur && q ? q.question : '', cur ? el('span', 'mark covered', 'Open now') : el('span', 'meta', 'Open'), false, function () { if (!cur) switchRun(id); }));
-    });
-    listCol.appendChild(rl);
+    var meaningful = runs.filter(function (r) { return !isDraftStatus(r.status) || r.question || r.fileCount > 0 || r.runId === state.runId; });
+    if (!meaningful.length) {
+      var empty = el('div', 'empty-state');
+      add(empty, el('h3', null, 'No analyses yet'), el('p', null, 'Start a new analysis from a thesis or strategic question to generate your first evidence-grounded memo.'));
+      pane.appendChild(empty);
+      return replace(host, pane);
+    }
 
-    var detail = el('section', 'detail');
-    detail.setAttribute('aria-live', 'polite');
-    detail.appendChild(homeDetail(selected, j));
-    add(inbox, listCol, detail);
-    pane.appendChild(inbox);
+    var wrap = el('div', 'table-wrap');
+    var table = el('table', 'analyses-table');
+    var thead = el('thead');
+    var hr = el('tr');
+    [['Analysis', ''], ['Status', ''], ['Assured sources', 'num'], ['Updated', 'num'], ['', 'num']].forEach(function (col) {
+      var th = el('th', col[1] || null, col[0]);
+      if (col[0]) th.setAttribute('scope', 'col');
+      hr.appendChild(th);
+    });
+    thead.appendChild(hr);
+    table.appendChild(thead);
+
+    var tbody = el('tbody');
+    meaningful.forEach(function (r) {
+      var cur = r.runId === state.runId;
+      var tr = el('tr', cur ? 'is-current' : '');
+      var mainTd = el('td');
+      var qText = r.question || (cur && j.brief && j.brief.question && j.brief.question.question) || 'No approved research plan yet';
+      var subBits = [r.runId];
+      if (r.scopeSummary) subBits.push(r.scopeSummary);
+      add(mainTd, el('span', 'analysis-q', qText), el('span', 'analysis-sub', subBits.join(' · ')));
+
+      var statusTd = el('td');
+      statusTd.appendChild(runStatusMark(r));
+
+      var srcTd = el('td', 'num', String(r.sourceCount || 0));
+      var updTd = el('td', 'num meta', when(r.updatedAt || r.mtimeMs));
+
+      var actTd = el('td', 'num');
+      var readyOrPub = r.status === 'published' || isReadyStatus(r.status);
+      var ctaLabel = readyOrPub ? 'Open memo' : isDraftStatus(r.status) ? 'Create plan' : 'Open pipeline';
+      var openBtn = el('button', isReadyStatus(r.status) ? 'btn-primary' : 'btn-secondary', ctaLabel);
+      openBtn.type = 'button';
+      openBtn.addEventListener('click', function () { openRunMemo(r.runId, r.status); });
+      actTd.appendChild(openBtn);
+
+      add(tr, mainTd, statusTd, srcTd, updTd, actTd);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    pane.appendChild(wrap);
     replace(host, pane);
   }
 
@@ -1040,7 +806,7 @@
     analyst: analyst, journey: journey, statusMark: statusMark, actorMark: actorMark, lifecycle: lifecycle, artifactLink: artifactLink,
     linkButton: linkButton, actButton: actButton, setBlocked: setBlocked, sectionHead: sectionHead, kv: kv, externalLink: externalLink, bindDraft: bindDraft,
     dropDrafts: dropDrafts, field: field, selectInput: selectInput, textInput: textInput, openSheet: openSheet, viewArtifact: viewArtifact,
-    postAction: postAction, aiTask: aiTask, go: go, navigate: navigate, selectTab: selectTab, switchRun: switchRun, render: render, refresh: refresh, panes: panes,
+    postAction: postAction, go: go, navigate: navigate, selectTab: selectTab, switchRun: switchRun, render: render, refresh: refresh, panes: panes,
     STEP_MARK: STEP_MARK
   };
 

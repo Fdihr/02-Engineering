@@ -4,19 +4,24 @@ const path = require('node:path');
 const { test } = require('node:test');
 const { JSDOM } = require('jsdom');
 
-function harness(journey, pane, execution = null, drafts = {}, memoExecution = null, memoReview = null, memoRevision = null) {
-  const dom = new JSDOM('<main><div id="pane-synthesis"></div><div id="pane-sources"></div><div id="pane-memo"></div></main>', { runScripts: 'outside-only' });
+function harness(journey, pane = 'memo', { pipeline = null, memoReview = null, memoRevision = null, drafts = {}, published = [], markdown = '' } = {}) {
+  const dom = new JSDOM('<main><div id="pane-memo"></div><div id="pane-audit"></div></main>', { runScripts: 'outside-only' });
   const { document, Event } = dom.window;
   const actions = [];
   let sequence = 0;
   const C = {
     state: {
-      runId: 'fixture', view: { boundedSynthesis: execution, boundedMemo: memoExecution, memoReview, memoRevision }, drafts, expanded: {}, openRounds: {},
-      evidenceView: 'explorer', sourceFilter: 'all', sourceQuery: ''
+      runId: 'fixture',
+      view: { pipeline, memoReview, memoRevision, published },
+      drafts,
+      expanded: {},
+      openRounds: {},
+      selectedClaim: ''
     },
-    panes: {}, journey: () => journey,
+    panes: {},
+    journey: () => journey,
     humanise: value => String(value || '').replace(/[-_]/g, ' '),
-    capital: value => value.charAt(0).toUpperCase() + value.slice(1),
+    capital: value => value ? value.charAt(0).toUpperCase() + value.slice(1) : '',
     when: value => value || '',
     plural: (n, word) => n + ' ' + word + (n === 1 ? '' : 's'),
     el: (tag, cls, text) => {
@@ -41,7 +46,11 @@ function harness(journey, pane, execution = null, drafts = {}, memoExecution = n
     },
     linkButton: (title, callback) => C.actButton(title, 'btn-link', callback),
     artifactLink: (ref, title) => C.el('button', 'artifact-link', title),
-    externalLink: ref => C.el('a', null, ref),
+    externalLink: (ref, label) => {
+      const a = C.el('a', 'ext-link', label || ref);
+      a.href = ref;
+      return a;
+    },
     statusMark: (status, label) => C.el('span', 'status', label),
     lifecycle: steps => C.add(C.el('ol', 'lifecycle'), ...steps.map(s => C.el('li', s.state, s.label))),
     kv: () => C.el('dl'),
@@ -69,273 +78,357 @@ function harness(journey, pane, execution = null, drafts = {}, memoExecution = n
       return C.bindDraft(select, key, fallback);
     },
     textInput: (key, fallback, placeholder, multiline) => C.bindDraft(C.el(multiline ? 'textarea' : 'input'), key, fallback),
-    postAction: payload => { actions.push(payload); return Promise.resolve({ ok: false }); },
-    dropDrafts() {}, go() {}, navigate: route => actions.push({ route }),
+    postAction: payload => { actions.push(payload); return Promise.resolve({ ok: true }); },
+    dropDrafts() {},
+    go() {},
+    navigate: route => actions.push({ route }),
     replace: (host, child) => host.replaceChildren(child),
     render: () => C.panes[pane]()
   };
   dom.window.CTI = C;
-  dom.window.fetch = () => new Promise(() => {});
+  dom.window.fetch = () => Promise.resolve({ ok: Boolean(markdown), text: async () => markdown });
   dom.window.eval(fs.readFileSync(path.join(__dirname, 'run_panes.js'), 'utf8'));
   C.render();
   return {
-    C, actions, document,
+    C,
+    actions,
+    document,
+    flush: async () => { for (let i = 0; i < 6; i++) await new Promise(setImmediate); },
     button: text => [...document.querySelectorAll('button')].find(b => b.textContent === text),
     change: (input, value) => { input.value = value; input.dispatchEvent(new Event('change', { bubbles: true })); }
   };
 }
 
-function memoJourney() {
-  return { brief: {}, rounds: [], memo: {
-    id: 'memo-1', createdAt: '2026-11-04T13:00:00Z', markdownPath: 'memo/memo-1/memo.md',
-    roundIndex: 1, currentRound: 1, isCurrent: true, claims: {}, blockers: [{ code: 'PROVISIONAL_MEMO_STANDARD', label: 'Provisional standard' }],
-    gate: { status: 'blocked', humanApprovalAvailable: false },
-    verification: { contentVerdict: 'pass', publicationVerdict: 'block', checks: [] },
-    bluf: [], keyJudgments: [], analysis: [], uncertainties: [], indicators: [], competing: []
-  } };
+const SAMPLE_MARKDOWN = [
+  '# Poland Sabotage Readiness Memo',
+  '',
+  '## Bottom Line Up Front',
+  'Poland heightened police readiness amid sabotage warnings.',
+  '',
+  '## Key Judgements',
+  '- Sabotage alerts prompted heightened readiness. (moderate confidence)',
+  '- No confirmed incursion has been disclosed. (low confidence)',
+  '',
+  '## Analysis',
+  'Polish police entered full readiness over sabotage warnings. Authorities have not reported a confirmed incursion.'
+].join('\n');
+
+function readyMemoJourney() {
+  return {
+    brief: {
+      scope: { status: 'approved', audience: 'Executive leadership' },
+      question: { id: 'rq-1', text: 'Did Poland face sabotage warnings in November 2026?' },
+      requirements: [{ irId: 'ir-1', text: 'Official warnings' }],
+      framed: true
+    },
+    sources: [
+      { id: 's-1', title: 'Polish police on full readiness', publisher: 'Kyiv Post', origin: 'OSINT', url: 'https://www.kyivpost.com/post/1', state: 'admitted', notePath: 'assurance/note-1.json', current: { label: 'Admitted' } },
+      { id: 's-2', title: 'Hybrid Threats Assessment', publisher: 'Seerist', origin: 'Seerist', url: '', state: 'admitted', notePath: 'assurance/note-2.json', current: { label: 'Admitted' } }
+    ],
+    leads: [],
+    rounds: [{ index: 1, current: true, claims: [] }],
+    memo: {
+      id: 'memo-1',
+      relPath: 'memo/memo-1/memo.json',
+      version: 1,
+      createdAt: '2026-11-04T13:00:00Z',
+      markdownPath: 'memo/memo-1/memo.md',
+      roundIndex: 1,
+      currentRound: 1,
+      isCurrent: true,
+      blockers: [],
+      gate: { status: 'review-ready', humanApprovalAvailable: true },
+      verification: { contentVerdict: 'pass', publicationVerdict: 'pass', checks: [{ check: 'required-sections-present', status: 'pass' }] },
+      claims: {
+        'claim-1': {
+          statement: 'Polish police entered full readiness over sabotage warnings.',
+          kind: 'reported-fact',
+          confidence: 'moderate',
+          singleSource: false,
+          status: 'accepted',
+          challenges: [],
+          sources: [{
+            noteId: 'note-1',
+            title: 'Polish police on full readiness',
+            publisher: 'Kyiv Post',
+            url: 'https://www.kyivpost.com/post/1',
+            reviewStatus: 'recorded',
+            quotes: [{ text: 'Polish police entered full readiness from Nov. 2 to 8.', quote: 'Officers entered full readiness from Nov. 2 to 8 over sabotage threats.' }]
+          }]
+        },
+        'claim-2': {
+          statement: 'Authorities have not reported a confirmed incursion.',
+          kind: 'reported-fact',
+          confidence: 'low',
+          singleSource: true,
+          status: 'contested',
+          challenges: [{ id: 'ch-1', check: 'single-source', rationale: 'Absence of reports is weak single-source evidence.', hypothesis: 'Limited disclosure.', decision: 'contested' }],
+          sources: [{
+            noteId: 'note-2',
+            title: 'Hybrid Threats Assessment',
+            publisher: 'Seerist',
+            url: '',
+            reviewStatus: 'recorded',
+            quotes: [{ text: 'No confirmed cross-border incursion was reported.', quote: 'Authorities have not reported a confirmed incursion connected to the current warning.' }]
+          }]
+        }
+      },
+      bluf: [{ text: 'Poland heightened police readiness amid sabotage warnings.', claimIds: ['claim-1'] }],
+      keyJudgments: [
+        { text: 'Sabotage alerts prompted heightened readiness.', confidence: 'moderate', claimIds: ['claim-1'] },
+        { text: 'No confirmed incursion has been disclosed.', confidence: 'low', claimIds: ['claim-2'] }
+      ],
+      analysis: [{ text: 'Polish police entered full readiness over sabotage warnings.', claimIds: ['claim-1'] }],
+      uncertainties: [],
+      indicators: [],
+      competing: []
+    }
+  };
 }
-function memoReview() {
+
+function reviewReady() {
   const binding = { artifactRef: 'memo.json', artifactSha256: 'a'.repeat(64) };
-  return { target: { runId: 'fixture', memoId: 'memo-1', memoVersion: 1,
-    memo: binding, markdown: binding, writer: binding, verification: binding, gate: binding, calibrationPolicy: binding },
-  decisionStatus: 'pending', approvalAvailable: false,
-  samples: [{ observationId: 'obs-1', text: 'The review was announced.', quote: 'We announced a review.' }] };
+  return {
+    target: {
+      runId: 'fixture',
+      memoId: 'memo-1',
+      memoVersion: 1,
+      memo: binding,
+      markdown: binding,
+      writer: binding,
+      verification: binding,
+      gate: binding,
+      calibrationPolicy: binding
+    },
+    decisionStatus: 'pending',
+    approvalAvailable: true,
+    samples: []
+  };
 }
 
-test('memo review requires sample verdict, feedback and explicit exact-draft confirmation', () => {
-  const review = memoReview();
-  const h = harness(memoJourney(), 'memo', null, {}, null, review);
-  assert.equal(h.button('Approve for publication').disabled, true);
-  assert.equal(h.button('Record decision').disabled, true);
-  const selects = h.document.querySelectorAll('select');
-  h.change(selects[1], 'evidence-gap');
-  h.change(selects[2], 'supported');
-  h.change(h.document.querySelector('textarea'), 'Resolve remaining gaps.');
-  const confirm = h.document.querySelector('input[type="checkbox"]');
-  confirm.checked = true;
-  confirm.dispatchEvent(new h.document.defaultView.Event('change', { bubbles: true }));
-  assert.equal(h.button('Record decision').disabled, false);
-  h.document.querySelector('form').dispatchEvent(new h.document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+test('automated pipeline workspace shows 5-stage progress and triggers run-pipeline before memo exists', () => {
+  const journey = {
+    brief: {
+      scope: { status: 'approved', audience: 'Executive leadership' },
+      question: { id: 'rq-1', text: 'Did Poland face sabotage warnings?' },
+      requirements: [{ irId: 'ir-1', text: 'Warnings' }],
+      framed: true
+    },
+    sources: [{ id: 's-1', title: 'Kyiv Post article', publisher: 'Kyiv Post', origin: 'OSINT', url: 'https://www.kyivpost.com/post/1', state: 'admitted', current: { label: 'Admitted' } }],
+    leads: [{ leadId: 'l-1' }],
+    rounds: [],
+    memo: null
+  };
+  const h = harness(journey, 'memo', { pipeline: { status: 'idle', maxExternalArticles: 6 } });
+  assert.match(h.document.body.textContent, /Ready to run the automated memo pipeline/);
+  assert.equal(h.document.querySelectorAll('.pipeline-stages li').length, 5);
+  const runBtn = h.button('Generate memo automatically');
+  assert.ok(runBtn);
+  runBtn.click();
   assert.equal(h.actions.length, 1);
-  assert.equal(h.actions[0].action, 'record-memo-review');
-  assert.equal(h.actions[0].decision, 'revision-requested');
-  assert.deepEqual(JSON.parse(JSON.stringify(h.actions[0].target)), review.target);
-  assert.deepEqual(JSON.parse(JSON.stringify(h.actions[0].sampledVerdicts)), [{ observationId: 'obs-1', verdict: 'supported' }]);
-});
-
-test('memo decisions and stale or unavailable review never expose a writable approval', () => {
-  for (const data of [
-    { ...memoReview(), decisionStatus: 'recorded', decision: { decision: 'revision-requested', reviewerId: 'REVIEWER',
-      decidedAt: '2026-11-04T13:01:00Z', feedback: 'Close the gap.' } },
-    { ...memoReview(), decisionStatus: 'stale' },
-    { error: 'Memo Markdown changed; restore or produce a new draft before review.' }
-  ]) {
-    const h = harness(memoJourney(), 'memo', null, {}, null, data);
-    assert.equal(h.button('Approve for publication').disabled, true);
-    assert.equal(h.button('Record decision'), undefined);
-  }
-});
-
-test('editorial revision requires separate confirmation and routes other feedback upstream', () => {
-  const data = { ...memoReview(), decisionStatus: 'recorded',
-    decision: { decision: 'revision-requested', reviewerId: 'REVIEWER', feedback: 'Improve clarity.' },
-    revisionRoute: { eligible: true, route: 'review', reason: 'One editorial writer call.' } };
-  const h = harness(memoJourney(), 'memo', null, {}, null, data);
-  const button = h.button('Start editorial revision');
-  assert.equal(button.disabled, true);
-  const confirm = h.document.querySelector('input[type="checkbox"]');
-  confirm.checked = true;
-  confirm.dispatchEvent(new h.document.defaultView.Event('change', { bubbles: true }));
-  assert.equal(button.disabled, false);
-  button.click();
-  assert.equal(h.actions[0].action, 'start-memo-revision');
-  assert.equal(h.actions[0].memoId, 'memo-1');
-  assert.equal(h.actions[0].reviewerId, 'TESTER');
-  assert.equal(h.button('Approve for publication').disabled, true);
-  for (const route of ['evidence', 'analysis/findings', 'audit']) {
-    const routed = harness(memoJourney(), 'memo', null, {}, null, { ...data,
-      revisionRoute: { eligible: false, route, reason: 'Resolve upstream.' } });
-    assert.equal(routed.button('Start editorial revision'), undefined);
-    [...routed.document.querySelectorAll('button')].find(b => b.textContent.startsWith('Return to ')).click();
-    assert.equal(routed.actions[0].route, route);
-  }
-});
-
-test('editorial recovery cannot offer new calls for terminal receipts and a revised draft has fresh review', () => {
-  const data = { ...memoReview(), decision: { decision: 'revision-requested', reviewerId: 'REVIEWER', feedback: 'Edit.' },
-    revisionRoute: { eligible: true, reason: 'One call.' } };
-  for (const status of ['blocked', 'indeterminate', 'running', 'response-saved']) {
-    const h = harness(memoJourney(), 'memo', null, {}, null, data,
-      { authorized: true, parentMemoId: 'memo-1', status, remainingCalls: 0, authority: { model: 'writer-test' } });
-    assert.equal(h.button('Start editorial revision'), undefined);
-    const resume = h.button('Resume editorial revision');
-    assert.equal(Boolean(resume), status === 'response-saved');
-    if (resume) { resume.click(); assert.equal(h.actions[0].action, 'resume-memo-revision'); }
-    assert.equal(h.button('Approve for publication').disabled, true);
-  }
-  const j = memoJourney();
-  j.memo.id = 'memo-2';
-  j.memo.version = 2;
-  j.memo.supersedesMemoId = 'memo-1';
-  const h = harness(j, 'memo', null, {}, null, { ...memoReview(), target: { ...memoReview().target, memoId: 'memo-2', memoVersion: 2 } });
-  assert.ok(h.document.body.textContent.includes('Version 2 supersedes memo-1'));
-  assert.equal(h.button('Record decision').disabled, true);
-  assert.equal(h.document.querySelector('input[type="checkbox"]').checked, false);
-});
-
-function reviewJourney() {
-  return {
-    brief: { requirements: [{ irId: 'ir-01', text: 'Was a review announced?' }] },
-    leads: [], rounds: [],
-    sources: [{
-      id: 'source-1', title: 'Ministry review', publisher: 'Example', artifacts: [], url: '',
-      state: 'action', action: { kind: 'review' }, current: { label: 'Review support', state: 'you' },
-      review: {
-        snapshotId: 'snap-1', status: 'pending',
-        observations: [1, 2, 3].map(n => ({
-          observationId: 'obs-' + n, text: 'Statement ' + n, quote: 'Quoted text ' + n,
-          claimKind: 'event', attribution: 'direct', irIds: ['ir-01']
-        })),
-        requirements: [{ irId: 'ir-01', text: 'Was a review announced?', disposition: 'covered' }]
-      }
-    }]
-  };
-}
-
-function findingJourney() {
-  const claim = {
-    claimId: 'claim-1', statement: 'A review was announced.', kind: 'reported-fact', confidence: 'low',
-    confidenceRationale: 'One source; credibility not assessed.', noteIds: ['note-1'],
-    observationIds: ['obs-1'], challenges: [], status: 'proposed'
-  };
-  return {
-    brief: { requirements: [{ irId: 'ir-01', text: 'Was a review announced?' }, { irId: 'ir-02', text: 'What follows?' }] },
-    sources: [], notes: { 'note-1': { title: 'Ministry', relPath: 'assurance/note.json', observations: { 'obs-1': { text: claim.statement, quote: 'Formal review announced.' } } } },
-    rounds: [{
-      index: 1, current: true, claims: [claim], noteIds: ['note-1'], limitedEvidence: true,
-      buildPath: 'build.json', challengeRecordPath: 'challenge.json', challengeStatus: 'checked',
-      adjudicationStatus: 'awaiting-adjudication', memoPaths: [],
-      coverage: [{ irId: 'ir-01', disposition: 'covered', observationIds: ['obs-1'] }, { irId: 'ir-02', disposition: 'silent', observationIds: [] }],
-      steps: [{ key: 'build', label: 'Build', state: 'done' }, { key: 'challenge', label: 'Challenge', state: 'done' }, { key: 'adjudicate', label: 'Adjudicate', state: 'you' }]
-    }],
-    readiness: { noteCount: 1, newNotes: [], inFlight: [], provisionalNotes: 0, canBuild: false, currentRoundComplete: false }
-  };
-}
-
-test('adjudicated Findings explicitly starts bounded memo work with the selected round', () => {
-  const journey = findingJourney();
-  journey.rounds[0].adjudicationStatus = 'adjudicated';
-  journey.rounds[0].adjudicationPath = 'synthesis/adjudication/c1/performed-adjudication.json';
-  journey.rounds[0].steps = [{ key: 'key-judgements', state: 'ready', label: 'Key judgements', action: {} }];
-  const h = harness(journey, 'synthesis');
-  assert.match(h.document.body.textContent, /Publication is not authorized/);
-  h.button('Start selection and writing').click();
   assert.deepEqual(JSON.parse(JSON.stringify(h.actions[0])), {
-    action: 'start-bounded-memo', runId: 'fixture', reviewerId: 'TESTER',
-    adjudicationPath: journey.rounds[0].adjudicationPath
+    action: 'run-pipeline',
+    runId: 'fixture',
+    reviewerId: 'TESTER',
+    maxExternalArticles: 6
   });
 });
 
-test('bounded memo exposes resume and recovery without competing model controls', () => {
-  const journey = findingJourney();
-  journey.rounds[0].adjudicationStatus = 'adjudicated';
-  journey.rounds[0].steps = [{ key: 'memo', state: 'ai', label: 'Memo', action: {} }];
-  const h = harness(journey, 'synthesis', null, {}, { authorized: true, status: 'response-saved', remainingCalls: 1 });
-  h.button('Resume bounded memo work').click();
-  assert.equal(h.actions[0].action, 'resume-bounded-memo');
-  assert.doesNotMatch(h.document.body.textContent, /Run the AI memo writer|Manual compatibility controls/);
-  const stopped = harness(journey, 'synthesis', null, {}, { authorized: true, status: 'indeterminate', remainingCalls: 0 });
-  assert.equal(stopped.button('Start selection and writing'), undefined);
-  assert.equal(stopped.button('Resume bounded memo work'), undefined);
-  assert.match(stopped.document.body.textContent, /cannot grant more calls/);
-  const complete = harness(journey, 'synthesis', null, {}, { authorized: true, status: 'memo-review', remainingCalls: 0 });
-  assert.ok(complete.button('Review memo draft'));
-  complete.button('Review memo draft').click();
-  assert.equal(complete.actions[0].route, 'review');
-  assert.equal(complete.button('Resume bounded memo work'), undefined);
-});
+test('Gate 2 memo reader renders clean prose without inline pill clutter, hover source preview card, verbatim quote inspector, and 1-click publish', async () => {
+  const review = reviewReady();
+  const h = harness(readyMemoJourney(), 'memo', { memoReview: review, markdown: SAMPLE_MARKDOWN });
+  await h.flush();
 
-test('review compares labelled statements and quotes, and never pre-approves verdicts', () => {
-  const h = harness(reviewJourney(), 'sources');
-  assert.equal(h.document.querySelectorAll('.review-comparison').length, 3);
-  assert.equal(h.document.querySelectorAll('.comparison-label').length, 6);
-  assert.match(h.document.querySelector('[role=status]').textContent, /0 of 3 statements checked/);
-  h.button('Confirm support review').click();
-  assert.equal(h.actions.length, 0);
-  assert.match(h.document.querySelector('[role=alert]').textContent, /3 statement/);
-  assert.equal(h.document.activeElement.tagName, 'SELECT');
-});
+  assert.equal(h.document.querySelectorAll('input[type="checkbox"]').length, 0);
+  assert.equal(h.document.querySelectorAll('.cite-pill').length, 0);
+  assert.equal(h.document.querySelectorAll('.cite-caveat').length, 0);
 
-test('bulk confirmation preserves exceptions and duplicate targets across rerenders', () => {
-  const drafts = { 'rv:snap-1:v0': 'unsupported', 'rv:snap-1:n0': 'Quote says the opposite.', 'rv:snap-1:v1': 'duplicate', 'rv:snap-1:d1': 'obs-1' };
-  const h = harness(reviewJourney(), 'sources', null, drafts);
-  h.button('I checked the remaining quotes — mark supported').click();
-  assert.equal(drafts['rv:snap-1:v0'], 'unsupported');
-  assert.equal(drafts['rv:snap-1:d1'], 'obs-1');
-  assert.equal(drafts['rv:snap-1:v2'], 'supported');
-  assert.match(h.document.querySelector('[role=status]').textContent, /3 of 3 statements checked · 2 exceptions/);
-  h.button('Confirm support review').click();
-  assert.equal(h.actions[0].reviewPolicyVersion, 'support-review-v2');
-  assert.equal(h.actions[0].verdicts[0].note, 'Quote says the opposite.');
-  assert.equal(h.actions[0].verdicts[1].duplicateOf, 'obs-1');
-  assert.equal(h.actions[0].irReview[0].note, '');
-  assert.equal('assessment' in h.actions[0], false);
-});
+  const docText = h.document.querySelector('#doc .page-inner').textContent;
+  assert.doesNotMatch(docText, /\[1\s+Kyiv Post\]/);
+  assert.doesNotMatch(docText, /low confidence|moderate confidence/i);
 
-test('changed coverage and unsupported statements disclose and require exception notes', () => {
-  const drafts = { 'rv:snap-1:v0': 'supported', 'rv:snap-1:v1': 'supported', 'rv:snap-1:v2': 'supported' };
-  const h = harness(reviewJourney(), 'sources', null, drafts);
-  const coverage = h.document.querySelector('.review-ir select');
-  h.change(coverage, 'contradicted');
-  h.button('Confirm support review').click();
-  assert.equal(h.actions.length, 0);
-  assert.equal(h.document.querySelector('.review-coverage').open, true);
-  assert.equal(h.document.querySelector('.review-ir input').getAttribute('aria-invalid'), 'true');
-  h.change(h.document.querySelector('.review-ir input'), 'The quoted evidence contradicts the question.');
-  h.button('Confirm support review').click();
+  const endnotes = [...h.document.querySelectorAll('.endnotes li')];
+  assert.equal(endnotes.length, 2);
+  assert.ok(h.document.querySelector('a.ext-link[href="https://www.kyivpost.com/post/1"]'));
+
+  const inspector = h.document.querySelector('#quote-inspector');
+  assert.match(inspector.textContent, /Officers entered full readiness from Nov\. 2 to 8/);
+
+  const hoverCard = h.document.querySelector('#claim-hover-card');
+  assert.equal(hoverCard.hidden, true);
+  const claims = [...h.document.querySelectorAll('.page .claim')];
+  const contestedSpan = claims.find(el => el.textContent.includes('confirmed incursion'));
+  assert.ok(contestedSpan);
+
+  contestedSpan.dispatchEvent(new h.document.defaultView.Event('mouseenter'));
+  assert.equal(hoverCard.hidden, false);
+  assert.match(hoverCard.textContent, /\[2\] Seerist/);
+  assert.match(hoverCard.textContent, /Low confidence/);
+  assert.match(hoverCard.textContent, /Caveat/);
+  assert.match(hoverCard.textContent, /Authorities have not reported a confirmed incursion/);
+
+  contestedSpan.click();
+  const pinnedSpan = h.document.querySelector('.page .claim[data-pinned="true"]');
+  assert.ok(pinnedSpan);
+  assert.match(pinnedSpan.textContent, /confirmed incursion/);
+  assert.match(h.document.querySelector('#quote-inspector').textContent, /Absence of reports is weak single-source evidence/);
+  assert.match(h.document.querySelector('#quote-inspector').textContent, /Authorities have not reported a confirmed incursion/);
+
+  const publishBtn = h.button('Publish memo');
+  assert.ok(publishBtn);
+  assert.equal(publishBtn.disabled, false);
+  publishBtn.click();
   assert.equal(h.actions.length, 1);
-  const other = harness(reviewJourney(), 'sources');
-  other.change(other.document.querySelector('.review-obs select'), 'unsupported');
-  assert.equal(other.document.querySelector('.review-row input').parentElement.hidden, false);
-  other.button('Confirm support review').click();
-  assert.match(other.document.querySelector('[role=alert]').textContent, /Explain the flagged/);
+  assert.deepEqual(JSON.parse(JSON.stringify(h.actions[0])), {
+    action: 'approve-and-publish',
+    runId: 'fixture',
+    memoId: 'memo-1',
+    reviewerId: 'TESTER',
+    notes: ''
+  });
 });
 
-test('optional source concern and provisional path retain their limited authority', () => {
-  const h = harness(reviewJourney(), 'sources', null, { 'rv:snap-1:concern': 'Attribution is unclear.' });
-  assert.equal(h.document.querySelectorAll('.review-coverage')[1].open, true);
-  assert.match(h.document.querySelector('.review-skip').textContent, /block publication/);
-  h.button('Skip the support pass (provisional)').click();
-  assert.equal(h.actions[0].mode, 'provisional');
-  assert.equal(h.actions[0].reviewerId, 'TESTER');
+test('editorial revision drawer records revision feedback and chains start-memo-revision', async () => {
+  const review = reviewReady();
+  const h = harness(readyMemoJourney(), 'memo', { memoReview: review, markdown: SAMPLE_MARKDOWN });
+  await h.flush();
+  const textarea = h.document.querySelector('textarea');
+  h.change(textarea, 'Tighten the opening BLUF sentence.');
+  h.button('Revise memo wording').click();
+  await h.flush();
+  assert.equal(h.actions.length, 2);
+  assert.equal(h.actions[0].action, 'record-memo-review');
+  assert.equal(h.actions[0].decision, 'revision-requested');
+  assert.equal(h.actions[0].issueType, 'editorial');
+  assert.deepEqual(JSON.parse(JSON.stringify(h.actions[0].sampledVerdicts)), []);
+  assert.equal(h.actions[1].action, 'start-memo-revision');
+  assert.equal(h.actions[1].memoId, 'memo-1');
 });
 
-test('Findings prioritizes the current human decision and preserves checked-zero semantics', () => {
-  const h = harness(findingJourney(), 'synthesis', { authorized: true, status: 'human-waiting', remainingCalls: 0, stages: { build: { phase: 'committed' }, challenge: { phase: 'committed' } } });
-  const text = h.document.body.textContent;
-  assert.match(text, /no findings does not mean approval/);
-  assert.match(text, /Limited evidence/);
-  assert.match(text, /Formal review announced/);
-  assert.equal(h.button('Start bounded Build and Challenge'), undefined);
-  assert.equal(h.button('Resume bounded synthesis'), undefined);
-  assert.ok(text.indexOf('Review claims and record adjudication') < text.indexOf('Claims by evidence link'));
-  assert.equal(text.includes('No claim selected for this question'), false);
-  assert.equal(h.document.querySelector('.current-round').closest('details'), null);
-  assert.match(text, /No evidence recorded for this question/);
-  h.button('Record adjudication').click();
-  assert.equal(h.actions[0].action, 'record-adjudication');
-  assert.equal(h.actions[0].challenges.length, 0);
+test('v4 executive memo renders clean Situation and Assessment prose with hover provenance and inspector trace', async () => {
+  const review = reviewReady();
+  const journey = readyMemoJourney();
+  journey.memo.memoStandardVersion = 4;
+  journey.memo.memoContext = {
+    title: 'Poland Sabotage Readiness',
+    audience: 'Executive leadership',
+    windowFrom: '2026-11-01',
+    windowTo: '2026-11-09',
+    geographies: ['Poland']
+  };
+  journey.memo.situation = [
+    { text: 'Polish police entered full readiness over sabotage warnings.', claimIds: ['claim-1'] },
+    { text: 'Authorities have not reported a confirmed incursion.', claimIds: ['claim-2'] }
+  ];
+  journey.memo.sourcing = { text: '2 sources (1 OSINT, 1 Seerist); 1 contested caveat retained.' };
+  journey.memo.limitations = ['Unclassified reporting only.'];
+  journey.memo.competing = [{ claimId: 'claim-2', check: 'plausible-alternative', text: 'Limited disclosure may explain the absence of public reports.' }];
+  const v4Markdown = [
+    '# Memorandum: Poland Sabotage Readiness',
+    '',
+    '**To:** Executive leadership · **Window:** 2026-11-01 to 2026-11-09 · **Scope:** Poland',
+    '',
+    '## Bottom Line',
+    'Poland heightened police readiness amid sabotage warnings. [claim:claim-1]',
+    '',
+    '## Key Judgements',
+    '- Sabotage alerts prompted heightened readiness. [claim:claim-1] *(Moderate confidence)*',
+    '- No confirmed incursion has been disclosed. [claim:claim-2] *(Low confidence)*',
+    '',
+    '## Situation',
+    'Polish police entered full readiness over sabotage warnings. [claim:claim-1] Authorities have not reported a confirmed incursion. [claim:claim-2]',
+    '',
+    '## Assessment & Implications',
+    'Polish police entered full readiness over sabotage warnings. [claim:claim-1]',
+    '',
+    '## Uncertainties & Intelligence Gaps',
+    '- None identified in the current evidence.',
+    '',
+    '## Outlook & Indicators to Watch',
+    '- None specified in the current evidence.',
+    '',
+    '*Information cutoff: 2026-11-04T13:00:00Z*'
+  ].join('\n');
+
+  const h = harness(journey, 'memo', { memoReview: review, markdown: v4Markdown });
+  await h.flush();
+
+  const bodyText = h.document.querySelector('#doc .page-inner').textContent;
+  assert.match(bodyText, /Memorandum: Poland Sabotage Readiness/);
+  assert.doesNotMatch(bodyText, /\[claim:/);
+  assert.doesNotMatch(bodyText, /Moderate confidence|Low confidence/i);
+  assert.doesNotMatch(bodyText, /\[1 Kyiv Post\]|Caveat/);
+  assert.match(bodyText, /Situation/);
+  assert.match(bodyText, /Assessment & Implications/);
+
+  const firstClaim = h.document.querySelector('.page .claim');
+  firstClaim.dispatchEvent(new h.document.defaultView.Event('mouseenter'));
+  const hoverText = h.document.querySelector('#claim-hover-card').textContent;
+  assert.match(hoverText, /\[1\] Kyiv Post/);
+  assert.match(hoverText, /Moderate confidence/);
+  assert.match(hoverText, /Open source/);
+
+  const drawerText = h.document.body.textContent;
+  assert.match(drawerText, /2 sources \(1 OSINT, 1 Seerist\)/);
+  assert.match(drawerText, /Limited disclosure may explain the absence of public reports/);
+  assert.match(drawerText, /Unclassified reporting only/);
 });
 
-test('question links use persisted observations, never shared source identity or inferred coverage', () => {
-  const j = findingJourney();
-  j.rounds[0].steps[2].state = 'todo';
-  j.rounds[0].claims.push({ ...j.rounds[0].claims[0], claimId: 'claim-2', statement: 'Unlinked claim', observationIds: ['obs-unlinked'] });
-  const h = harness(j, 'synthesis');
-  const groups = [...h.document.querySelectorAll('.finding-group')];
-  assert.equal(groups[0].textContent.includes('Unlinked claim'), false);
-  assert.match(groups.at(-1).textContent, /Claims without a recorded question link.*Unlinked claim/);
-  j.rounds[0].keyJudgements = { path: 'kj.json', selections: [{ requirementId: 'ir-01', claimId: 'claim-1', text: 'A review was announced.' }], omissions: [], withoutClaim: [] };
-  h.C.render();
-  assert.match(h.document.body.textContent, /Selected findings by question/);
+test('legacy blocked memo offers automatic pipeline regeneration', async () => {
+  const j = readyMemoJourney();
+  j.memo.blockers = [{ code: 'PROVISIONAL_MEMO_STANDARD', label: 'Provisional standard' }];
+  j.memo.gate = { status: 'blocked', humanApprovalAvailable: false };
+  const review = { ...reviewReady(), approvalAvailable: false, approvalBlockers: ['PROVISIONAL_MEMO_STANDARD'] };
+  const h = harness(j, 'memo', { memoReview: review, markdown: SAMPLE_MARKDOWN });
+  await h.flush();
+  assert.equal(h.button('Publish memo'), undefined);
+  const regen = h.button('Regenerate memo automatically');
+  assert.ok(regen);
+  regen.click();
+  assert.equal(h.actions[0].action, 'run-pipeline');
+});
+
+test('pipelineWindow renders live TypeScript pipeline-status-v1 stage, counts, and source rows', () => {
+  const journey = {
+    brief: {
+      scope: { status: 'approved', audience: 'Executive leadership' },
+      question: { id: 'rq-1', text: 'Did Poland face sabotage warnings?' },
+      requirements: [{ irId: 'ir-1', text: 'Warnings' }],
+      framed: true
+    },
+    sources: [],
+    leads: [],
+    rounds: [],
+    memo: null
+  };
+  const h = harness(journey, 'memo', {
+    pipeline: {
+      schemaVersion: 'pipeline-status-v1',
+      state: 'running',
+      workerActive: true,
+      currentStage: 'adjudication',
+      stageDetail: 'Adjudicating adversarial challenges and preserving contested caveats...',
+      counts: {
+        discoveredCandidates: 18,
+        seeristAnalysisFound: 2,
+        externalArticlesCaptured: 4,
+        sourcesAssured: 5,
+        claimsBuilt: 7
+      },
+      sources: [
+        { id: 'article-1', kind: 'external-article', title: 'Kyiv Post sabotage report', publisherHost: 'www.kyivpost.com', status: 'assured', observationCount: 3, url: 'https://www.kyivpost.com/post/1' }
+      ]
+    }
+  });
+  const stages = [...h.document.querySelectorAll('.pipeline-stages li')];
+  assert.equal(stages[0].className, 'is-done');
+  assert.equal(stages[1].className, 'is-done');
+  assert.equal(stages[2].className, 'is-done');
+  assert.equal(stages[3].className, 'is-active');
+  assert.equal(stages[4].className, '');
+  assert.match(h.document.body.textContent, /Adjudicating adversarial challenges/);
+  const metricNums = [...h.document.querySelectorAll('.pipeline-metric strong')].map(n => n.textContent);
+  assert.deepEqual(metricNums, ['18', '6', '5', '7']);
+  assert.match(h.document.body.textContent, /Kyiv Post sabotage report/);
+  assert.match(h.document.body.textContent, /Assured \(3\)/);
 });

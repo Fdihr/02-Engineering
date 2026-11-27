@@ -98,7 +98,7 @@ No other workflow step is a human surface. A current manual action outside these
 | Human source assessment | `Assess` stage plus approved outlet reliability table | Versioned outlet identities and reliability table exist for the source profile |
 | Human adjudication | `Adjudicate` stage with `key-judgement-contest` escalation | Deterministic change checks are implemented; only contests that could change a key judgment enter the exception queue |
 | Manual command choreography | `run:next` run-to-next-gate driver | Every implemented step exposes deterministic readiness and next-action state |
-| Manual GitHub Copilot bridge | Approved Foundry adapter | Endpoint type, deployment, authentication, API version, region, and retention policy are approved |
+| Manual/unbounded model transport | Bounded Copilot or another approved model-provider integration | Each automated call is covered by explicit immutable authority; provider configuration and retention are approved |
 
 ## Support calibration policy
 
@@ -492,7 +492,7 @@ Deterministic code validates schema, source and question lineage, model-invocati
 
 The assessment cannot admit evidence, start source assurance, expand collection scope, or establish organizational relevance. AI never admits; deterministic code may admit only under the approved admission policy recorded by the run.
 
-The initial executable PoC uses an immutable request/response handoff through GitHub Copilot in VS Code because no approved Azure AI Foundry endpoint is available. It records the underlying model as `not-exposed-by-host` and is not a production model API. A future Foundry adapter must preserve this assessment contract and replace only the model-call transport.
+The early executable PoC used an immutable request/response handoff through GitHub Copilot in VS Code because no approved Azure AI Foundry endpoint was available. Current bounded executions use the existing GitHub Copilot SDK under frozen authorization. Additional model-provider integrations, including Foundry, are optional and must preserve this assessment contract if adopted.
 
 ## Readiness assessment
 
@@ -1877,7 +1877,7 @@ The NV review may be deferred while controller code and synthetic tests are deve
 
 Before that live exercise, synthetic fixtures cover: independent reporting; direct derivation; shared origin; the same note pair independent on one IR and shared-origin on another; one outlet represented by different names or domains; and a valid source note carrying the not-performed omission caveat. The last three distinguish claim-scoped dependency, outlet identity resolution, mandatory limitation propagation, and the derived `limitedEvidence` rule from simpler source-pair counting. The source appendix is asserted as an exact projection of those claim-level results. Confidence cells not reached by this fixture set remain explicitly `untested` in the test matrix.
 
-The manual Copilot bridge and command choreography are interim stand-ins for an approved Foundry adapter and `run:next` driver. They are not human approval surfaces. Keep the first POC bounded; do not add Relevance or a ten-call semantic verifier until the earlier contracts work.
+Manual or unbounded Copilot transport and command choreography are interim stand-ins for automated steps in the `run:next` driver. They are not human approval surfaces. Keep model work bounded by explicit authorization; do not add Relevance or a ten-call semantic verifier until the earlier contracts work.
 
 ## Open decisions
 

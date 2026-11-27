@@ -32,6 +32,126 @@
       "canonicalName": "Synthetic Relay",
       "aliases": ["Synthetic Note"],
       "domains": ["synthetic.example"]
+    },
+    {
+      "outletId": "outlet-seerist",
+      "canonicalName": "Seerist",
+      "aliases": ["Seerist Intelligence", "Control Risks Seerist"],
+      "domains": ["seerist.com", "app.seerist.com"]
+    },
+    {
+      "outletId": "outlet-reuters",
+      "canonicalName": "Reuters",
+      "aliases": ["Thomson Reuters"],
+      "domains": ["reuters.com"]
+    },
+    {
+      "outletId": "outlet-ap",
+      "canonicalName": "Associated Press",
+      "aliases": ["AP", "AP News"],
+      "domains": ["apnews.com"]
+    },
+    {
+      "outletId": "outlet-bbc",
+      "canonicalName": "BBC News",
+      "aliases": ["BBC"],
+      "domains": ["bbc.com", "bbc.co.uk"]
+    },
+    {
+      "outletId": "outlet-ft",
+      "canonicalName": "Financial Times",
+      "aliases": ["FT"],
+      "domains": ["ft.com"]
+    },
+    {
+      "outletId": "outlet-bloomberg",
+      "canonicalName": "Bloomberg",
+      "aliases": ["Bloomberg News"],
+      "domains": ["bloomberg.com"]
+    },
+    {
+      "outletId": "outlet-wsj",
+      "canonicalName": "The Wall Street Journal",
+      "aliases": ["WSJ", "Wall Street Journal"],
+      "domains": ["wsj.com"]
+    },
+    {
+      "outletId": "outlet-wapo",
+      "canonicalName": "The Washington Post",
+      "aliases": ["Washington Post"],
+      "domains": ["washingtonpost.com"]
+    },
+    {
+      "outletId": "outlet-guardian",
+      "canonicalName": "The Guardian",
+      "aliases": ["Guardian"],
+      "domains": ["theguardian.com"]
+    },
+    {
+      "outletId": "outlet-politico",
+      "canonicalName": "Politico",
+      "aliases": ["POLITICO Europe"],
+      "domains": ["politico.eu", "politico.com"]
+    },
+    {
+      "outletId": "outlet-kyiv-independent",
+      "canonicalName": "The Kyiv Independent",
+      "aliases": ["Kyiv Independent"],
+      "domains": ["kyivindependent.com"]
+    },
+    {
+      "outletId": "outlet-kyiv-post",
+      "canonicalName": "Kyiv Post",
+      "aliases": ["The Kyiv Post"],
+      "domains": ["kyivpost.com"]
+    },
+    {
+      "outletId": "outlet-dw",
+      "canonicalName": "Deutsche Welle",
+      "aliases": ["DW"],
+      "domains": ["dw.com"]
+    },
+    {
+      "outletId": "outlet-aljazeera",
+      "canonicalName": "Al Jazeera",
+      "aliases": ["Al Jazeera English"],
+      "domains": ["aljazeera.com"]
+    },
+    {
+      "outletId": "outlet-france24",
+      "canonicalName": "France 24",
+      "aliases": ["F24"],
+      "domains": ["france24.com"]
+    },
+    {
+      "outletId": "outlet-euronews",
+      "canonicalName": "Euronews",
+      "aliases": ["Euronews English"],
+      "domains": ["euronews.com"]
+    },
+    {
+      "outletId": "outlet-notes-from-poland",
+      "canonicalName": "Notes From Poland",
+      "aliases": ["NFP"],
+      "domains": ["notesfrompoland.com"]
+    },
+    {
+      "outletId": "outlet-therecord",
+      "canonicalName": "The Record",
+      "aliases": ["Recorded Future News"],
+      "domains": ["therecord.media"]
+    },
+    {
+      "outletId": "outlet-bleepingcomputer",
+      "canonicalName": "BleepingComputer",
+      "aliases": ["Bleeping Computer"],
+      "domains": ["bleepingcomputer.com"]
+    },
+    {
+      "outletId": "outlet-cisa",
+      "canonicalName": "CISA",
+      "aliases": ["Cybersecurity and Infrastructure Security Agency"],
+      "domains": ["cisa.gov"]
     }
   ]
 }

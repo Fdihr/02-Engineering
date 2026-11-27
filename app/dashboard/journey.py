@@ -197,7 +197,14 @@ def _note_index(full: dict[str, Any], candidates: dict[str, dict[str, Any]]) -> 
             for obs in _arr(value.get(group)):
                 obs = _rec(obs)
                 if _txt(obs.get("observationId")):
-                    observations[obs["observationId"]] = {"text": _txt(obs.get("text")), "quote": _txt(obs.get("quote"))}
+                    observations[obs["observationId"]] = {
+                        "observationId": _txt(obs.get("observationId")),
+                        "text": _txt(obs.get("text")),
+                        "quote": _txt(obs.get("quote")),
+                        "claimKind": _txt(obs.get("claimKind")),
+                        "attribution": _txt(obs.get("attribution")),
+                        "attributedTo": _txt(obs.get("attributedTo")),
+                    }
         notes[note_id] = {
             "noteId": note_id,
             "relPath": rel,
@@ -210,6 +217,46 @@ def _note_index(full: dict[str, Any], candidates: dict[str, dict[str, Any]]) -> 
             "observations": observations,
         }
     return notes
+
+
+def check_key_judgement_impact(
+    claims: list[dict[str, Any]],
+    selections: list[dict[str, Any]],
+    *,
+    selection_known: bool,
+) -> dict[str, Any]:
+    selected: dict[str, list[str]] = defaultdict(list)
+    if selection_known:
+        for item in selections:
+            claim_id = _txt(_rec(item).get("claimId"))
+            requirement_id = _txt(_rec(item).get("requirementId"))
+            if claim_id and requirement_id:
+                selected[claim_id].append(requirement_id)
+
+    impacted_claims: set[str] = set()
+    impacting_challenges = 0
+    for claim in claims:
+        claim_id = _txt(claim.get("claimId"))
+        requirement_ids = selected.get(claim_id, [])
+        for challenge in claim.get("challenges", []):
+            could_change = bool(selection_known and requirement_ids)
+            challenge["changeCheck"] = {
+                "couldChangeKeyJudgement": could_change if selection_known else None,
+                "reason": "selected-claim" if could_change else (
+                    "claim-not-selected" if selection_known else "selection-not-recorded"
+                ),
+                "requirementIds": requirement_ids,
+            }
+            if could_change:
+                impacted_claims.add(claim_id)
+                impacting_challenges += 1
+    return {
+        "selectionKnown": selection_known,
+        "selectedClaimCount": len(selected),
+        "affectedClaimCount": len(impacted_claims),
+        "impactingChallengeCount": impacting_challenges,
+        "otherChallengeCount": sum(len(claim.get("challenges", [])) for claim in claims) - impacting_challenges,
+    }
 
 
 def _rounds(run_id: str, full: dict[str, Any], adjudications: list[dict[str, Any]], ai_queue: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
@@ -289,6 +336,13 @@ def _rounds(run_id: str, full: dict[str, Any], adjudications: list[dict[str, Any
 
         kj_rel, kj = key_judgements.get(ref, ("", {}))
         selection = _rec(kj.get("selection"))
+        challenge_record_id = _txt(_rec(challenge).get("id"))
+        selection_known = bool(
+            kj_rel and challenge_rel and
+            _ref(kj, "challengeRecord") == f"runs/{run_id}/{challenge_rel}" and
+            _ref(kj, "adjudication") ==
+            f"runs/{run_id}/synthesis/adjudication/{challenge_record_id}/performed-adjudication.json"
+        )
         if kj_rel:
             steps.append(_step("key-judgements", "Key judgements", "done", f"{len(_arr(selection.get('selections')))} selected · {len(_arr(selection.get('omissions')))} omitted"))
         elif "key-judgements" in waiting:
@@ -326,6 +380,9 @@ def _rounds(run_id: str, full: dict[str, Any], adjudications: list[dict[str, Any
                 "challenges": judged.get("challenges", []),
                 "status": judged.get("status", ""),
             })
+        impact = check_key_judgement_impact(
+            claims, _arr(selection.get("selections")), selection_known=selection_known
+        )
         rounds.append({
             "index": index,
             "id": _txt(record.get("id")),
@@ -356,6 +413,7 @@ def _rounds(run_id: str, full: dict[str, Any], adjudications: list[dict[str, Any
                 "omissions": [{"requirementId": _txt(_rec(o).get("requirementId")), "reason": _txt(_rec(o).get("reason"))} for o in _arr(selection.get("omissions"))],
                 "withoutClaim": [str(r) for r in _arr(selection.get("requirementsWithoutEligibleClaim"))],
             } if kj_rel else None,
+            "keyJudgementImpact": impact,
             "memoPaths": [rel_path for _, rel_path in round_memos],
             "steps": _settle(steps),
             "current": False,
@@ -406,7 +464,21 @@ def _memo_view(run_id: str, full: dict[str, Any], rounds: list[dict[str, Any]], 
             quotes = [note["observations"][o] for o in claim["observationIds"] if o in note["observations"]]
             sources.append({"noteId": note_id, "title": note["title"], "url": note["url"], "publisher": note["publisher"],
                             "reviewStatus": note["reviewStatus"], "quotes": quotes})
-        claims[claim["claimId"]] = {**{k: claim[k] for k in ("statement", "kind", "confidence", "status", "singleSource", "alias")}, "sources": sources}
+        claims[claim["claimId"]] = {
+            **{k: claim[k] for k in ("statement", "kind", "confidence", "status", "singleSource", "alias")},
+            "ceiling": _txt(claim.get("ceiling")),
+            "challenges": [
+                {
+                    "id": _txt(ch.get("id")),
+                    "check": _txt(ch.get("check")),
+                    "rationale": _txt(ch.get("rationale")),
+                    "hypothesis": _txt(ch.get("hypothesis")),
+                    "decision": _txt(ch.get("decision")),
+                }
+                for ch in _arr(claim.get("challenges"))
+            ],
+            "sources": sources,
+        }
 
     verification = _rec(full.get(f"{folder}/verification.json"))
     gate = _rec(full.get(f"{folder}/publication-gate.json"))
@@ -426,9 +498,12 @@ def _memo_view(run_id: str, full: dict[str, Any], rounds: list[dict[str, Any]], 
         "isCurrent": bool(round_index) and round_index == current,
         "versions": len(found),
         "version": _num(memo.get("version")),
+        "memoStandardVersion": _num(memo.get("memoStandardVersion")),
+        "memoContext": _rec(memo.get("memoContext")),
         "supersedesMemoId": _txt(memo.get("supersedesMemoId")),
         "bluf": [statement(e) for e in _arr(memo.get("bluf"))],
         "keyJudgments": [statement(e) for e in _arr(memo.get("keyJudgments"))],
+        "situation": [statement(e) for e in _arr(memo.get("situation"))],
         "analysis": [statement(e) for e in _arr(memo.get("analysis"))],
         "uncertainties": [statement(e) for e in _arr(memo.get("uncertainties"))],
         "indicators": [statement(e) for e in _arr(memo.get("indicators"))],

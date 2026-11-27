@@ -70,6 +70,23 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(view["sources"][0]["snapshotId"], "snapshot-test-001")
         self.assertEqual(view["counts"]["events"], 1)
 
+    def test_published_memo_download_serves_only_a_run_bound_package(self):
+        package = self.run_dir / "published" / "memo-1" / "publication.json"
+        package.parent.mkdir(parents=True)
+        expected = {"schemaVersion": "published-memo-package-v1", "runId": "test-run", "memoId": "memo-1"}
+        package.write_text(json.dumps(expected), encoding="utf-8")
+        with urlopen(self.base + "/api/published-memo?" + urlencode({"run": "test-run", "memo": "memo-1"})) as response:
+            self.assertEqual(response.status, 200)
+            self.assertIn("attachment; filename=\"memo-package-memo-1.json\"",
+                          response.headers.get("Content-Disposition", ""))
+            self.assertEqual(json.loads(response.read()), expected)
+        with self.assertRaises(HTTPError) as missing:
+            urlopen(self.base + "/api/published-memo?" + urlencode({"run": "test-run", "memo": "missing"}))
+        self.assertEqual(missing.exception.code, 404)
+        with self.assertRaises(HTTPError) as invalid:
+            urlopen(self.base + "/api/published-memo?" + urlencode({"run": "test-run", "memo": "../memo-1"}))
+        self.assertEqual(invalid.exception.code, 400)
+
     def test_frontend_initialization_keeps_approval_gates_and_copilot_settings(self):
         script = r"""
 const assert = require('node:assert/strict');
@@ -144,6 +161,13 @@ C.panes.settings();
     def test_evidence_workspace_frontend(self):
         result = subprocess.run(
             ["node", str(Path(__file__).parent / "test_evidence_workspace.cjs")],
+            capture_output=True, text=True, timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_two_gate_memo_review_frontend(self):
+        result = subprocess.run(
+            ["node", str(Path(__file__).parent / "test_workflow_review.cjs")],
             capture_output=True, text=True, timeout=15,
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
@@ -382,6 +406,29 @@ C.panes.settings();
                 "reviewerId": "analyst", "requirements": "What happened?"})
             self.assertEqual(status, 409)
             runner.assert_not_called()
+    def test_exception_decision_requires_identity_reason_and_single_decision(self):
+        runs_root = self.run_dir / "runs-root"
+        run_id = "run-x"
+        run_dir = runs_root / run_id
+        item_dir = run_dir / "exceptions" / "exc-1"
+        item_dir.mkdir(parents=True)
+        (item_dir / "exception-item.json").write_text("{}", encoding="utf-8")
+        base = {"action": "decide-exception", "runId": run_id, "exceptionId": "exc-1", "reviewerId": "FDIHR", "decision": "exclude", "reason": "Context only"}
+        with patch("dashboard.server._run_npm_script") as runner:
+            runner.return_value = {"ok": True, "command": "decide:exception", "exitCode": 0, "stdout": "", "stderr": ""}
+            self.assertEqual(_handle_analyst_action(runs_root, run_dir, {**base, "reviewerId": ""})[0], 400)
+            self.assertEqual(_handle_analyst_action(runs_root, run_dir, {**base, "decision": "resume"})[0], 400)
+            self.assertEqual(_handle_analyst_action(runs_root, run_dir, {**base, "reason": " "})[0], 400)
+            self.assertEqual(_handle_analyst_action(runs_root, run_dir, {**base, "exceptionId": "missing"})[0], 404)
+            runner.assert_not_called()
+            status, _ = _handle_analyst_action(runs_root, run_dir, {**base, "reason": "ok & echo pwned\r\nnext"})
+            self.assertEqual(status, 200)
+            self.assertEqual(runner.call_args.args[0], "decide:exception")
+            self.assertEqual(runner.call_args.args[1], [f"runs/{run_id}/exceptions/exc-1/exception-item.json", "exclude", "FDIHR", "ok & echo pwned next"])
+            self.assertEqual(runner.call_args.kwargs["runs_root"], runs_root)
+            (item_dir / "exception-decision.json").write_text("{}", encoding="utf-8")
+            self.assertEqual(_handle_analyst_action(runs_root, run_dir, base)[0], 409)
+
     def test_evidence_review_requires_identity_reason_and_single_decision(self):
         runs_root = self.run_dir / "runs-root"
         run_id = "run-e"
@@ -658,7 +705,7 @@ C.panes.settings();
             status, result = _handle_analyst_action(runs_root, run_dir, base)
             self.assertEqual(status, 200, result)
             self.assertEqual(runner.call_args.args[0], "prepare:key-judgements")
-            self.assertEqual(runner.call_args.args[1][-1], "src/modules/memo/standards/memo-standard-v2.json")
+            self.assertEqual(runner.call_args.args[1][-1], "src/modules/memo/standards/memo-standard-v4.json")
             self.assertEqual(runner.call_args.kwargs["runs_root"], runs_root)
             self.assertEqual(_handle_analyst_action(runs_root, run_dir, base)[0], 409)
         out = run_dir / "synthesis" / "adjudication" / "synthesis-challenge-record-abc"
@@ -668,6 +715,18 @@ C.panes.settings();
         self.assertEqual(adjudication["adjudicationStatus"], "performed")
         decision = json.loads((out / "adjudication-decision.json").read_text(encoding="utf-8"))
         self.assertEqual(decision["reviewerId"], "FDIHR")
+
+        round2_rec = "synthesis/challenge/records/synthesis-challenge-record-r2/challenge-record.json"
+        round2_file = run_dir / round2_rec
+        round2_file.parent.mkdir(parents=True)
+        round2_file.write_text((run_dir / rec_rel).read_text(encoding="utf-8"), encoding="utf-8")
+        memo_auth = run_dir / "memo" / "execution" / "authorization.json"
+        memo_auth.parent.mkdir(parents=True)
+        memo_auth.write_text("{}", encoding="utf-8")
+        with patch("dashboard.server._run_npm_script") as runner2:
+            status2, result2 = _handle_analyst_action(runs_root, run_dir, {**base, "challengeRecordPath": round2_rec})
+            self.assertEqual(status2, 200, result2)
+            runner2.assert_not_called()
 
     def test_writer_chain_preserves_the_recorded_selection_standard(self):
         from dashboard.server import _chain_after_stage
@@ -816,6 +875,72 @@ C.panes.settings();
         self.assertIsNone(read_lead(self.run_dir, "test-run", "discoveries/../raw-pages/x.json", "cr-1"))
         with urlopen(self.base + "/api/lead?" + urlencode({"path": ref, "id": "42"})) as response:
             self.assertEqual(json.loads(response.read())["summary"], "Plain summary.")
+
+    def test_pipeline_status_normalizes_ts_schema_and_detects_interruption(self):
+        from dashboard import pipeline_runner
+        from dashboard.scan import list_available_runs
+
+        with tempfile.TemporaryDirectory() as tmp_root:
+            runs_root = Path(tmp_root)
+            target_dir = runs_root / "test-run"
+            pipe_dir = target_dir / "pipeline"
+            pipe_dir.mkdir(parents=True, exist_ok=True)
+            status_file = pipe_dir / "status.json"
+            status_file.write_text(json.dumps({
+                "schemaVersion": "pipeline-status-v1",
+                "runId": "test-run",
+                "state": "running",
+                "currentStage": "adjudication",
+                "stageDetail": "Adjudicating adversarial challenges...",
+                "counts": {
+                    "discoveredCandidates": 14,
+                    "seeristAnalysisFound": 2,
+                    "externalArticlesCaptured": 4,
+                    "sourcesAssured": 5,
+                    "claimsBuilt": 6,
+                },
+                "sources": [],
+            }), encoding="utf-8")
+
+            # When worker is active, status stays running and maps adjudication -> synthesis
+            pipeline_runner.ACTIVE.add(target_dir.resolve())
+            try:
+                live = pipeline_runner.status(runs_root, "test-run")
+                self.assertEqual(live["status"], "running")
+                self.assertEqual(live["stage"], "synthesis")
+                self.assertEqual(live["message"], "Adjudicating adversarial challenges...")
+                self.assertEqual(live["counts"]["leads"], 14)
+                self.assertEqual(live["counts"]["capturedSources"], 6)
+                self.assertEqual(live["counts"]["assuredSources"], 5)
+                self.assertEqual(live["counts"]["claims"], 6)
+                runs = list_available_runs(runs_root, active_runs=pipeline_runner.ACTIVE)
+                row = next(r for r in runs if r["runId"] == "test-run")
+                self.assertEqual(row["status"], "running")
+                self.assertEqual(row["sourceCount"], 5)
+            finally:
+                pipeline_runner.ACTIVE.discard(target_dir.resolve())
+
+            # When worker stops without writing terminal state, status reports interrupted
+            stopped = pipeline_runner.status(runs_root, "test-run")
+            self.assertEqual(stopped["status"], "interrupted")
+            self.assertIn("stopped before finishing", stopped["error"])
+            runs_after = list_available_runs(runs_root, active_runs=pipeline_runner.ACTIVE)
+            row_after = next(r for r in runs_after if r["runId"] == "test-run")
+            self.assertEqual(row_after["status"], "interrupted")
+
+            # When pipeline finishes into memo-review, status maps to ready-for-review
+            status_file.write_text(json.dumps({
+                "schemaVersion": "pipeline-status-v1",
+                "runId": "test-run",
+                "state": "memo-review",
+                "currentStage": "complete",
+                "stageDetail": "Memo draft verified and ready for review.",
+                "counts": {"sourcesAssured": 5},
+                "sources": [],
+            }), encoding="utf-8")
+            done = pipeline_runner.status(runs_root, "test-run")
+            self.assertEqual(done["status"], "ready-for-review")
+            self.assertEqual(done["stage"], "completed")
 
 
 if __name__ == "__main__":

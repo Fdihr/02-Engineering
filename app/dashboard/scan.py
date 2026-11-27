@@ -1,6 +1,7 @@
 """Bounded, read-only scans of one run directory."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -33,7 +34,89 @@ def _fs_path(path: Path) -> str:
     return resolved
 
 
-def list_available_runs(runs_root: str | Path) -> list[dict[str, Any]]:
+def _unwrap_value(raw: Any) -> Any:
+    if isinstance(raw, dict) and "value" in raw:
+        return raw["value"]
+    return raw
+
+
+def _glob_sorted(directory: Path, pattern: str) -> list[Path]:
+    """Glob without \\\\?\\ prefix (Windows pathlib.glob fails on extended-length prefixes)."""
+    plain = Path(str(directory).removeprefix("\\\\?\\"))
+    try:
+        return sorted(plain.glob(pattern))
+    except OSError:
+        return []
+
+
+def _summarize_run_dir(run_dir: Path, *, active_runs: set[Path] | None = None) -> dict[str, Any]:
+    """Read lightweight run summary metadata without scanning every file."""
+    question = ""
+    scope_summary = ""
+    status = "draft"
+    source_count = 0
+    memo_id = ""
+    try:
+        rq_files = _glob_sorted(run_dir / "research-questions", "*/approved-research-question.json")
+        if rq_files:
+            rq = json.loads(Path(_fs_path(rq_files[-1])).read_text(encoding="utf-8"))
+            q_val = _unwrap_value(rq.get("question")) or _unwrap_value(rq.get("researchThesis")) or ""
+            question = str(q_val).strip()
+            status = "approved"
+        scope_files = _glob_sorted(run_dir / "memo-scopes", "*/*/approved-memo-scope.json")
+        if scope_files:
+            scope = json.loads(Path(_fs_path(scope_files[-1])).read_text(encoding="utf-8"))
+            raw_geos = _unwrap_value(scope.get("geographies"))
+            geos = ", ".join(str(g) for g in raw_geos) if isinstance(raw_geos, list) else str(raw_geos or "")
+            win = _unwrap_value(scope.get("timeWindow")) or {}
+            if not isinstance(win, dict):
+                win = {}
+            t_from = str(win.get("from") or win.get("start") or "")[:10]
+            t_to = str(win.get("to") or win.get("end") or "")[:10]
+            parts = [p for p in (geos, f"{t_from} → {t_to}" if t_from and t_to else "") if p]
+            scope_summary = " · ".join(parts)
+            if not question:
+                question = str(_unwrap_value(scope.get("researchThesis")) or "").strip()
+        source_count = len(_glob_sorted(run_dir / "assurance", "*/source-note-reviewed.json"))
+        pipe_file = run_dir / "pipeline" / "status.json"
+        if os.path.isfile(_fs_path(pipe_file)):
+            pipe = json.loads(Path(_fs_path(pipe_file)).read_text(encoding="utf-8"))
+            raw_state = str(pipe.get("state") or pipe.get("status") or "")
+            if raw_state == "memo-review":
+                p_status = "ready-for-review"
+            elif raw_state == "running" and active_runs is not None and run_dir.resolve() not in active_runs:
+                p_status = "interrupted"
+            else:
+                p_status = raw_state
+            if p_status in ("running", "failed", "interrupted", "ready-for-review"):
+                status = p_status
+            p_counts = pipe.get("counts") or {}
+            assured = p_counts.get("sourcesAssured") or p_counts.get("assuredSources") or p_counts.get("assured")
+            if isinstance(assured, int) and assured > source_count:
+                source_count = assured
+        memo_files = _glob_sorted(run_dir / "memo", "*/memo.json")
+        if memo_files:
+            memo = json.loads(Path(_fs_path(memo_files[-1])).read_text(encoding="utf-8"))
+            memo_id = str(memo.get("id") or "")
+            status = "ready-for-review"
+        pub_files = [
+            p for p in _glob_sorted(run_dir / "published", "*/*.json")
+            if p.name in ("publication.json", "publication-record.json", "published-memo.json")
+        ] or _glob_sorted(run_dir / "memo", "*/publication-record.json")
+        if pub_files:
+            status = "published"
+    except (OSError, ValueError, TypeError):
+        pass
+    return {
+        "question": question,
+        "scopeSummary": scope_summary,
+        "status": status,
+        "sourceCount": source_count,
+        "memoId": memo_id,
+    }
+
+
+def list_available_runs(runs_root: str | Path, *, active_runs: set[Path] | None = None) -> list[dict[str, Any]]:
     """List run directories under the parent runs root."""
     root = Path(runs_root).resolve()
     items: list[dict[str, Any]] = []
@@ -43,15 +126,20 @@ def list_available_runs(runs_root: str | Path) -> list[dict[str, Any]]:
         return items
     for entry in entries:
         try:
-            if entry.name.startswith(".") or entry.is_symlink() or not entry.is_dir(follow_symlinks=False):
+            if entry.name.startswith((".", "_")) or entry.is_symlink() or not entry.is_dir(follow_symlinks=False):
                 continue
             # Evidence admission writes snapshot folders beside analyses; they are not runs.
             if os.path.isfile(os.path.join(entry.path, "approved-evidence-snapshot.json")):
                 continue
             stat = entry.stat(follow_symlinks=False)
+            summary = _summarize_run_dir(root / entry.name, active_runs=active_runs)
+            mtime_ms = int(stat.st_mtime * 1000)
+            updated_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
             items.append({
                 "runId": entry.name,
-                "mtimeMs": int(stat.st_mtime * 1000),
+                "mtimeMs": mtime_ms,
+                "updatedAt": updated_at,
+                **summary,
             })
         except OSError:
             continue

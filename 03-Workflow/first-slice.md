@@ -1,23 +1,27 @@
 # Implemented Workflow Baseline
 
-Status: Historical Firecrawl retrieval is retired. Bounded RSS batches and a
-separate local exact-URL article adapter now reach canonicalization, relevance
-and explicitly governed relevant-only admission. Historical leads remain
-pending; neither adapter automatically resolves them. Panel 2 exercised
-provisional review and then completed a human rows-only support pass. Panel 3
-has a bounded key-judgement selection contract and writer v2 path; the reviewed
-Build request still needs a fresh response, Challenge, and performed adjudication.
-The bounded execution path below is implemented and synthetically verified;
-it has not been run against that existing analysis.
+Status: CTI Bench now operates on a **two-gate human operating model**:
+- **Gate 1 (`#/new`)**: Human approves the AI-drafted research plan (scope, research question, information requirements, Seerist search queries, and an external publisher article budget defaulting to 6).
+- **Automated pipeline (`npm run pipeline:run` / `dashboard/pipeline_runner.py`)**: Runs end to end without mid-run human stops — Seerist `/v1/wod` collection, provider-item triage, native Seerist `analysis` full-text admission plus bounded local exact-URL publisher capture, question relevance (`v2`), deterministic verbatim-quote source assurance (`auto-assure:source`), synthesis `Build` + adversarial `Challenge`, deterministic challenge adjudication (surfacing contested claims as explicit caveats and capping confidence to `low` without halting), key-judgement selection, and `memo-standard-v4` executive memo writing + 11 deterministic verification checks.
+- **Gate 2 (`#/review`)**: Human reads the finished executive memo with clickable inline `[N Publisher]` pills, `Caveat` badges, verbatim-quote inspection, direct external source links, optional editorial revision, and 1-click publication (`approve-and-publish` under `support-calibration-policy-v2`, `sampleSize: 0`).
 
-The local adapter uses Node HTTPS, Readability and a non-executing jsdom
-document. It needs no scraping service, MCP or key. Its one-source approval,
-network limits, immutable artifacts, trust boundary and separate source
-identity are defined in [the active contract](../02-Contracts/local-article-retrieval.md).
-Admission does not claim completed source assurance. RSS remains the first
-live-validated acquisition path; see persisted run receipts for actual outcomes.
+The local article adapter uses Node HTTPS, Readability and a non-executing jsdom
+document. It needs no scraping service, MCP or key. Its network limits,
+immutable artifacts, trust boundary and separate source identity are defined in
+[the active contract](../02-Contracts/local-article-retrieval.md).
 
-Human references below are either one of the four target surfaces (intent, publication, pushed exceptions, governance), compatibility history, or an interim stand-in named in `memo-workflow.md`. Per-source review and manual model transport are not additional permanent human surfaces.
+## Implemented two-gate automated pipeline (2026-11-24)
+
+`npm run pipeline:run -- <run-id> [reviewer-id] [max-external-articles]` and the
+dashboard background runner (`POST /api/action` with `action: "run-pipeline"`,
+or `runPipeline: true` on Gate 1 plan approval) execute the complete post-plan
+workflow idempotently from persisted run artifacts:
+
+1. **Collection & capture**: Executes unrun approved Seerist discovery queries, classifies provider items, canonicalizes full-text Seerist `analysis` reports directly, and fetches up to `maxExternalArticles` (default `6`) external publisher leads via the safe local Readability adapter. Failed or unreachable URLs are skipped cleanly without stopping the run.
+2. **Relevance & extraction**: Runs `relevance-v2` screening, admits relevant sources under policy, and extracts structured observations with verbatim quotes.
+3. **Automated source assurance (`auto-assure:source`)**: Deterministically verifies that each extracted quote appears in the canonical source snapshot (`supported` vs `unsupported`), classifies outlet credibility via `geopolitical-outlets-v1.json`, and emits non-provisional `source-note` artifacts.
+4. **Synthesis, challenge & caveat preservation**: Runs bounded `Build` and adversarial `Challenge`, then records deterministic adjudication (`autoAdjudicateChallengeRecord`) where `high`/`moderate` challenges mark claims `contested` (retaining open caveats and capping key-judgement confidence at `low`) and `low` challenges remain `accepted`. Open challenges surface visibly in the memo rather than blocking `OPEN_KEY_JUDGEMENT_CONTEST`.
+5. **Memo writing & Gate 2 readiness**: Runs bounded key-judgement selection and `memo-standard-v4` executive memo writing (giving the writer access to the full non-rejected adjudicated claim pool across `Bottom Line`, `Key Judgements`, `Situation`, `Assessment & Implications`, `Uncertainties & Intelligence Gaps`, and `Outlook & Indicators to Watch`), passes deterministic verification, and prepares Gate 2 review under `support-calibration-policy-v2.json` (`sampleSize: 0`).
 
 ## Implemented shared next-action projection (2026-11-04)
 
@@ -27,13 +31,21 @@ outcomes, pending decisions and interim checkpoints, scoped blockers, current
 stage/status, and one recommended next action without persisting duplicate
 workflow state. Exact artifact references can scope a source exception to its
 dependent work; unknown scope remains an explicit conservative run blocker.
+An analyst can close an open exception with a write-once `exclude` or
+`accept-gap` decision (`npm run decide:exception`); the runner, synthesis and
+memo gates treat validly decided items as closed and invalid decisions as
+integrity failures.
 Publication blockers do not stop unrelated draft work.
 
 The projection itself does not automate model calls or collection, remove compatibility
 admission/support/adjudication checks, or grant publication authority.
-Prepared model requests remain inspectable manual checkpoints, and
-`run:next` executes only existing deterministic recorders with saved
-responses. See [the active contract](../02-Contracts/workflow-projection.md).
+Prepared model requests remain inspectable manual checkpoints. `run:next`
+executes existing deterministic recorders for saved responses, rereading state
+after each and stopping at the next human gate, pending model request, or
+failure. For synthesis, memo, or revision with an existing valid authorization,
+it may use the existing resume runner and Copilot model within that frozen
+call budget; it cannot create or replenish authority. See
+[the active contract](../02-Contracts/workflow-projection.md).
 
 ## Implemented bounded Build and Challenge execution (2026-11-04)
 
@@ -54,21 +66,31 @@ safely scoped source work remains eligible through the shared projection.
 
 Challenge always stops at the existing human adjudication checkpoint, even
 when no findings are raised. Source support review, adjudication and publication
-remain human-owned; key-judgement selection and writer execution are outside
-this slice. CLI `run:next` reports bounded status/resume instead of advancing
-later work. No live model/provider run is implied by implementation or tests.
+remain human-owned. CLI `run:next` may resume only already-authorized bounded
+synthesis work and still stops at adjudication; it does not authorize or
+advance through that human gate. No live model/provider run is implied by
+implementation or tests.
 See [authorization, receipts and recovery limits](../02-Contracts/bounded-synthesis-execution.md).
 
 ## Implemented bounded selection and writing (2026-11-04)
 
-New starts now use provisional `memo-standard-v2` without a total word ceiling.
-The writer is guided to be concise, but two-page memos are allowed; evidence,
-selection, structured output, call allowances and publication boundaries are
-unchanged. Existing drafts, authorizations and editorial revisions retain their
-checksum-bound historical standard rather than being silently migrated.
+New starts now use approved `memo-standard-v4` without a total word ceiling.
+It supplies the full non-rejected adjudicated claim pool to the writer, composes
+proportional multi-sentence executive prose (`Bottom Line`, `Key Judgements`,
+`Situation`, `Assessment & Implications`, `Uncertainties & Intelligence Gaps`,
+and `Outlook & Indicators to Watch`), renders plain-English gap descriptions,
+and moves mechanical sourcing/provenance counts to the `#/review` inspector.
+Evidence, selection, structured output, call allowances and publication
+boundaries remain unchanged. Existing drafts, authorizations and editorial
+revisions retain their checksum-bound historical standard rather than being
+silently migrated.
 
 After performed human adjudication, Findings has a separate explicit bounded
-start for key-judgement selection and writer v2. It freezes the adjudicated
+start for key-judgement selection and writer v2. The first adjudicated round
+freezes its receipt under `memo/execution/`; subsequent adjudicated rounds
+freeze independent immutable receipts under `memo/execution/rounds/<adjudication-id>/`
+without altering earlier authorizations, drafts or historical `length-repair`.
+Each start freezes the adjudicated
 round, approved question/scope and source lineage, policy/standard and Settings
 models, reuses validated existing work, and grants at most one generation per
 missing stage. Saved outputs can finish deterministic recording after restart;
@@ -77,27 +99,31 @@ replacement allowance from refresh, start or resume.
 
 Existing eligibility and writer recorders preserve rejected/contested status,
 confidence ceilings, key-judgement wording, omissions, evidence gaps and caveats.
-The complete draft, Markdown, deterministic verification and blocked publication
+The complete draft, Markdown, deterministic verification and publication
 gate lead to human memo review. Publication remains a separate human decision;
-the provisional standard and any unresolved contests still block it. This slice
-has synthetic coverage only and does not execute or change the live analysis.
-CLI `run:next` reports memo status/resume before the earlier synthesis handoff.
+Round 1 of `analysis-2026-11` remains bound to provisional v2, while Round 2 uses
+approved v3 and remains blocked only by `OPEN_KEY_JUDGEMENT_CONTEST`.
+CLI `run:next` resumes only runnable work under an existing bounded memo
+authorization and yields to newer synthesis/adjudication rounds once an earlier
+round is already waiting at memo review.
 See [the active contract](../02-Contracts/bounded-memo-execution.md).
 
 ## Implemented version-bound memo review (2026-11-04)
 
-The review surface can record a human revision request or rejection for a
-reconstructable writer v2 draft, with sampled observation verdicts and
-drill-down timestamps. Each immutable decision binds the exact memo JSON,
-Markdown, writer, verification, gate and calibration policy checksums.
+The review surface can record human publication approval, a revision request, or
+rejection for a reconstructable writer v2 draft, with sampled observation
+verdicts and drill-down timestamps. Each immutable decision binds the exact memo
+JSON, Markdown, writer, verification, gate and calibration policy checksums.
 Changed or incomplete artifacts disable review; stale decisions grant no
 approval. Dashboard and `review:memo` use the same deterministic recorder.
 
-Publication approval remains unavailable under the current provisional memo
-standard. Neither a review decision nor a forged ready gate overrides the
-writer's blockers. Publication delivery is not implemented, and review cannot
-refill bounded model authority. See
-[the decision contract](../02-Contracts/memo-review-and-publication-decision.md).
+Approval is available only when deterministic writer blockers are clear and all
+five sampled observations are marked supported. After an immutable approval
+receipt, a separate explicit action creates a write-once local Markdown+JSON
+publication package under `runs/<run-id>/published/<memo-id>/publication.json`
+with no external distribution. Neither a review decision nor a forged ready gate
+overrides the writer's blockers, and review cannot refill bounded model
+authority. See [the decision contract](../02-Contracts/memo-review-and-publication-decision.md).
 
 ## Implemented bounded editorial revision (2026-11-04)
 
@@ -108,8 +134,10 @@ Original artifacts and the prior decision remain immutable; the linked new
 version requires fresh human review. Saved output can finish deterministic
 recording after interruption, but reserved unsaved calls cannot replay.
 Evidence, judgement/scope and policy concerns route upstream without writer
-authority. Publication remains blocked under the provisional standard.
-Dashboard controls and `run:next` follow the latest revision status.
+authority. The existing draft remains blocked under its bound provisional
+standard.
+Dashboard controls and `run:next` follow the latest revision authority;
+`run:next` resumes it only from an eligible prepared or response-saved state.
 This slice has synthetic coverage and does not advance the live analysis.
 See [the revision contract](../02-Contracts/bounded-memo-revision.md).
 

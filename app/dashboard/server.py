@@ -21,7 +21,7 @@ from string import Template
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from . import auth, settings, rss, bounded_synthesis, memo_review
+from . import auth, settings, rss, bounded_synthesis, memo_review, pipeline_runner
 from .model import RELEVANCE_REQUEST_PATH, ai_stage_for, build_run_view
 from .relevance_bridge import build_relevance_prompt, build_response, parse_model_answer
 from .scan import _fs_path, list_available_runs, read_artifact_text, resolve_inside_run, scan_run_directory
@@ -165,7 +165,7 @@ def _run_npm_script(script_name: str, args: list[str], timeout_sec: int = 90, *,
         env = {**os.environ, **{key: str(runs_root) for key in (
             "RESEARCH_RUN_DIR", "SOURCE_ASSURANCE_RUN_DIR", "QUESTION_RELEVANCE_RUN_DIR",
             "SOURCE_REINTAKE_RUN_DIR", "SEERIST_RUN_DIR", "SOURCE_DOCUMENT_RUN_DIR",
-            "EVIDENCE_RUN_DIR", "RSS_RUN_DIR",
+            "EVIDENCE_RUN_DIR", "RSS_RUN_DIR", "EXCEPTION_RUN_DIR",
         )}}
     npm_cmd = "npm.cmd" if os.name == "nt" else "npm"
     cmd = [npm_cmd, "run", script_name, "--", *args]
@@ -474,7 +474,7 @@ def _handle_assurance_review(runs_root: Path, payload: dict[str, Any]) -> tuple[
     return (200 if succeeded else 400), {"ok": succeeded, "runId": run_id, "steps": steps, "error": "" if succeeded else steps[-1]["stderr"]}
 
 
-MEMO_STANDARD = "src/modules/memo/standards/memo-standard-v2.json"
+MEMO_STANDARD = "src/modules/memo/standards/memo-standard-v4.json"
 ASSURANCE_POLICY = "src/modules/assurance/policies/geopolitical-source-assurance-v4.json"
 SYNTHESIS_POLICY = "src/modules/synthesis/policies/geopolitical-synthesis-v1.json"
 OUTLET_TABLE = "src/modules/synthesis/policies/geopolitical-outlets-v1.json"
@@ -575,6 +575,7 @@ def _chain_after_stage(runs_root: Path, run_id: str, stage: str, recorded: dict[
 
 def _memo_authority_exists(run_dir: Path) -> bool:
     return ((run_dir / "memo" / "execution" / "authorization.json").is_file() or
+            any((run_dir / "memo" / "execution" / "rounds").glob("*/authorization.json")) or
             any((run_dir / "memo" / "revisions").glob("*/authorization.json")))
 
 
@@ -1036,15 +1037,22 @@ def _handle_adjudication(runs_root: Path, payload: dict[str, Any]) -> tuple[int,
         "ok": True, "command": "adjudication:record", "exitCode": 0, "stderr": "",
         "stdout": f"Accepted: {counts['accepted']}\nContested: {counts['contested']}\nRejected: {counts['rejected']}\nReviewer: {reviewer_id}\nOutput: {adjudication_ref}",
     }]
-    steps.append(_run_npm_script("prepare:key-judgements", [build_ref, f"runs/{run_id}/{rel_path}", adjudication_ref, MEMO_STANDARD], runs_root=runs_root))
+    if not _memo_authority_exists(run_dir):
+        steps.append(_run_npm_script("prepare:key-judgements", [build_ref, f"runs/{run_id}/{rel_path}", adjudication_ref, MEMO_STANDARD], runs_root=runs_root))
     succeeded = all(step["ok"] for step in steps)
     return (200 if succeeded else 400), {"ok": succeeded, "runId": run_id, "steps": steps, "error": "" if succeeded else steps[-1]["stderr"]}
 
 
 def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     action = payload.get("action")
+    if action == "approve-and-publish":
+        return memo_review.approve_and_publish(runs_root, payload, _run_npm_script)
+    if action in ("run-pipeline", "resume-pipeline"):
+        return pipeline_runner.start(runs_root, payload, _run_npm_script, COPILOT_LOCK)
     if action == "record-memo-review":
         return memo_review.record(runs_root, payload, _run_npm_script)
+    if action == "publish-memo":
+        return memo_review.publish(runs_root, payload, _run_npm_script)
     if action in ("start-memo-revision", "resume-memo-revision"):
         return bounded_synthesis.start(runs_root, payload, _run_npm_script, COPILOT_LOCK, pipeline="revision")
     if action in ("start-bounded-synthesis", "resume-bounded-synthesis"):
@@ -1080,6 +1088,25 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
         return _handle_assurance_review(runs_root, payload)
     if action == "record-relevance":
         return _handle_record_relevance(runs_root, payload)
+    if action == "decide-exception":
+        run_id = _valid_id(payload.get("runId"))
+        exception_id = _valid_id(payload.get("exceptionId"))
+        reviewer_id = _valid_id(payload.get("reviewerId"))
+        decision = payload.get("decision")
+        reason = re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f]", " ", str(payload.get("reason") or ""))).strip()
+        if not (run_id and exception_id and reviewer_id) or decision not in ("exclude", "accept-gap"):
+            return 400, {"ok": False, "error": "A valid run, exception, decision (exclude or accept gap), and your analyst ID are required."}
+        if not 3 <= len(reason) <= 1000:
+            return 400, {"ok": False, "error": "Give a reason for your decision (3 to 1,000 characters)."}
+        directory = runs_root / run_id / "exceptions" / exception_id
+        if not Path(_fs_path(directory / "exception-item.json")).is_file():
+            return 404, {"ok": False, "error": "Exception not found in this run."}
+        if Path(_fs_path(directory / "exception-decision.json")).is_file():
+            return 409, {"ok": False, "error": "This exception already has a recorded decision."}
+        step = _run_npm_script("decide:exception", [
+            f"runs/{run_id}/exceptions/{exception_id}/exception-item.json", decision, reviewer_id, reason,
+        ], runs_root=runs_root)
+        return (200 if step["ok"] else 400), {"ok": step["ok"], "runId": run_id, "steps": [step], "error": "" if step["ok"] else step["stderr"]}
     if action == "review-evidence":
         run_id = _valid_id(payload.get("runId"))
         candidate_id = _valid_id(payload.get("candidateId"))
@@ -1146,6 +1173,14 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
                 return 400, {"ok": False, "error": "Minimum lead score must be an integer from 1 to 20."}
             if not 1 <= min_score <= 20:
                 return 400, {"ok": False, "error": "Minimum lead score must be an integer from 1 to 20."}
+        max_external = pipeline_runner.DEFAULT_MAX_EXTERNAL_ARTICLES
+        if payload.get("runPipeline") is True or "maxExternalArticles" in payload:
+            try:
+                max_external = int(payload.get("maxExternalArticles", pipeline_runner.DEFAULT_MAX_EXTERNAL_ARTICLES))
+            except (ValueError, TypeError):
+                return 400, {"ok": False, "error": "External source budget must be an integer from 1 to 20."}
+            if not 1 <= max_external <= 20:
+                return 400, {"ok": False, "error": "External source budget must be from 1 to 20."}
 
         target_run_dir = (runs_root / run_id).resolve()
         proposals_dir = target_run_dir / "proposals"
@@ -1241,10 +1276,26 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
                     "maxResults": 50,
                     "minimumScore": max(1, min_score),
                 })
-                step4 = _run_npm_script("discover:seerist", [f"runs/{run_id}/proposals/{plan_id}.json", rel_approved_rq], timeout_sec=120)
-                steps.append(step4)
-                if not step4["ok"]:
-                    return 400, {"ok": False, "runId": run_id, "steps": steps, "error": step4["stderr"] or step4["stdout"]}
+                if payload.get("runPipeline") is not True:
+                    step4 = _run_npm_script("discover:seerist", [f"runs/{run_id}/proposals/{plan_id}.json", rel_approved_rq], timeout_sec=120, runs_root=runs_root)
+                    steps.append(step4)
+                    if not step4["ok"]:
+                        return 400, {"ok": False, "runId": run_id, "steps": steps, "error": step4["stderr"] or step4["stdout"]}
+
+        if payload.get("runPipeline") is True:
+            pipe_code, pipe_body = pipeline_runner.start(
+                runs_root,
+                {"runId": run_id, "reviewerId": reviewer_id, "maxExternalArticles": max_external},
+                _run_npm_script,
+                COPILOT_LOCK,
+            )
+            return 200, {
+                "ok": True,
+                "runId": run_id,
+                "steps": steps,
+                "pipelineStarted": pipe_code in (200, 202),
+                "pipeline": pipe_body,
+            }
 
         return 200, {"ok": True, "runId": run_id, "steps": steps}
 
@@ -1406,15 +1457,24 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
                 execution = bounded_synthesis.status(runs_root, target_id, _run_npm_script)
                 memo_execution = bounded_synthesis.status(runs_root, target_id, _run_npm_script, pipeline="memo")
                 revision_execution = bounded_synthesis.status(runs_root, target_id, _run_npm_script, pipeline="revision")
+                memo_build = str(((memo_execution or {}).get("authority") or {}).get("build", {}).get("artifactRef", "")).replace("\\", "/")
+                synth_build = str((((execution or {}).get("stages") or {}).get("build") or {}).get("record", {}).get("artifactRef", "")).replace("\\", "/")
+                memo_superseded_by_synth = bool(
+                    memo_execution and memo_execution.get("status") == "memo-review"
+                    and execution and execution.get("authorized")
+                    and memo_build and synth_build and memo_build != synth_build
+                )
                 projected_execution = (revision_execution if revision_execution and revision_execution.get("authorized") else
+                                       execution if memo_superseded_by_synth else
                                        memo_execution if memo_execution and memo_execution.get("authorized") else execution)
                 view = build_run_view(target_id, scan["files"], scan["jsons"], scan["events"], scanned_at, projected_execution, str(target_dir))
                 view["truncated"] = scan["truncated"]
-                view["availableRuns"] = list_available_runs(runs_root)
+                view["availableRuns"] = list_available_runs(runs_root, active_runs=pipeline_runner.ACTIVE)
                 view["rss"]["feeds"] = rss.feeds()
                 view["boundedSynthesis"] = execution
                 view["boundedMemo"] = memo_execution
                 view["memoRevision"] = revision_execution
+                view["pipeline"] = pipeline_runner.status(runs_root, target_id)
                 memo = view["journey"].get("memo")
                 view["memoReview"] = memo_review.status(runs_root, target_id, memo["id"], _run_npm_script) if memo else None
                 for batch in view["rss"]["batches"]:
@@ -1552,7 +1612,7 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
                 self._send(200, "text/html; charset=utf-8", render_page(target_id))
                 return
             if parsed.path == "/api/runs":
-                self._send(200, "application/json; charset=utf-8", json.dumps({"runs": list_available_runs(runs_root), "defaultRunId": run_id}, ensure_ascii=False))
+                self._send(200, "application/json; charset=utf-8", json.dumps({"runs": list_available_runs(runs_root, active_runs=pipeline_runner.ACTIVE), "defaultRunId": run_id}, ensure_ascii=False))
                 return
             if parsed.path == "/api/settings":
                 self._send(200, "application/json; charset=utf-8", json.dumps({
@@ -1620,6 +1680,26 @@ def _make_handler(run_dir: Path, run_id: str, cache_ms: int) -> type[BaseHTTPReq
                     return
                 content_type = "application/json; charset=utf-8" if rel_path.endswith(".json") else "text/plain; charset=utf-8"
                 self._send(200, content_type, content)
+                return
+            if parsed.path == "/api/published-memo":
+                target_dir, target_id = _resolve_target_run(requested_run)
+                memo_id = _valid_id(query.get("memo", [None])[0])
+                if not memo_id:
+                    self._send(400, "text/plain; charset=utf-8", "A valid memo ID is required")
+                    return
+                relative_path = f"published/{memo_id}/publication.json"
+                absolute = resolve_inside_run(target_dir, relative_path)
+                content = read_artifact_text(absolute, MAX_ARTIFACT_BYTES) if absolute else None
+                try:
+                    package = json.loads(content) if content else None
+                except (TypeError, json.JSONDecodeError):
+                    package = None
+                if (not isinstance(package, dict) or package.get("schemaVersion") != "published-memo-package-v1"
+                        or package.get("runId") != target_id or package.get("memoId") != memo_id):
+                    self._send(404, "text/plain; charset=utf-8", "Published memo package not available")
+                    return
+                self._send(200, "application/json; charset=utf-8", content,
+                           {"Content-Disposition": f'attachment; filename="memo-package-{memo_id}.json"'})
                 return
             if parsed.path in STATIC_FILES:
                 file_path, content_type = STATIC_FILES[parsed.path]

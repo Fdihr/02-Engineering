@@ -184,7 +184,10 @@ Rules for every version: one claim, one wording across versions; no version may 
 
 ## 7. Open decisions before approval
 
+This Vestas-specific template is a separate profile proposal. Approval of the
+domain-neutral `memo-standard-v3` does not approve or activate this template.
+
 1. **Lexicon horizons.** The 2023 lexicon ties likelihood to fixed horizons (one and five years). Keep, or separate likelihood from time frame and state the horizon in each judgement?
 2. **Classification levels.** Confirm the set (Internal, Confidential, Restricted) and who may mark Restricted.
 3. **Assessment box placement.** The archive floats it beside the situation on page one; the governed memo puts the BLUF first. Pick one reading order for all versions.
-4. **Approver.** Who approves this template as the curated memo standard (it replaces the provisional `memo-standard-v1` blocker only after approval and regression review).
+4. **Approver.** `memo-standard-v3` is approved. Any future adoption of this Vestas-specific profile requires its own approver decision and regression review.

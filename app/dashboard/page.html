@@ -25,9 +25,10 @@
           <h1>CTI workbench</h1>
         </div>
         <nav class="topnav" aria-label="Workbench">
-          <a href="#/home" id="nav-home">Home <span class="n" id="count-home"></span></a>
+          <a href="#/home" id="nav-home">Analyses</a>
+          <a href="#/review" id="nav-review">Memo</a>
           <a href="#/new" id="nav-new">New analysis</a>
-          <a href="#/audit" id="nav-audit">Audit <span class="n" id="count-audit"></span></a>
+          <a href="#/audit" id="nav-audit">Audit</a>
           <a href="#/settings" id="nav-settings">Settings</a>
         </nav>
       </div>
@@ -54,10 +55,10 @@
       <div id="brief-run"></div>
 
       <div id="brief-new" hidden>
-        <!-- Thesis -> paired questions/searches -> human approval. Preserve the incumbent Vestas controls and rules-based layout. Draft generation never approves or collects. -->
+        <!-- Gate 1: Thesis -> paired questions/searches -> human approval -> automated pipeline. -->
         <header class="new-analysis-head">
-          <div class="section-head"><h1>New analysis</h1><button class="btn-link" id="btn-cancel-new" type="button">Back to the current analysis</button></div>
-          <p>Write a thesis or intelligence question. Copilot turns it into focused research questions and Seerist searches.</p>
+          <div class="section-head"><h1>New analysis</h1><button class="btn-link" id="btn-cancel-new" type="button">Back to Analyses</button></div>
+          <p>Write a thesis or intelligence question. Copilot turns it into focused research questions and Seerist searches; once you approve the plan, the pipeline collects sources, checks verbatim quotes, runs adversarial challenges, and writes the memo automatically.</p>
         </header>
         <div class="field thesis-entry">
           <label for="in-question">Your thesis or question</label>
@@ -65,7 +66,7 @@
           <span class="hint" id="thesis-hint">State what you want to test, not what the answer should be.</span>
         </div>
         <details class="drawer" id="plan-scope">
-          <summary>Refine scope <span class="meta" id="plan-scope-summary">Europe · Last 60 days · Intelligence memo</span></summary>
+          <summary>Scope and source budget <span class="meta" id="plan-scope-summary">Europe · Last 60 days · 6 external sources · Intelligence memo</span></summary>
           <div class="drawer-body scope-grid">
         <div class="field">
           <label for="in-output">What you need back</label>
@@ -101,6 +102,12 @@
         </fieldset>
 
         <div class="field">
+          <label for="in-max-external">External source budget</label>
+          <input id="in-max-external" type="number" min="1" max="20" value="6">
+          <p class="meta">Top ranked external articles to capture in addition to Seerist analytical reports.</p>
+        </div>
+
+        <div class="field">
           <label for="in-run-id">Analysis ID</label>
           <input id="in-run-id" type="text" spellcheck="false" autocomplete="off">
           <p class="meta">Letters, digits, dots and dashes. Must be new.</p>
@@ -113,11 +120,11 @@
             <span class="meta" id="draft-question-status" role="status"></span>
           </div>
           <p class="meta" id="draft-question-model">Loading the saved model assignment...</p>
-          <p class="meta">Draft only. No scope approval, searches or collection until you review the plan.</p>
+          <p class="meta">Draft only. Nothing is approved or collected until you confirm Gate 1 below.</p>
 
         <section id="generated-plan" aria-labelledby="generated-plan-title" hidden>
           <div class="section-head"><h2 id="generated-plan-title">Your research plan</h2><span class="meta" id="generated-plan-meta"></span></div>
-          <p class="meta prose">Edit the questions and their paired searches before approval. Expand a thesis connection to review the reasoning. No searches have run.</p>
+          <p class="meta prose">Edit the questions and their paired Seerist searches before approval. Expand a thesis connection to review the reasoning.</p>
           <ol id="generated-plan-questions" class="plan-question-list"></ol>
           <details class="drawer" id="plan-details">
             <summary>Plan details</summary>
@@ -139,26 +146,24 @@
             </div>
           </details>
           <div class="btn-row">
-            <button class="btn-primary" id="btn-review-intent" type="button">Review and approve plan</button>
+            <button class="btn-secondary" id="btn-review-intent" type="button">Refresh summary</button>
             <span class="meta fail" id="intent-problem" role="status"></span>
           </div>
         </section>
 
         <section id="approval-review" hidden aria-labelledby="approval-title">
-          <div class="section-head"><h2 id="approval-title">Approve the research plan</h2><button class="btn-link" id="btn-edit-intent" type="button">Edit</button></div>
+          <div class="section-head"><h2 id="approval-title">Gate 1 — Approve the research plan</h2><button class="btn-link" id="btn-edit-intent" type="button">Edit</button></div>
           <div id="approval-summary"></div>
           <label class="check"><input type="checkbox" id="approve-confirm"> <span id="approve-confirm-text">I approve this scope, question and these requirements.</span></label>
           <div class="btn-row">
-            <button class="btn-primary" id="btn-approve-collect" type="button" disabled>Approve and collect leads</button>
-            <button class="btn-secondary" id="btn-approve-only" type="button" disabled>Approve without collecting</button>
+            <button class="btn-primary" id="btn-approve-collect" type="button" disabled>Approve plan &amp; generate memo</button>
+            <button class="btn-secondary" id="btn-approve-only" type="button" disabled>Approve plan only</button>
           </div>
         </section>
       </div>
       <div id="brief-draft" hidden></div>
     </div>
 
-    <div class="tab-pane" id="pane-sources" hidden></div>
-    <div class="tab-pane" id="pane-synthesis" hidden></div>
     <div class="tab-pane" id="pane-memo" hidden></div>
     <div class="tab-pane" id="pane-audit" hidden></div>
     <div class="tab-pane" id="pane-settings" aria-label="Settings" hidden>

@@ -37,12 +37,19 @@ def status(runs_root: Path, run_id: str, command: Callable[..., dict[str, Any]],
     else:
         directory = runs_root / run_id / pipeline / "execution"
     active_key = directory.resolve() if pipeline in ("memo", "revision") else (runs_root / run_id).resolve()
-    if not (directory / "authorization.json").is_file():
+    round_dirs = ([path for path in (directory / "rounds").glob("*")
+                   if path.is_dir() and not path.is_symlink() and SAFE_ID.fullmatch(path.name)]
+                  if pipeline == "memo" else [])
+    has_authority = (directory / "authorization.json").is_file() or any((path / "authorization.json").is_file() for path in round_dirs)
+    if not has_authority:
         if active_key in ACTIVE:
             return {"status": "starting", "workerActive": True, "error": "", "runId": run_id,
                     **({"parentMemoId": parent} if parent else {})}
-        failures = sorted([*directory.glob("start-blocked-*.json"), *directory.glob("launcher-failure-*.json")],
-                          key=lambda path: path.stat().st_mtime)
+        failures = sorted([
+            *directory.glob("start-blocked-*.json"),
+            *directory.glob("launcher-failure-*.json"),
+            *(item for path in round_dirs for item in path.glob("start-blocked-*.json")),
+        ], key=lambda path: path.stat().st_mtime)
         if not failures:
             return None
         value = json.loads(failures[-1].read_text(encoding="utf-8"))
@@ -53,7 +60,10 @@ def status(runs_root: Path, run_id: str, command: Callable[..., dict[str, Any]],
                                           ["status", run_id, parent] if parent else ["status", run_id], runs_root=runs_root))
     except (OSError, ValueError, RuntimeError) as error:
         value = {"status": "blocked", "runId": run_id, "error": f"Execution status unavailable: {error}"}
-    failures = sorted(directory.glob("launcher-failure-*.json"), key=lambda path: path.stat().st_mtime)
+    failures = sorted([
+        *directory.glob("launcher-failure-*.json"),
+        *(item for path in round_dirs if not (path / "authorization.json").is_file() for item in path.glob("start-blocked-*.json")),
+    ], key=lambda path: path.stat().st_mtime)
     if failures:
         value["launcherError"] = json.loads(failures[-1].read_text(encoding="utf-8"))["error"]
     value["workerActive"] = value.get("workerActive", False) or active_key in ACTIVE
@@ -84,7 +94,9 @@ def start(
         return 400, {"ok": False, "error": "Execution artifacts must remain inside this run."}
     if parent:
         directory.mkdir(parents=True, exist_ok=True)
-    if mode == "resume" and not (directory / "authorization.json").is_file():
+    has_authority = ((directory / "authorization.json").is_file() or
+                     (pipeline == "memo" and any((directory / "rounds").glob("*/authorization.json"))))
+    if mode == "resume" and not has_authority:
         return 409, {"ok": False, "error": "Use the explicit bounded start action before resuming."}
     adjudication = None
     if pipeline == "memo" and mode == "start":
@@ -141,6 +153,14 @@ def compose_workflow(base: dict[str, Any], execution: dict[str, Any] | None,
             "affectedWorkIds": [], "uncertain": True, "title": "Bounded execution status requires recovery",
             "detail": execution.get("error") or "Execution facts are unavailable; inspect the saved authority.",
         }]}
+    if (execution.get("pipeline") == "memo" and execution.get("status") == "memo-review"
+            and adjudicated_round):
+        authority_challenge = str(((execution.get("authority") or {}).get("challenge") or {}).get("artifactRef", "")).replace("\\", "/")
+        challenge = adjudicated_round.get("challengeRecordPath")
+        if authority_challenge and challenge and not authority_challenge.endswith(f"/{base['runId']}/{challenge}"):
+            # A completed earlier-round memo must not hide a newer synthesis round's work.
+            return {**base, "committedOutcomes": base["committedOutcomes"] + bounded["committedOutcomes"],
+                    "blockers": base["blockers"] + bounded["blockers"]}
     if (execution.get("pipeline") != "memo" and execution.get("status") == "human-waiting"
             and adjudicated_round and adjudicated_round.get("adjudicationStatus") == "adjudicated"):
         record = execution.get("stages", {}).get("challenge", {}).get("record") or {}

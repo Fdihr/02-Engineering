@@ -110,7 +110,15 @@ The four uniform single-source findings are calibration data for the checklist, 
 
 ## Constrained writer and publication gate
 
-`memo-standard-v0` is a handwritten provisional standard with eight required sections, a low/moderate/high confidence lexicon, inline claim citations, prohibited confidence patterns, and a 350-word rendered-Markdown limit. It has no historical memo inputs and is itself a publication blocker until curated standards supersede it.
+This is the historical live run: approved `memo-standard-v3` applies to new
+starts, while existing artifacts retain their bound standard and blockers.
+
+For the historical live run, `memo-standard-v0` was a handwritten provisional
+standard with eight required sections, a low/moderate/high confidence lexicon,
+inline claim citations, prohibited confidence patterns, and a 350-word
+rendered-Markdown limit. It had no historical memo inputs and remains a blocker
+for artifacts bound to it; approved `memo-standard-v3` supersedes it only for
+new work.
 
 The writer model supplies only statement text, allowed section placement, and existing claim aliases. Code derives citations, contested status, open challenges, confidence and ceiling, the three hypothesis alternatives, all partial and silent gaps, sourcing summary, limitations, information cutoff, and publication state. The BLUF is controller-generated from evidence counts so it always states source count, contested low-confidence claim count, competing-explanation count, and silent-question count.
 
@@ -119,6 +127,9 @@ Deterministic Markdown starts with `NOT FOR PUBLICATION`. Verification checks th
 The final publication gate is blocked by `SYNTHETIC_SOURCE_LINEAGE`, `PROVISIONAL_SOURCE_LINEAGE`, `PROVISIONAL_MEMO_STANDARD`, and `LEGACY_SCOPE_LINEAGE_UNAVAILABLE`. The last blocker is explicit because the approved legacy question has no checksum-bound approved scope artifact; no scope approval was reconstructed or fabricated.
 
 The current bounded path adds `memo-standard-v1`, performed-adjudication validation, immutable key-judgement request and record artifacts, and writer request v2. It reuses Challenge aliases, keeps claim IDs out of the selection prompt, aggregates KJ1-KJ8 failures without content, and recomputes the complete selection before writer preparation. Writer v2 inserts selected judgement wording unchanged and rejects model-authored BLUF or key-judgement rows. Legacy v0 standards and writer v1 artifacts remain readable and unchanged.
+
+The preceding v1 implementation paragraph is historical; approved v3 governs
+new starts, while existing artifacts retain their bound standard.
 
 ## Publication and supersession
 

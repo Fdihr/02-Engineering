@@ -5,8 +5,9 @@ import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import type { ArtifactBinding } from "../modules/assurance/types.js";
 import { isRecord, pathSafeId, readArtifactBinding, validTime } from "../modules/assurance/validators.js";
-import { validateExceptionItem } from "../modules/exceptions/exception-item.js";
+import { loadExceptionState } from "./exception-io.js";
 import { renderMemoMarkdown } from "../modules/memo/writer.js";
+import { createMemoPublicationGate } from "../modules/memo/publication.js";
 import { DEFAULT_MEMO_STANDARD_PATH } from "../modules/memo/standard-v1.js";
 import { validateSourceDocument } from "../modules/source/source-document.js";
 import { validatePerformedAdjudication, type KeyJudgementRecord } from "../modules/synthesis/key-judgement-stage.js";
@@ -24,6 +25,7 @@ import { memoRelevanceExceptionScope } from "./memo-exception-scope.js";
 const now = () => new Date().toISOString();
 const directoryFor = (root: string, runId: string) => resolve(root, runId, "memo", "execution");
 const repairDirectoryFor = (root: string, runId: string) => resolve(directoryFor(root, runId), "length-repair");
+const roundsRootFor = (root: string, runId: string) => resolve(directoryFor(root, runId), "rounds");
 const optional = async (path: string) => {
   try { return await loadJsonArtifact(path); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }
@@ -131,9 +133,10 @@ export const checkMemoExceptions = async (root: string, authority: Pick<MemoAuth
     }
   }
   for (const path of (await filesIn(resolve(root, authority.runId))).filter(path => basename(path) === "exception-item.json")) {
-    const parsed = validateExceptionItem((await loadJsonArtifact(path)).value);
-    if (!parsed.ok || parsed.value.runId !== authority.runId) throw new Error("Exception integrity is uncertain.");
-    if (parsed.value.status !== "open") continue;
+    const state = await loadExceptionState(path).catch(() => undefined);
+    if (!state || state.item.runId !== authority.runId) throw new Error("Exception integrity is uncertain.");
+    if (!state.open) continue;
+    const parsed = { value: state.item };
     let unrelated = parsed.value.refs.length > 0;
     for (const binding of parsed.value.refs) {
       const ref = await bound(root, binding, authority.runId);
@@ -150,7 +153,7 @@ export const checkMemoExceptions = async (root: string, authority: Pick<MemoAuth
   }
 };
 
-const freeze = async (root: string, runId: string, analyst: string, adjudicationPath?: string) => {
+const freeze = async (root: string, runId: string, analyst: string, adjudicationPath?: string, targetDirectory?: string) => {
   if (!pathSafeId(analyst)) throw new Error("An explicit analyst ID must authorize selection and writing.");
   const files = await filesIn(resolve(root, runId));
   const choices = adjudicationPath ? [resolve(adjudicationPath)] : files.filter(path => basename(path) === "performed-adjudication.json");
@@ -216,7 +219,9 @@ const freeze = async (root: string, runId: string, analyst: string, adjudication
   authority.maxCalls = MEMO_STAGES.reduce((sum, stage) => sum + authority.stages[stage].maxCalls, 0);
   for (const binding of [authority.build, authority.challenge, authority.adjudication, authority.question]) await bound(root, binding, runId);
   await checkExceptions(root, authority);
-  const directory = directoryFor(root, runId);
+  const directory = targetDirectory ?? directoryFor(root, runId);
+  await ensureDirectory(directory);
+  await confined(resolve(root, runId), directory);
   const binding = await durable(resolve(directory, "authorization.json"), authority);
   await durable(resolve(directory, "authorized.json"), { authorization: binding, actorType: "human",
     actorId: analyst, occurredAt: authority.approvedAt, decision: authority.decision, maxCalls: authority.maxCalls });
@@ -321,10 +326,9 @@ export const writeMemoHandoff = async (root: string, runId: string, record: Retu
   await durable(resolve(directory, "memo.json"), record.memo, true);
   await durableText(resolve(directory, "memo.md"), renderMemoMarkdown(record.memo), true);
   await durable(resolve(directory, "verification.json"), record.verification, true);
-  await durable(resolve(directory, "publication-gate.json"), {
-    schemaVersion: "memo-publication-gate-v1", memoId: record.memo.id, checkedAt: record.recordedAt,
-    status: "blocked", reasons: record.verification.blockers, humanApprovalAvailable: false
-  }, true);
+  await durable(resolve(directory, "publication-gate.json"), createMemoPublicationGate({
+    memoId: record.memo.id, checkedAt: record.recordedAt, blockers: record.verification.blockers
+  }), true);
   return binding;
 };
 
@@ -332,8 +336,8 @@ export const verifyMemoHandoff = async (binding: ArtifactBinding, record: Return
   if (!isWriterRecord(record)) return;
   const directory = dirname(binding.artifactRef);
   for (const [file, expected] of [["memo.json", record.memo], ["verification.json", record.verification],
-    ["publication-gate.json", { schemaVersion: "memo-publication-gate-v1", memoId: record.memo.id,
-      checkedAt: record.recordedAt, status: "blocked", reasons: record.verification.blockers, humanApprovalAvailable: false }]] as const) {
+    ["publication-gate.json", createMemoPublicationGate({ memoId: record.memo.id,
+      checkedAt: record.recordedAt, blockers: record.verification.blockers })]] as const) {
     same((await loadJsonArtifact(resolve(directory, file))).value, expected, "Memo review handoff is incomplete or changed.");
   }
   same(await readFile(longPath(resolve(directory, "memo.md")), "utf8"), renderMemoMarkdown(record.memo), "Memo rendering changed.");
@@ -341,11 +345,62 @@ export const verifyMemoHandoff = async (binding: ArtifactBinding, record: Return
 const writeHandoff = writeMemoHandoff;
 const verifyHandoff = verifyMemoHandoff;
 
-export const inspectBoundedMemo = async (root: string, runId: string, originalOnly = false) => {
+export const listBoundedMemoDirectories = async (root: string, runId: string, originalOnly = false) => {
+  const entries: Array<{ directory: string; authority: MemoAuthorization; binding: ArtifactBinding }> = [];
+  const rootDir = !originalOnly && await optional(resolve(repairDirectoryFor(root, runId), "authorization.json"))
+    ? repairDirectoryFor(root, runId) : directoryFor(root, runId);
+  const rootAuth = await optional(resolve(rootDir, "authorization.json"));
+  if (rootAuth) {
+    const parsed = validateMemoAuthorization(rootAuth.value);
+    if (!parsed.ok || parsed.value.runId !== runId || Date.parse(parsed.value.approvedAt) > Date.now()) {
+      throw new Error("Invalid frozen memo authorization.");
+    }
+    entries.push({ directory: rootDir, authority: parsed.value, binding: rootAuth.binding });
+  }
+  if (!originalOnly) {
+    try {
+      for (const entry of await readdir(longPath(roundsRootFor(root, runId)), { withFileTypes: true })) {
+        if (entry.isSymbolicLink()) throw new Error("Symlinked run artifacts require operator inspection.");
+        if (!entry.isDirectory()) continue;
+        if (!pathSafeId(entry.name)) throw new Error("Invalid memo round directory.");
+        const directory = resolve(roundsRootFor(root, runId), entry.name);
+        const auth = await optional(resolve(directory, "authorization.json"));
+        if (!auth) continue;
+        const parsed = validateMemoAuthorization(auth.value);
+        if (!parsed.ok || parsed.value.runId !== runId || parsed.value.lengthRepair ||
+            Date.parse(parsed.value.approvedAt) > Date.now()) throw new Error("Invalid frozen memo authorization.");
+        entries.push({ directory, authority: parsed.value, binding: auth.binding });
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+  const seenAdjudications = new Set<string>();
+  for (const entry of entries) {
+    const key = resolve(entry.authority.adjudication.artifactRef);
+    if (seenAdjudications.has(key)) throw new Error("Multiple bounded memo authorizations match one adjudication.");
+    seenAdjudications.add(key);
+  }
+  entries.sort((left, right) => Date.parse(left.authority.approvedAt) - Date.parse(right.authority.approvedAt) ||
+    left.directory.localeCompare(right.directory));
+  return entries;
+};
+
+export const inspectBoundedMemo = async (root: string, runId: string, originalOnly = false, adjudicationPath?: string) => {
   if (!pathSafeId(runId)) throw new Error("A valid run ID is required.");
   await confined(root, resolve(root, runId));
-  const directory = !originalOnly && await optional(resolve(repairDirectoryFor(root, runId), "authorization.json"))
-    ? repairDirectoryFor(root, runId) : directoryFor(root, runId);
+  let directory: string;
+  if (originalOnly) directory = directoryFor(root, runId);
+  else if (adjudicationPath) {
+    await confined(resolve(root, runId), adjudicationPath);
+    const match = (await listBoundedMemoDirectories(root, runId))
+      .find(entry => resolve(entry.authority.adjudication.artifactRef) === resolve(adjudicationPath));
+    if (!match) throw new Error("No bounded memo authorization for this adjudication.");
+    directory = match.directory;
+  } else {
+    const entries = await listBoundedMemoDirectories(root, runId);
+    directory = entries.at(-1)?.directory ?? directoryFor(root, runId);
+  }
   await confined(resolve(root, runId), directory);
   const artifact = await loadJsonArtifact(resolve(directory, "authorization.json"));
   const parsed = validateMemoAuthorization(artifact.value);
@@ -371,6 +426,9 @@ export const inspectBoundedMemo = async (root: string, runId: string, originalOn
   } else if (directory === repairDirectoryFor(root, runId)) throw new Error("Length repair lacks explicit repair authority.");
   for (const binding of [authority.build, authority.challenge, authority.adjudication, authority.question]) await bound(root, binding, runId);
   const input = await loadMemoInputs(root, authority);
+  if (dirname(directory) === roundsRootFor(root, runId) && basename(directory) !== input.adjudication.id) {
+    throw new Error("Memo round directory does not match its adjudication.");
+  }
   same(input.lineage, authority.lineage, "Frozen evidence lineage changed.");
   const worker = (await optional(resolve(directoryFor(root, runId), "worker.lock")))?.value;
   const workerActive = isRecord(worker) && alive(worker.pid);
@@ -477,10 +535,9 @@ export const runBoundedMemo = async (root: string, runId: string, mode: "start" 
   if (!pathSafeId(runId)) throw new Error("A valid run ID is required.");
   await confined(root, resolve(root, runId));
   const effects = { runModel: runLocalCopilot, ...injected };
-  const directory = mode === "repair" || await optional(resolve(repairDirectoryFor(root, runId), "authorization.json"))
-    ? repairDirectoryFor(root, runId) : directoryFor(root, runId);
-  await ensureDirectory(directory);
-  await confined(resolve(root, runId), directory);
+  let directory = mode === "repair" ? repairDirectoryFor(root, runId) : directoryFor(root, runId);
+  await ensureDirectory(directoryFor(root, runId));
+  await confined(resolve(root, runId), directoryFor(root, runId));
   const workerPath = resolve(directoryFor(root, runId), "worker.lock");
   await ensureDirectory(dirname(workerPath));
   const workerId = randomUUID();
@@ -505,17 +562,49 @@ export const runBoundedMemo = async (root: string, runId: string, mode: "start" 
   }
   let phase = "authorization";
   let stage: MemoStage | null = null;
+  let targetAdjudication: string | undefined;
+  let authorizedDirectory: string | null = null;
   try {
-    if (!(await optional(resolve(directory, "authorization.json")))) {
-      if (mode === "repair") await freezeLengthRepair(root, runId, analyst ?? "");
-      else {
-        if (mode !== "start") throw new Error("Explicit bounded memo start is required.");
-        await freeze(root, runId, analyst ?? "", adjudicationPath);
+    if (mode === "repair") {
+      await ensureDirectory(directory);
+      await confined(resolve(root, runId), directory);
+      if (!(await optional(resolve(directory, "authorization.json")))) await freezeLengthRepair(root, runId, analyst ?? "");
+      authorizedDirectory = directory;
+    } else if (mode === "resume") {
+      const entries = await listBoundedMemoDirectories(root, runId);
+      const match = adjudicationPath
+        ? entries.find(entry => resolve(entry.authority.adjudication.artifactRef) === resolve(adjudicationPath))
+        : entries.at(-1);
+      if (!match) throw new Error("Explicit bounded memo start is required.");
+      directory = match.directory;
+      authorizedDirectory = directory;
+      targetAdjudication = match.authority.lengthRepair ? undefined : match.authority.adjudication.artifactRef;
+    } else {
+      if (mode !== "start") throw new Error("Explicit bounded memo start is required.");
+      const entries = await listBoundedMemoDirectories(root, runId);
+      const files = await filesIn(resolve(root, runId));
+      const choices = adjudicationPath ? [resolve(adjudicationPath)] : files.filter(path => basename(path) === "performed-adjudication.json");
+      if (choices.length !== 1) throw new Error("Select exactly one performed adjudication round.");
+      await confined(resolve(root, runId), choices[0]!);
+      const existing = entries.find(entry => resolve(entry.authority.adjudication.artifactRef) === choices[0]!);
+      if (existing) {
+        directory = existing.directory;
+        authorizedDirectory = directory;
+        targetAdjudication = existing.authority.lengthRepair ? undefined : choices[0]!;
+      } else {
+        const parsedAdjudication = validatePerformedAdjudication((await loadJsonArtifact(choices[0]!)).value);
+        if (!parsedAdjudication.ok) throw new Error("Performed human adjudication is required, including checked-zero rounds.");
+        directory = entries.length === 0 ? directoryFor(root, runId) : resolve(roundsRootFor(root, runId), parsedAdjudication.value.id);
+        await ensureDirectory(directory);
+        await confined(resolve(root, runId), directory);
+        await freeze(root, runId, analyst ?? "", choices[0]!, directory);
+        authorizedDirectory = directory;
+        targetAdjudication = choices[0]!;
       }
     }
     for (let step = 0; step < 8; step += 1) {
       phase = "preflight";
-      const execution = await inspectBoundedMemo(root, runId);
+      const execution = await inspectBoundedMemo(root, runId, false, mode === "repair" ? undefined : targetAdjudication);
       if (execution.action === "stop") return execution;
       stage = execution.stage;
       const stageDir = resolve(directory, stage);
@@ -549,7 +638,7 @@ export const runBoundedMemo = async (root: string, runId: string, mode: "start" 
         const catalog = await effects.runModel({ action: "models" });
         if (!isRecord(catalog) || !Array.isArray(catalog.models) ||
             !catalog.models.some(value => isRecord(value) && value.id === model)) throw new Error(`Frozen ${stage} model is unavailable; no substitution.`);
-        const refreshed = await inspectBoundedMemo(root, runId);
+        const refreshed = await inspectBoundedMemo(root, runId, false, mode === "repair" ? undefined : targetAdjudication);
         if (refreshed.action !== "invoke") return refreshed;
         if (await consumed(binding)) throw new Error("Request already has an attempt or saved answer; no automatic retry.");
         phase = "reservation";
@@ -585,9 +674,10 @@ export const runBoundedMemo = async (root: string, runId: string, mode: "start" 
     throw new Error("Bounded memo exceeded its deterministic step limit.");
   } catch (issue) {
     const error = `${phase}: ${commandError(issue)}`;
-    const authorization = await optional(resolve(directory, "authorization.json"));
-    if (authorization && !(await optional(resolve(directory, "failure.json")))) {
-      await durable(resolve(directory, "failure.json"), { authorization: authorization.binding, phase, stage, error, occurredAt: now() });
+    await ensureDirectory(directory);
+    const authorization = authorizedDirectory ? await optional(resolve(authorizedDirectory, "authorization.json")) : undefined;
+    if (authorization && authorizedDirectory && !(await optional(resolve(authorizedDirectory, "failure.json")))) {
+      await durable(resolve(authorizedDirectory, "failure.json"), { authorization: authorization.binding, phase, stage, error, occurredAt: now() });
     } else if (!authorization) {
       await durable(resolve(directory, `start-blocked-${randomUUID()}.json`), { error, occurredAt: now(), actorId: analyst ?? null });
     }
@@ -597,12 +687,14 @@ export const runBoundedMemo = async (root: string, runId: string, mode: "start" 
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
-    const [mode, runId, analyst, adjudication, ...extra] = process.argv.slice(2);
+    const [mode, runId, arg3, arg4, ...extra] = process.argv.slice(2);
+    const analyst = mode === "start" || mode === "repair" ? arg3 : undefined;
+    const adjudication = mode === "start" ? arg4 : mode === "resume" || mode === "status" ? arg3 : undefined;
     if (!runId || !["start", "resume", "status", "repair"].includes(mode ?? "") || extra.length ||
-        (mode === "repair" ? !analyst || !!adjudication : mode !== "start" && (analyst || adjudication))) {
+        (mode === "repair" ? !analyst || !!arg4 : mode !== "start" && !!arg4)) {
       throw new Error("Usage: npm run run:memo -- <start|resume|status|repair> <run-id> [analyst-id] [performed-adjudication.json]");
     }
-    const execution = mode === "status" ? await inspectBoundedMemo(assuranceRunRoot(), runId)
+    const execution = mode === "status" ? await inspectBoundedMemo(assuranceRunRoot(), runId, false, adjudication)
       : await runBoundedMemo(assuranceRunRoot(), runId, mode as "start" | "resume" | "repair", analyst, adjudication);
     const presentation = Object.fromEntries(Object.entries(execution).filter(([key]) => key !== "input" && key !== "selection"));
     console.log(`Execution: ${JSON.stringify(presentation)}`);

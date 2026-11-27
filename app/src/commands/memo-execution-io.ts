@@ -6,13 +6,111 @@ import type { ArtifactBinding } from "../modules/assurance/types.js";
 import { isRecord, readArtifactBinding } from "../modules/assurance/validators.js";
 import { keyJudgementPolicyFromStandard, validateMemoStandard } from "../modules/memo/standard-v1.js";
 import { createBoundedWriterRequest, editorialWriterRequest, recordWriterResponse, validateBoundedWriterRequest,
-  type EditorialRevision, type WriterRecord } from "../modules/memo/writer.js";
+  type EditorialRevision, type WriterMemoContext, type WriterRecord } from "../modules/memo/writer.js";
+import { validateApprovedMemoScope } from "../modules/research/memo-scope.js";
 import { createKeyJudgementRequest, recordKeyJudgementResponse, validateKeyJudgementRequest,
   validatePerformedAdjudication, type KeyJudgementRecord } from "../modules/synthesis/key-judgement-stage.js";
+import { validateSynthesisBuildEnvelope } from "../modules/synthesis/build.js";
+import { validateSynthesisBuildRequest } from "../modules/synthesis/request.js";
+import { validateSynthesisSourceNote } from "../modules/synthesis/source-note.js";
+import type { SynthesisBuildRecord } from "../modules/synthesis/types.js";
+import type { ApprovedResearchQuestion } from "../core/types.js";
 import type { MemoAuthorization, MemoStage } from "../workflow/bounded-memo.js";
-import { loadJsonArtifact, loadRunArtifact, requireChecksum } from "./assurance-io.js";
+import { loadCommitContext, loadJsonArtifact, loadRunArtifact, requireChecksum } from "./assurance-io.js";
 import { loadRssQuestion } from "./rss-io.js";
 import { loadChallengeRecordContext, verifySynthesisSourceAuthority } from "./synthesis-io.js";
+
+export const loadWriterMemoContext = async (
+  root: string,
+  question: ApprovedResearchQuestion,
+  buildRecord: SynthesisBuildRecord
+): Promise<Partial<Pick<WriterMemoContext, "title" | "audience" | "purpose" | "requirementTexts">>> => {
+  let title: string | undefined;
+  let audience: string | undefined;
+  let purpose: string | undefined;
+  if (question.scopeApproval) {
+    const scopeArtifact = requireChecksum(
+      await loadRunArtifact(root, question.scopeApproval.artifactRef, "Approved scope"),
+      question.scopeApproval.artifactSha256,
+      "Approved scope"
+    );
+    const scope = validateApprovedMemoScope(
+      {
+        ...(scopeArtifact.value as object),
+        artifactRef: scopeArtifact.binding.artifactRef,
+        artifactSha256: scopeArtifact.binding.artifactSha256
+      },
+      new Date().toISOString()
+    );
+    if (scope.ok) {
+      title = scope.value.threatTopic.value;
+      audience = scope.value.audience.value;
+      purpose = scope.value.purpose.value;
+    }
+  }
+  const requirementTexts: Record<string, string> = {};
+  const buildReqArtifact = requireChecksum(
+    await loadRunArtifact(root, buildRecord.request.artifactRef, "Build request"),
+    buildRecord.request.artifactSha256,
+    "Build request"
+  );
+  const buildReq = validateSynthesisBuildRequest(buildReqArtifact.value);
+  if (buildReq.ok) {
+    const envArtifact = requireChecksum(
+      await loadRunArtifact(root, buildReq.value.envelope.artifactRef, "Build envelope"),
+      buildReq.value.envelope.artifactSha256,
+      "Build envelope"
+    );
+    const env = validateSynthesisBuildEnvelope(envArtifact.value);
+    if (env.ok) {
+      for (const noteBinding of env.value.sourceNotes) {
+        const noteArtifact = requireChecksum(
+          await loadRunArtifact(root, noteBinding.artifactRef, "Source note"),
+          noteBinding.artifactSha256,
+          "Source note"
+        );
+        const note = validateSynthesisSourceNote(noteArtifact.value);
+        if (!note.ok) continue;
+        const commitCtx = await loadCommitContext(root, note.value.lineage.extractCommit.artifactRef);
+        for (const req of commitCtx.requirements.requirements) {
+          requirementTexts[req.irId] = req.text;
+        }
+        break;
+      }
+    }
+  }
+  return {
+    ...(title ? { title } : {}),
+    ...(audience ? { audience } : {}),
+    ...(purpose ? { purpose } : {}),
+    requirementTexts
+  };
+};
+
+export const hasBoundedMemoAuthority = async (root: string, runId: string) => {
+  const directory = resolve(root, runId, "memo", "execution");
+  try {
+    await stat(resolve(directory, "authorization.json"));
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  try {
+    for (const entry of await readdir(resolve(directory, "rounds"), { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) return true;
+      if (!entry.isDirectory()) continue;
+      try {
+        await stat(resolve(directory, "rounds", entry.name, "authorization.json"));
+        return true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  return false;
+};
 
 export const reserveManualMemo = async (root: string, runId: string) => {
   const directory = resolve(root, runId, "memo", "execution");
@@ -33,11 +131,7 @@ export const reserveManualMemo = async (root: string, runId: string) => {
         } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
       }
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-    try { await stat(resolve(directory, "authorization.json")); }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return async () => { await unlink(lockPath); };
-      throw error;
-    }
+    if (!(await hasBoundedMemoAuthority(root, runId))) return async () => { await unlink(lockPath); };
     throw new Error("This run has bounded memo authority. Use run:memo status/resume; manual preparation or recording cannot replace its frozen work.");
   } catch (error) { await unlink(lockPath); throw error; }
 };
@@ -85,8 +179,12 @@ export const loadMemoInputs = async (root: string, authority: MemoInputBindings)
     authority.standard.artifactSha256, "Frozen memo standard");
   const standard = validateMemoStandard(standardArtifact.value);
   if (!standard.ok) throw new Error("Memo standard is invalid.");
+  const memoContext = standard.value.version >= 4
+    ? await loadWriterMemoContext(root, question, challenge.build.record)
+    : undefined;
   return { build: challenge.build.record, challenge: challenge.record, adjudication: adjudication.value,
     question, standard: standard.value, policy: keyJudgementPolicyFromStandard(standard.value),
+    memoContext,
     lineage: [challenge.build.envelopeArtifact.binding, challenge.build.policyArtifact.binding,
       challenge.build.outletArtifact.binding, ...challenge.build.envelope.sourceNotes] };
 };
@@ -110,6 +208,7 @@ export const memoWriterRequest = (authority: MemoInputBindings, input: MemoInput
     adjudication: input.adjudication, adjudicationArtifact: authority.adjudication,
     question: input.question, questionArtifact: authority.question,
     standard: input.standard, standardArtifact: authority.standard,
+    ...(input.memoContext ? { memoContext: input.memoContext } : {}),
     keyJudgementRecord: selection, keyJudgementRecordArtifact: binding, preparedAt, wordBudget
   });
   if (!result.ok) throw new Error(`Writer inputs rejected: ${JSON.stringify(result.error)}`);

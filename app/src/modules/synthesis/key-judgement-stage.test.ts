@@ -18,6 +18,7 @@ import {
 } from "../memo/writer.js";
 import type { ChallengeRecord } from "./challenge.js";
 import {
+  createAutomatedAdjudication,
   createKeyJudgementRequest,
   projectClaimsForKeyJudgementSelection,
   recordKeyJudgementResponse,
@@ -364,7 +365,7 @@ test("memo standard v1 owns the provisional key-judgement policy", async () => {
 });
 
 test("memo standard v2 removes only the word ceiling and rejects invented limits", async () => {
-  const value = JSON.parse(await readFile(resolve(DEFAULT_MEMO_STANDARD_PATH), "utf8"));
+  const value = JSON.parse(await readFile(resolve("src/modules/memo/standards/memo-standard-v2.json"), "utf8"));
   const standard = validateMemoStandard(value);
   assert.ok(standard.ok);
   assert.equal(standard.value.version, 2);
@@ -378,6 +379,37 @@ test("memo standard v2 removes only the word ceiling and rejects invented limits
   const old = JSON.parse(await readFile(resolve("src/modules/memo/standards/memo-standard-v1.json"), "utf8"));
   delete old.limits.maxWords;
   assert.equal(validateMemoStandard(old).ok, false);
+});
+
+test("memo standard v3 is approved, provenance-bound, domain-neutral, and regression-backed", async () => {
+  const value = JSON.parse(await readFile(resolve(DEFAULT_MEMO_STANDARD_PATH), "utf8"));
+  const standard = validateMemoStandard(value);
+  assert.ok(standard.ok);
+  if (!standard.ok || standard.value.version !== 3) return;
+  assert.equal(standard.value.status, "approved-standard");
+  assert.equal(standard.value.approvedBy, "Fdihr");
+  assert.equal(standard.value.sourceMemoRefs.length, 23);
+  assert.equal(standard.value.archiveCoverage.verifiedAndCuratedCount, 23);
+  assert.equal(standard.value.archiveCoverage.excludedCount, 9);
+  assert.equal(standard.value.keyJudgementPolicy.maxKeyJudgementsStatus, "approved");
+  assert.equal(standard.value.keyJudgementPolicy.maxKeyJudgements, 3);
+  assert.equal("maxWords" in standard.value.limits, false);
+  assert.equal(standard.value.regressionExamples.length, 4);
+  assert.ok(standard.value.styleGuidance.length > 0);
+
+  assert.equal(validateMemoStandard({
+    ...value,
+    archiveCoverage: { ...value.archiveCoverage, verifiedAndCuratedCount: 22 }
+  }).ok, false);
+  assert.equal(validateMemoStandard({
+    ...value,
+    sourceMemoRefs: value.sourceMemoRefs.map((entry: { sha256: string }, index: number) =>
+      index === 0 ? { ...entry, sha256: "invalid" } : entry)
+  }).ok, false);
+  assert.equal(validateMemoStandard({
+    ...value,
+    limits: { ...value.limits, maxWords: 1200 }
+  }).ok, false);
 });
 
 test("writer v2 consumes bounded selected judgements without model rewriting", async () => {
@@ -563,29 +595,181 @@ test("writer v2 consumes bounded selected judgements without model rewriting", a
     standard: { ...standard, limits: { ...standard.limits, maxWords: budget.fixedWords } } });
   assert.ok(fixedOnly.ok);
   assert.equal(fixedOnly.value.wordBudget?.maxProseWords, 0);
-  const uncappedStandard = validateMemoStandard(JSON.parse(await readFile(resolve(DEFAULT_MEMO_STANDARD_PATH), "utf8")));
+  const uncappedStandard = validateMemoStandard(JSON.parse(await readFile(resolve("src/modules/memo/standards/memo-standard-v3.json"), "utf8")));
   assert.ok(uncappedStandard.ok);
-  const uncappedArtifact = binding("memo-standard-v2");
-  const uncappedKeyRecord = { ...keyRecord.value, memoStandard: uncappedArtifact };
+  if (!uncappedStandard.ok || uncappedStandard.value.version !== 3) return;
+  const uncappedArtifact = binding("memo-standard-v3");
+  const approvedKeyRequest = createKeyJudgementRequest({
+    buildRecord,
+    buildRecordArtifact: buildArtifact,
+    challengeRecord,
+    challengeRecordArtifact: challengeArtifact,
+    adjudication,
+    adjudicationArtifact,
+    memoStandardArtifact: uncappedArtifact,
+    policy: keyJudgementPolicyFromStandard(uncappedStandard.value),
+    preparedAt: "2026-09-03T10:03:00.000Z"
+  });
+  assert.ok(approvedKeyRequest.ok);
+  if (!approvedKeyRequest.ok) return;
+  const uncappedKeyRecord = recordKeyJudgementResponse({
+    request: approvedKeyRequest.value,
+    requestArtifact: binding("approved-key-judgement-request"),
+    responseValue: {
+      schemaVersion: "key-judgement-copilot-response-v1",
+      requestId: approvedKeyRequest.value.id,
+      invocationId: "approved-key-judgement-invocation",
+      provider: "github-copilot-vscode",
+      model: "not-exposed-by-host",
+      startedAt: "2026-09-03T10:04:00.000Z",
+      completedAt: "2026-09-03T10:04:30.000Z",
+      freshSession: true,
+      capturedBy: "TESTER",
+      proposal: {
+        selections: [
+          { requirementId: "ir-01", claim: "c01", judgementText: "The visit is reported by one source." },
+          { requirementId: "ir-02", claim: "c02", judgementText: "The purpose remains uncertain." }
+        ],
+        omissions: []
+      }
+    },
+    responseArtifact: binding("approved-key-judgement-response"),
+    buildRecord,
+    challengeRecord,
+    adjudication,
+    policy: keyJudgementPolicyFromStandard(uncappedStandard.value),
+    recordedAt: "2026-09-03T10:05:00.000Z"
+  });
+  assert.ok(uncappedKeyRecord.ok);
+  if (!uncappedKeyRecord.ok) return;
   const uncappedRequest = createBoundedWriterRequest({ ...writerInputs,
-    standard: uncappedStandard.value, standardArtifact: uncappedArtifact, keyJudgementRecord: uncappedKeyRecord });
+    standard: uncappedStandard.value, standardArtifact: uncappedArtifact,
+    keyJudgementRecord: uncappedKeyRecord.value,
+    keyJudgementRecordArtifact: binding(uncappedKeyRecord.value.id) });
   assert.ok(uncappedRequest.ok);
   assert.equal(uncappedRequest.value.wordBudget, undefined);
-  assert.match(uncappedRequest.value.prompt.system, /no word-count target or hard word limit/);
+  assert.match(uncappedRequest.value.prompt.system, /no overall word-count target or hard word limit/);
+  assert.match(uncappedRequest.value.prompt.system, /Lead with a clear bottom line/);
   assert.doesNotMatch(uncappedRequest.value.prompt.system, /very short|whitespace-separated words/);
+  assert.doesNotMatch(JSON.stringify(uncappedRequest.value), /Israel-Iran|sourceMemoRefs|archiveCoverage|regressionExamples/);
   const longMemo = recordWriterResponse({ ...recordInput,
-    request: uncappedRequest.value, standard: uncappedStandard.value, keyJudgementRecord: uncappedKeyRecord,
+    request: uncappedRequest.value, standard: uncappedStandard.value, keyJudgementRecord: uncappedKeyRecord.value,
     responseValue: { ...response, requestId: uncappedRequest.value.id, proposal: { statements: [
       { section: "analysis", text: Array<string>(450).fill("x").join(" "), claims: ["c01"] },
       { section: "analysis", text: Array<string>(450).fill("x").join(" "), claims: ["c02"] }
     ] } } });
   assert.ok(longMemo.ok);
   assert.ok(countWords(renderMemoMarkdown(longMemo.value.memo)) > 1_000);
-  assert.equal(longMemo.value.memo.memoStandardVersion, 2);
+  assert.equal(longMemo.value.memo.memoStandardVersion, 3);
+  assert.ok(!longMemo.value.memo.publicationBlockers.includes("PROVISIONAL_MEMO_STANDARD"));
   assert.ok(longMemo.value.verification.checks.some(check => check.check === "prohibited-patterns"));
   assert.equal(longMemo.value.verification.checks.some(check => check.check === "word-limit-and-prohibited-patterns"), false);
   assert.ok(validateBoundedWriterRequest(uncappedRequest.value).ok);
   assert.equal(validateBoundedWriterRequest({ ...uncappedRequest.value, wordBudget: budget }).ok, false);
+
+  const v4Standard = validateMemoStandard(JSON.parse(await readFile(resolve(DEFAULT_MEMO_STANDARD_PATH), "utf8")));
+  assert.ok(v4Standard.ok);
+  if (!v4Standard.ok || v4Standard.value.version !== 4) return;
+  const v4Artifact = binding("memo-standard-v4");
+  const v4SingleJudgementReq = createKeyJudgementRequest({
+    buildRecord,
+    buildRecordArtifact: buildArtifact,
+    challengeRecord,
+    challengeRecordArtifact: challengeArtifact,
+    adjudication,
+    adjudicationArtifact,
+    memoStandardArtifact: v4Artifact,
+    policy: keyJudgementPolicyFromStandard(v4Standard.value),
+    preparedAt: "2026-09-03T10:03:30.000Z"
+  });
+  assert.ok(v4SingleJudgementReq.ok);
+  if (!v4SingleJudgementReq.ok) return;
+  const v4KeyRecord = recordKeyJudgementResponse({
+    request: v4SingleJudgementReq.value,
+    requestArtifact: binding("v4-key-judgement-request"),
+    responseValue: {
+      schemaVersion: "key-judgement-copilot-response-v1",
+      requestId: v4SingleJudgementReq.value.id,
+      invocationId: "v4-key-judgement-invocation",
+      provider: "github-copilot-vscode",
+      model: "not-exposed-by-host",
+      startedAt: "2026-09-03T10:04:00.000Z",
+      completedAt: "2026-09-03T10:04:30.000Z",
+      freshSession: true,
+      capturedBy: "TESTER",
+      proposal: {
+        selections: [
+          { requirementId: "ir-01", claim: "c01", judgementText: "The visit is reported by one source." }
+        ],
+        omissions: [
+          { requirementId: "ir-02", reason: "Secondary contested detail kept in narrative prose." }
+        ]
+      }
+    },
+    responseArtifact: binding("v4-key-judgement-response"),
+    buildRecord,
+    challengeRecord,
+    adjudication,
+    policy: keyJudgementPolicyFromStandard(v4Standard.value),
+    recordedAt: "2026-09-03T10:05:00.000Z"
+  });
+  assert.ok(v4KeyRecord.ok);
+  if (!v4KeyRecord.ok) return;
+  const v4WriterReq = createBoundedWriterRequest({
+    ...writerInputs,
+    standard: v4Standard.value,
+    standardArtifact: v4Artifact,
+    keyJudgementRecord: v4KeyRecord.value,
+    keyJudgementRecordArtifact: binding(v4KeyRecord.value.id),
+    memoContext: {
+      title: "Reported diplomatic visit and operational posture",
+      audience: "Regional Security Leadership",
+      purpose: "Assess near-term operational exposure",
+      requirementTexts: {
+        "ir-01": "What confirmed details establish the diplomatic visit?",
+        "ir-02": "What was the operational purpose of the visit?",
+        "ir-03": "Were energy infrastructure sites affected during the visit?"
+      }
+    }
+  });
+  assert.ok(v4WriterReq.ok);
+  if (!v4WriterReq.ok) return;
+  // v4 retains the full non-rejected adjudicated claim pool (both c01 and c02), not only selected KJ c01!
+  assert.deepEqual(v4WriterReq.value.claims.map((entry) => entry.alias), ["c01", "c02"]);
+  assert.ok(validateBoundedWriterRequest(v4WriterReq.value).ok);
+  const v4Recorded = recordWriterResponse({
+    ...recordInput,
+    request: v4WriterReq.value,
+    standard: v4Standard.value,
+    keyJudgementRecord: v4KeyRecord.value,
+    responseValue: {
+      ...response,
+      requestId: v4WriterReq.value.id,
+      proposal: {
+        statements: [
+          { section: "bluf", text: "Single-source reporting indicates an official visit occurred, though its operational objective remains unverified.", claims: ["c01", "c02"] },
+          { section: "situation", text: "Initial reporting described the arrival of the delegation.", claims: ["c01"] },
+          { section: "situation", text: "Subsequent commentary noted that officials have not disclosed the agenda.", claims: ["c02"] },
+          { section: "analysis", text: "Operational teams should treat the reported agenda with caution until corroborated.", claims: ["c01", "c02"] },
+          { section: "uncertainties", text: "Public reporting relies on a single outlet without independent official confirmation.", claims: ["c02"] },
+          { section: "indicators", text: "Official communiques confirming bilateral security commitments.", claims: ["c01"] }
+        ]
+      }
+    }
+  });
+  assert.ok(v4Recorded.ok);
+  if (!v4Recorded.ok) return;
+  const v4Markdown = renderMemoMarkdown(v4Recorded.value.memo);
+  assert.match(v4Markdown, /^# Memorandum: Reported diplomatic visit and operational posture/m);
+  assert.match(v4Markdown, /\*\*To:\*\* Regional Security Leadership/);
+  assert.match(v4Markdown, /## Bottom Line\nSingle-source reporting indicates an official visit occurred/);
+  assert.match(v4Markdown, /## Key Judgements\n- The visit is reported by one source\. \[claim:[^\]]+\]$/m);
+  assert.doesNotMatch(v4Markdown, /\(Moderate confidence\)/);
+  assert.match(v4Markdown, /## Situation\nInitial reporting described the arrival of the delegation\. \[claim:[^\]]+\] Subsequent commentary noted that officials have not disclosed the agenda\. \[claim:[^\]]+\]/);
+  assert.match(v4Markdown, /## Assessment & Implications/);
+  assert.match(v4Markdown, /Were energy infrastructure sites affected during the visit\?/);
+  assert.match(v4Markdown, /## Outlook & Indicators to Watch/);
+  assert.doesNotMatch(v4Markdown, /NOT FOR PUBLICATION|Status: accepted|Sourcing Summary|ir-03: silent/);
   assert.deepEqual(
     recorded.value.memo.keyJudgments.map((entry) => entry.statement.text),
     [
@@ -602,7 +786,7 @@ test("writer v2 consumes bounded selected judgements without model rewriting", a
     )
   );
   assert.ok(
-    recorded.value.memo.publicationBlockers.includes(
+    !recorded.value.memo.publicationBlockers.includes(
       "OPEN_KEY_JUDGEMENT_CONTEST"
     )
   );
@@ -692,5 +876,20 @@ test("writer v2 consumes bounded selected judgements without model rewriting", a
   assert.deepEqual(scopedRecorded.value.memo.approvedScope, scopedRequest.value.approvedScope);
   assert.deepEqual(scopedRecorded.value.memo.sourcingSummary.reportingDependencies, [
     "Reporting dependency is mixed: NCSC-NL, Modat."
+  ]);
+
+  const automated = createAutomatedAdjudication({
+    buildRecord,
+    buildRecordArtifact: buildArtifact,
+    challengeRecord,
+    challengeRecordArtifact: challengeArtifact,
+    createdAt: "2026-09-03T10:09:00.000Z"
+  });
+  assert.equal(automated.ok, true);
+  if (!automated.ok) return;
+  assert.equal(validatePerformedAdjudication(automated.value).ok, true);
+  assert.deepEqual(automated.value.claims, [
+    { claimId: "claim-a", status: "accepted", openChallengeIds: [] },
+    { claimId: "claim-b", status: "contested", openChallengeIds: ["challenge-b"] }
   ]);
 });

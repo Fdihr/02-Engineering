@@ -299,24 +299,42 @@ def _build_synthesis_view(files: list[FileEntry], json_by_path: dict[str, Any]) 
     return stages
 
 
+DECISION_FILE = "exception-decision.json"
+
+
 def _build_exceptions(files: list[FileEntry], json_by_path: dict[str, Any]) -> list[dict[str, Any]]:
     exceptions = []
     for file in files:
         if RULES["exceptions_dir"] not in _segments(file["relPath"]) or not file["relPath"].endswith(".json"):
             continue
+        if _basename(file["relPath"]) == DECISION_FILE:
+            continue
         value = json_by_path.get(file["relPath"])
         record = value if _is_record(value) else {}
+        exception_id = _string_field(record, ["id", "exceptionId"]) or _basename(file["relPath"])
+        # Display only: the TypeScript gates verify the decision against the item checksum.
+        decision_path = file["relPath"].rsplit("/", 1)[0] + "/" + DECISION_FILE
+        decision = json_by_path.get(decision_path)
+        decided = (_is_record(decision) and decision.get("schemaVersion") == "exception-decision-v1"
+                   and decision.get("exceptionId") == exception_id)
         exceptions.append({
             "relPath": file["relPath"],
-            "id": _string_field(record, ["id", "exceptionId"]) or _basename(file["relPath"]),
+            "id": exception_id,
             "kind": _string_field(record, ["kind", "type"]) or "unknown",
-            "status": _string_field(record, ["status"]) or "unknown",
+            "status": "decided" if decided else (_string_field(record, ["status"]) or "unknown"),
             "raisedAt": _string_field(record, ["raisedAt", "occurredAt", "createdAt"]),
             "refs": [
                 ref["artifactRef"]
                 for ref in record.get("refs", [])
                 if _is_record(ref) and isinstance(ref.get("artifactRef"), str)
             ] if isinstance(record.get("refs"), list) else [],
+            **({
+                "decision": _string_field(decision, ["decision"]),
+                "decidedBy": _string_field(decision, ["decidedBy"]),
+                "decidedAt": _string_field(decision, ["decidedAt"]),
+                "reason": _string_field(decision, ["reason"]),
+                "decisionPath": decision_path,
+            } if decided else {}),
         })
     return sorted(exceptions, key=lambda item: item["raisedAt"], reverse=True)
 
@@ -470,6 +488,14 @@ def _build_adjudications(run_id: str, json_by_path: dict[str, Any]) -> list[dict
         adjudication_path = f"synthesis/adjudication/{record_id}/performed-adjudication.json"
         adjudication = json_by_path.get(adjudication_path)
         decided = {c.get("claimId"): c for c in adjudication.get("claims", [])} if _is_record(adjudication) else {}
+        decision_record = json_by_path.get(f"synthesis/adjudication/{record_id}/adjudication-decision.json")
+        decision_values = decision_record.get("challengeDecisions", []) if _is_record(decision_record) else []
+        if not isinstance(decision_values, list):
+            decision_values = []
+        decisions = {
+            _string_field(decision, ["challengeId"]): decision
+            for decision in decision_values if _is_record(decision)
+        } if _is_record(decision_record) else {}
         claims = []
         for claim in build_claims:
             if not _is_record(claim):
@@ -489,6 +515,8 @@ def _build_adjudications(run_id: str, json_by_path: dict[str, Any]) -> list[dict
                         "check": _string_field(r, ["check"]),
                         "rationale": _string_field(r, ["rationale"]),
                         "hypothesis": _string_field(r.get("alternativeHypothesis") if _is_record(r.get("alternativeHypothesis")) else {}, ["text"]),
+                        "decision": _string_field(decisions.get(_string_field(r, ["id"]), {}), ["decision"]),
+                        "decisionNote": _string_field(decisions.get(_string_field(r, ["id"]), {}), ["note"]),
                     }
                     for r in results if r.get("claimId") == claim_id and r.get("verdict") == "challenge"
                 ],

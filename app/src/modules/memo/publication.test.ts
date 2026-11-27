@@ -3,9 +3,12 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import test from "node:test";
 import {
+  createMemoPublicationGate,
+  createPublishedMemoPackage,
   createSupportCalibrationRecord,
   createBoundMemoDecision,
   validateMemoPublicationDecision,
+  validatePublishedMemoPackage,
   validateSupportCalibrationPolicy,
   validateSupportCalibrationRecord
 } from "./publication.js";
@@ -37,6 +40,44 @@ test("bound publication decisions reject stale targets, incomplete samples and b
     { ok: false, error: "INVALID_MEMO_REVIEW" });
   assert.equal(createBoundMemoDecision({ ...input, approvalBlockers: ["PROVISIONAL_MEMO_STANDARD"],
     submitted: { ...submitted, decision: "rejected" } }).ok, true);
+  assert.equal(createBoundMemoDecision({ ...input, submitted: {
+    ...submitted, issueType: undefined, decision: "approved"
+  } }).ok, true);
+  assert.deepEqual(createBoundMemoDecision({ ...input, approvalBlockers: ["OPEN_KEY_JUDGEMENT_CONTEST"],
+    submitted: { ...submitted, issueType: undefined, decision: "approved" } }),
+  { ok: false, error: "PUBLICATION_BLOCKED" });
+});
+
+test("publication gate exposes review only when deterministic blockers are clear", () => {
+  assert.deepEqual(createMemoPublicationGate({
+    memoId: "memo-1", checkedAt: "2026-11-04T13:00:00.000Z", blockers: []
+  }), {
+    schemaVersion: "memo-publication-gate-v1", memoId: "memo-1",
+    checkedAt: "2026-11-04T13:00:00.000Z", status: "ready", reasons: [],
+    humanApprovalAvailable: true
+  });
+  assert.equal(createMemoPublicationGate({
+    memoId: "memo-1", checkedAt: "2026-11-04T13:00:00.000Z",
+    blockers: ["OPEN_KEY_JUDGEMENT_CONTEST"]
+  }).humanApprovalAvailable, false);
+});
+
+test("published package binds the approved audience, review and both memo formats", () => {
+  const target = { runId: "run-1", memoId: "memo-1", memoVersion: 1,
+    memo: binding("memo"), markdown: binding("markdown"), writer: binding("writer"),
+    verification: binding("verification"), gate: binding("gate"), calibrationPolicy: binding("policy") };
+  const result = createPublishedMemoPackage({
+    runId: "run-1", memoId: "memo-1", memoVersion: 1,
+    publishedAt: "2026-11-04T13:00:00.000Z", publishedBy: "publisher-1",
+    publicationStatus: "published", audience: "Approved leadership audience", format: "markdown+json",
+    approval: binding("decision"), reviewTarget: target,
+    lineage: { buildRecord: binding("build") },
+    memo: { id: "memo-1", runId: "run-1", version: 1 }, markdown: "# Approved memo"
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(validatePublishedMemoPackage(result.value).ok, true);
+  assert.equal(validatePublishedMemoPackage({ ...result.value, markdown: "# Changed" }).ok, false);
 });
 
 test("validates publication samples and records drill-down calibration", async () => {

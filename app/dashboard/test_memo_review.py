@@ -52,3 +52,24 @@ class MemoReviewTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             value = memo_review.status(Path(directory), "run-1", "memo-1", lambda *args, **kwargs: {"ok": True, "stdout": ""})
             self.assertIn("no receipt", value["error"])
+
+    def test_publication_requires_a_valid_publisher_and_returns_the_immutable_package(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            calls = []
+
+            def command(name, args, **kwargs):
+                calls.append((name, args, kwargs))
+                return {"ok": True, "stdout": 'Published: {"path":"runs/run-1/published/memo-1/publication.json"}'}
+
+            status, result = memo_review.publish(root, {
+                "runId": "run-1", "memoId": "memo-1", "publisherId": "REVIEWER"
+            }, command)
+            self.assertEqual(status, 200)
+            self.assertTrue(result["ok"])
+            self.assertEqual(calls, [("publish:memo", ["run-1", "memo-1", "REVIEWER"], {"runs_root": root})])
+            status, _ = memo_review.publish(root, {
+                "runId": "run-1", "memoId": "memo-1", "publisherId": "../bad"
+            }, command)
+            self.assertEqual(status, 400)
+            self.assertEqual(len(calls), 1)

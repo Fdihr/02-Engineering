@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   chooseRunNextAction,
+  deterministicRecorderForRequest,
+  driveRunNext,
   type DeterministicRunStep,
   type RunNextFacts
 } from "./run-next.js";
@@ -17,6 +19,14 @@ const base: RunNextFacts = {
   pendingModelRequestPaths: [],
   governanceBlockerPaths: []
 };
+
+test("run-next recognizes only explicitly allowlisted deterministic recorders", () => {
+  assert.equal(deterministicRecorderForRequest("draft-request.json"), "record:research-question-draft");
+  assert.equal(deterministicRecorderForRequest("question-relevance-request.json"), "record:question-relevance");
+  assert.equal(deterministicRecorderForRequest("extract-request.json"), "record:assurance-extract");
+  assert.equal(deterministicRecorderForRequest("review-package.json"), undefined);
+  assert.equal(deterministicRecorderForRequest("request.json"), undefined);
+});
 
 test("run-next prioritizes pushed exceptions and deterministic work", () => {
   assert.deepEqual(
@@ -50,6 +60,97 @@ test("run-next prioritizes pushed exceptions and deterministic work", () => {
       ]
     }).kind,
     "execute"
+  );
+  assert.deepEqual(
+    chooseRunNextAction({
+      ...base,
+      deterministicSteps: [
+        {
+          command: "record:synthesis-challenge",
+          requestPath: "runs/run-1/challenge/challenge-request.json",
+          responsePath: "runs/run-1/challenge/copilot-response.json"
+        },
+        {
+          command: "record:synthesis-build",
+          requestPath: "runs/run-1/build/build-request.json",
+          responsePath: "runs/run-1/build/copilot-response.json"
+        }
+      ]
+    }),
+    {
+      kind: "execute",
+      step: {
+        command: "record:synthesis-build",
+        requestPath: "runs/run-1/build/build-request.json",
+        responsePath: "runs/run-1/build/copilot-response.json"
+      }
+    }
+  );
+});
+
+test("run-next records each saved response until the next human gate", async () => {
+  const steps: DeterministicRunStep[] = [
+    {
+      command: "record:synthesis-build",
+      requestPath: "runs/run-1/build/build-request.json",
+      responsePath: "runs/run-1/build/copilot-response.json"
+    },
+    {
+      command: "record:synthesis-challenge",
+      requestPath: "runs/run-1/challenge/challenge-request.json",
+      responsePath: "runs/run-1/challenge/copilot-response.json"
+    }
+  ];
+  const remaining = [...steps];
+  const recorded: DeterministicRunStep[] = [];
+  const result = await driveRunNext(
+    async () => remaining.length
+      ? { ...base, deterministicSteps: [...remaining] }
+      : {
+          ...base,
+          publicationGatePath: "runs/run-1/publication-gate.json",
+          publicationApprovalAvailable: true
+        },
+    async step => {
+      recorded.push(step);
+      remaining.splice(remaining.findIndex(candidate => candidate.responsePath === step.responsePath), 1);
+    }
+  );
+  assert.deepEqual(recorded, steps);
+  assert.deepEqual(result, {
+    action: {
+      kind: "human-wait",
+      surface: "publication",
+      paths: ["runs/run-1/publication-gate.json"]
+    },
+    executed: steps
+  });
+});
+
+test("run-next stops at manual model transport and rejects recorders that make no progress", async () => {
+  const step: DeterministicRunStep = {
+    command: "record:synthesis-build",
+    requestPath: "runs/run-1/build/build-request.json",
+    responsePath: "runs/run-1/build/copilot-response.json"
+  };
+  const waiting = await driveRunNext(
+    async () => ({
+      ...base,
+      pendingModelRequestPaths: ["runs/run-1/challenge/challenge-request.json"]
+    }),
+    async () => assert.fail("A pending model request must not execute a recorder.")
+  );
+  assert.deepEqual(waiting, {
+    action: {
+      kind: "machine-wait",
+      replacement: "foundry-adapter",
+      paths: ["runs/run-1/challenge/challenge-request.json"]
+    },
+    executed: []
+  });
+  await assert.rejects(
+    driveRunNext(async () => ({ ...base, deterministicSteps: [step] }), async () => {}),
+    /did not consume its response/
   );
 });
 

@@ -339,6 +339,41 @@ test("dependency is claim-scoped for mixed independent and shared-origin reporti
   assert.equal(built.value.sourceAppendix.length, 2);
 });
 
+test("multi-source claims with unknown outlet independence retain single-source ceiling without dropping to zero-source unknown", async () => {
+  const providerNote: SourceNote = {
+    ...note({
+      id: "note-seerist",
+      host: "app.seerist.com",
+      observations: [observation({ id: "obs-seerist" })]
+    }),
+    sourceIdentity: { kind: "unknown" },
+    assessment: { status: "not-assessed" }
+  };
+  const publisherNote: SourceNote = {
+    ...note({
+      id: "note-kyivpost",
+      host: "www.kyivpost.com",
+      observations: [observation({ id: "obs-kyivpost" })]
+    }),
+    assessment: { status: "not-assessed" }
+  };
+  const prepared = await envelope([providerNote, publisherNote]);
+  const built = buildExternalSynthesis({
+    envelope: prepared.envelope,
+    sources: [bound(providerNote), bound(publisherNote)],
+    policy: prepared.policy,
+    outletIdentityTable: prepared.outlets,
+    proposals: [proposal(["n1-o01", "n2-o01"], "reported-fact")],
+    createdAt: "2026-09-03T10:00:00.000Z"
+  });
+  assert.equal(built.ok, true);
+  if (!built.ok) return;
+  assert.equal(built.value.claims[0]?.independentSourceCount, null);
+  assert.equal(built.value.claims[0]?.singleSourceDependent, true);
+  assert.equal(built.value.claims[0]?.confidenceCeiling, "low");
+  assert.equal(built.value.claims[0]?.confidenceCeilingRuleId, "ceiling-one-limited-fact");
+});
+
 test("derivative reporting recognizes a held upstream publisher", async () => {
   const origin = note({
     id: "note-origin",

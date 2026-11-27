@@ -21,17 +21,18 @@ Rejected claims are excluded. Contested claims are included only when policy per
 ## Policy
 
 The governing memo standard owns `keyJudgementPolicy`. The current default,
-`memo-standard-v2`, preserves the selection policy introduced by v1:
+approved `memo-standard-v3`, preserves the existing three-judgement cap and
+contested-claim allowance:
 
-- `policyId: memo-standard-v1-key-judgements-v1`
+- `policyId: memo-standard-v3-key-judgements-v1`
 - `maxKeyJudgements: 3`
-- `maxKeyJudgementsStatus: provisional`
+- `maxKeyJudgementsStatus: approved`
 - `allowContested: true`
 - `judgementTextMaxChars: 240`
 
-Standard v2 removes the total memo word ceiling, not selection or evidence
-constraints. The earlier v0/v1 standard bytes and existing run artifacts remain
-unchanged.
+The approved standard removes the total memo word ceiling, not selection or
+evidence constraints. Provisional `memo-standard-v2` remains immutable for
+historical authorizations and drafts.
 
 ## Model boundary
 
@@ -52,6 +53,21 @@ The request reuses Challenge aliases such as `c01`; real claim IDs are not rende
 
 Failures contain only `{ check, count, rule }`. On success, code attaches claim-owned fields and writes an immutable selection record.
 
+## Post-selection adjudication impact
+
+The dashboard derives a deterministic, read-only change check after selection.
+It joins the key-judgement record to the same Challenge and performed
+adjudication artifact references, then marks a raised challenge as potentially
+affecting a key judgement only when it targets a claim selected in that record.
+The projection exposes the selected requirement and the recorded
+uphold/dismiss outcome. Challenges on other claims remain visible for audit
+but are not counted as direct changes to the current selected judgements.
+
+Before a matching selection exists, impact is unknown and all raised challenges
+remain reviewable. The check neither changes adjudication nor promotes a claim;
+it is not a substitute for artifact checksum validation. The existing human
+decision and checksum-bound writer reconstruction remain authoritative.
+
 ## Commands and artifacts
 
 Run from `app/`:
@@ -66,11 +82,11 @@ Requests and records are write-once beneath `runs/<runId>/synthesis/key-judgemen
 
 Writer v2 accepts only selected claims. It carries key-judgement wording unchanged into canonical memo JSON; the writer model may return only optional analysis, uncertainty, and indicator statements. Model-authored BLUF or key-judgement rows are rejected. Code derives BLUF, citations, confidence, status, open challenges, gaps, omissions, limitations, and publication blockers.
 
-Use `src/modules/memo/standards/memo-standard-v2.json` for new work. The writer
+Use `src/modules/memo/standards/memo-standard-v3.json` for new work. The writer
 must use the exact standard bound by the recorded selection, not silently
-substitute the current default. Under v2, brevity is guidance rather than a
-hard word limit, and two-page memos are acceptable. Historical v1 writer requests
-retain their word budgets and exact reconstruction. A separately approved,
+substitute the current default. Under v3, brevity is guidance rather than a
+hard word limit. Historical v1 writer requests retain their word budgets and
+exact reconstruction; v2 requests retain their original prompt and policy. A separately approved,
 single-call repair of a historical saved length failure follows
 [the bounded memo contract](bounded-memo-execution.md); it cannot rerun selection
 or relax that frozen standard.

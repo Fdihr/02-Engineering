@@ -1,6 +1,6 @@
 import { appendFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { reserveManualMemo } from "./memo-execution-io.js";
+import { loadWriterMemoContext, reserveManualMemo } from "./memo-execution-io.js";
 import { validateApprovedResearchQuestion } from "../modules/research/research-question.js";
 import { validateChallengeRecord } from "../modules/synthesis/challenge.js";
 import {
@@ -110,6 +110,9 @@ const main = async (): Promise<void> => {
     const standardArtifact = await loadJsonArtifact(resolve(standardPath));
     const standard = validateMemoStandard(standardArtifact.value);
     if (!standard.ok) throw new Error(`Memo standard rejected: ${standard.error}`);
+    const memoContext = standard.value.version >= 4
+      ? await loadWriterMemoContext(runRoot, question.value, build.value)
+      : undefined;
     const request = createBoundedWriterRequest({
       buildRecord: build.value,
       buildRecordArtifact: buildArtifact.binding,
@@ -123,6 +126,7 @@ const main = async (): Promise<void> => {
       questionArtifact: questionArtifact.binding,
       standard: standard.value,
       standardArtifact: standardArtifact.binding,
+      ...(memoContext ? { memoContext } : {}),
       preparedAt
     });
     if (!request.ok) throw new Error(`Writer request rejected: ${request.error}`);

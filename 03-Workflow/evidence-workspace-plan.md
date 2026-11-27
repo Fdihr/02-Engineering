@@ -46,7 +46,9 @@ what challenges the emerging answer, and what remains missing?
   retrieved-source candidates. It is not a general admission mechanism for
   arbitrary native records. Missing admission settings retain human mode.
 - `run:next` is a bounded next-action selector, not yet an autonomous evidence
-  worker. Its current pending-model state names the future Foundry adapter.
+  worker. Bounded model stages use the existing Copilot SDK under immutable
+  authorization; manual/unbounded transport remains a checkpoint. Foundry is
+  an optional future provider integration, not a prerequisite.
 - Per-source support review, assessment and adjudication remain interim
   stand-ins. They cannot be removed merely by hiding UI controls.
 

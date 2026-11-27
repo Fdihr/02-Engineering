@@ -34,9 +34,14 @@ import {
 import type { BuiltClaim, SynthesisBuildRecord } from "../synthesis/types.js";
 import {
   keyJudgementPolicyFromStandard,
+  memoStandardForWriter,
   validateMemoStandard,
-  type MemoStandard
+  validateMemoStandardForWriter,
+  type MemoStandard,
+  type MemoStandardForWriter,
+  type MemoStandardV4ForWriter
 } from "./standard-v1.js";
+import { createMemoPublicationGate } from "./publication.js";
 
 export const MEMO_STANDARD_SCHEMA_VERSION = "memo-standard-pack-v0" as const;
 export const WRITER_REQUEST_SCHEMA_VERSION = "memo-writer-request-v1" as const;
@@ -52,11 +57,24 @@ export const WRITER_MODEL = "not-exposed-by-host" as const;
 export const WRITER_SECTIONS = [
   "bluf",
   "key-judgments",
+  "situation",
   "analysis",
   "uncertainties",
   "indicators"
 ] as const;
+
 export type WriterSection = (typeof WRITER_SECTIONS)[number];
+
+export type WriterMemoContext = {
+  title: string;
+  audience?: string;
+  purpose?: string;
+  geographies: string[];
+  windowFrom: string;
+  windowTo: string;
+  question: string;
+  requirementTexts: Record<string, string>;
+};
 
 export type MemoStandardV0 = {
   schemaVersion: typeof MEMO_STANDARD_SCHEMA_VERSION;
@@ -174,9 +192,10 @@ export type BoundedWriterRequest = {
     disposition: "covered" | "partial" | "silent" | "contradicted";
   }>;
   requiredOmissions: Array<{ requirementId: string; reason: string }>;
+  memoContext?: WriterMemoContext;
   derivedSourcingSummary: string;
   derivedLimitations: string[];
-  standard: MemoStandard;
+  standard: MemoStandardForWriter;
   prompt: { system: string; user: string };
   editorialRevision?: EditorialRevision;
   wordBudget?: {
@@ -234,9 +253,10 @@ export type MemoDocument = {
   notForPublication: true;
   publicationBlockers: string[];
   memoStandardId: string;
-  memoStandardVersion: 0 | 1 | 2;
+  memoStandardVersion: MemoStandardV0["version"] | MemoStandard["version"];
   approvedQuestionId: string;
   approvedScope: ArtifactBinding | null;
+  memoContext?: WriterMemoContext;
   lineage: {
     buildRecord: ArtifactBinding;
     challengeRecord: ArtifactBinding;
@@ -256,6 +276,7 @@ export type MemoDocument = {
       rationale: string;
     };
   }>;
+  situation?: MemoStatement[];
   analysis: MemoStatement[];
   uncertainties: MemoStatement[];
   competingExplanations: Array<{
@@ -287,7 +308,7 @@ export type MemoVerification = {
   memoId: string;
   verifiedAt: string;
   contentVerdict: "pass";
-  publicationVerdict: "block";
+  publicationVerdict: "eligible" | "block";
   checks: Array<{ check: string; status: "pass" }>;
   blockers: string[];
 };
@@ -579,7 +600,7 @@ const boundedWriterPrompt = (
   >
 ): BoundedWriterRequest["prompt"] => ({
   system: [
-    request.standard.version === 2
+    request.standard.version >= 2
       ? "Write supporting sections for an evidence-grounded memo."
       : "Write optional supporting sections for a very short threat-intelligence memo.",
     "The BLUF and key judgements are fixed controller outputs; do not return or rewrite them.",
@@ -589,7 +610,11 @@ const boundedWriterPrompt = (
     ...(request.standard.version === 2 ? [
       "Use the space needed to explain the evidence clearly. A two-page memo is acceptable; there is no word-count target or hard word limit.",
       "Be concise without omitting material analysis, uncertainties or caveats."
+    ] : request.standard.version === 3 ? [
+      "Use enough space to explain the evidence clearly; there is no overall word-count target or hard word limit.",
+      "Be concise without omitting material analysis, uncertainties or caveats."
     ] : []),
+    ...(request.standard.version === 3 ? request.standard.styleGuidance : []),
     ...(request.wordBudget && "maxWords" in request.standard.limits ? [
       `The complete rendered memo is limited to ${request.standard.limits.maxWords} words. Fixed sections already use ${request.wordBudget.fixedWords} words.`,
       `Across ALL returned statement text, use at most ${request.wordBudget.maxProseWords} whitespace-separated words in total. The controller reserves another ${request.wordBudget.reservedStatementWords} words for citations and status labels.`,
@@ -640,6 +665,92 @@ const boundedWriterPrompt = (
   )
 });
 
+const executiveWriterPrompt = (
+  request: Omit<BoundedWriterRequest, "id" | "prompt" | "schemaVersion"> & {
+    standard: MemoStandardV4ForWriter;
+    memoContext: WriterMemoContext;
+  },
+  competingHypotheses: Array<{ claimAlias: string; check: string; hypothesis: string }>
+): BoundedWriterRequest["prompt"] => ({
+  system: [
+    "You are writing a concise Executive Management (ExM) intelligence memorandum.",
+    "Target 1 to 1.5 pages total (roughly 350–550 words across the entire finished memo). Be brief, sharp, and straight to the point.",
+    "Write in plain, direct business English: use active voice, lead every section with the takeaway, and keep sentences short (aim for 15–25 words per sentence).",
+    "Cut all analyst throat-clearing, passive hedging, and filler transitions ('Analytically,', 'Similarly,', 'Furthermore,', 'Following investigations into,', 'Media reporting indicated that').",
+    "Select only the most decision-relevant facts and operational implications from the claim pool—do not turn the memo into an exhaustive police blotter or repeat minor sub-details.",
+    "Ground every single statement strictly in the provided adjudicated claims (`claims` aliases). Never invent facts, actors, dates, incidents, attributions, or confidence levels beyond the provided claims.",
+    "Do not emit `key-judgments` statements; fixed Key Judgements are bound separately and rendered automatically under `## Key Judgements`.",
+    "Never mention internal workflow terms, claim aliases (such as c01), requirement IDs (such as ir-01), confidence parentheticals, calibration verdicts, or source-limitation counters inside statement `text`; reference aliases only in `claims`.",
+    ...request.standard.styleGuidance,
+    "Return a JSON object `{ \"statements\": [...] }` only. Unknown fields are rejected."
+  ].join("\n"),
+  user: JSON.stringify(
+    {
+      task: "Draft a crisp 1 to 1.5 page (350–550 word) Executive Management memorandum across bluf, situation, analysis, uncertainties, and indicators grounded strictly in the adjudicated claim pool.",
+      brief: {
+        title: request.memoContext.title,
+        researchQuestion: request.memoContext.question,
+        ...(request.memoContext.audience ? { audience: request.memoContext.audience } : {}),
+        ...(request.memoContext.purpose ? { purpose: request.memoContext.purpose } : {}),
+        geographies: request.memoContext.geographies,
+        assessmentWindow: {
+          from: request.memoContext.windowFrom,
+          to: request.memoContext.windowTo
+        }
+      },
+      sectionBlueprint: {
+        bluf: `1-${request.standard.limits.maxBlufStatements} short, direct sentences (~45–70 words total) answering the research question upfront: what is happening, how solid the reporting is, and the operational bottom line. Never write source-count boilerplate.`,
+        situation: `3-${request.standard.limits.maxSituationStatements} crisp factual sentences (~90–140 words total) summarizing only the material events, official actions, and attributed incidents—skip granular tactical trivia.`,
+        analysis: `2-${request.standard.limits.maxAnalysisStatements} plain-English sentences (~80–130 words total) explaining what this means for business/operational risk, adversary intent, and the main alternative explanation.`,
+        uncertainties: `1-${request.standard.limits.maxUncertaintyStatements} short sentences (~35–65 words total) stating only the main unverified gaps or single-source limits that could change leadership's view.`,
+        indicators: `2-${request.standard.limits.maxIndicatorStatements} crisp one-line signposts (~40–75 words total) naming specific, observable near-term triggers to watch.`
+      },
+      hardRules: [
+        "Every statement `text` must be one complete, standalone sentence ending in terminal punctuation (aim for 15–25 words; avoid multi-clause 35+ word sentences).",
+        "Keep total statements lean so the entire rendered memo reads in ~2 minutes (roughly 350–550 words / 1 to 1.5 pages).",
+        "Every statement must cite at least one supporting alias from `adjudicatedClaims` in `claims`.",
+        "Do not repeat `fixedKeyJudgements` verbatim; add concrete context in `situation` and operational meaning in `analysis`.",
+        `Never use prohibited phrases: ${request.standard.prohibitedPatterns.join(", ")}.`
+      ],
+      fixedKeyJudgements: request.keyJudgements.map((judgement) => ({
+        requirementId: judgement.requirementId,
+        claimAlias: judgement.claimAlias,
+        judgementText: judgement.judgementText,
+        confidence: judgement.confidence,
+        status: judgement.status
+      })),
+      adjudicatedClaims: request.claims.map((claim) => ({
+        alias: claim.alias,
+        statement: claim.statement,
+        kind: claim.kind,
+        ...(claim.attributedTo ? { attributedTo: claim.attributedTo } : {}),
+        status: claim.status,
+        confidenceLevel: claim.confidenceLevel,
+        openChallenges: claim.openChallenges.map((challenge) => ({
+          check: challenge.check,
+          rationale: challenge.rationale
+        }))
+      })),
+      ...(competingHypotheses.length > 0 ? { competingHypotheses } : {}),
+      intelligenceGaps: request.requiredGaps.map((gap) => ({
+        requirement: request.memoContext.requirementTexts[gap.irId] ?? gap.irId,
+        disposition: gap.disposition
+      })),
+      responseShape: {
+        statements: [
+          {
+            section: "bluf | situation | analysis | uncertainties | indicators",
+            text: "<complete standalone executive sentence>",
+            claims: ["c01"]
+          }
+        ]
+      }
+    },
+    null,
+    2
+  )
+});
+
 export const createBoundedWriterRequest = (input: {
   buildRecord: SynthesisBuildRecord;
   buildRecordArtifact: ArtifactBinding;
@@ -653,6 +764,7 @@ export const createBoundedWriterRequest = (input: {
   questionArtifact: ArtifactBinding;
   standard: MemoStandard;
   standardArtifact: ArtifactBinding;
+  memoContext?: Partial<Pick<WriterMemoContext, "title" | "audience" | "purpose" | "requirementTexts">>;
   preparedAt: string;
   wordBudget?: boolean;
 }): Result<BoundedWriterRequest, WriterError> => {
@@ -753,7 +865,12 @@ export const createBoundedWriterRequest = (input: {
       )
     )
   ];
-  const claims = selectedClaimIds.map((claimId) => {
+  const candidateClaimIds =
+    input.standard.version >= 4
+      ? input.buildRecord.synthesis.claims.map((claim) => claim.id)
+      : selectedClaimIds;
+  const selectedClaimIdSet = new Set(selectedClaimIds);
+  const claims = candidateClaimIds.map((claimId) => {
     const claim = buildByClaim.get(claimId);
     const decided = adjudicationByClaim.get(claimId);
     const alias = aliasesByClaimId.get(claimId);
@@ -765,7 +882,7 @@ export const createBoundedWriterRequest = (input: {
       claim.confidence.level === "unknown" ||
       claim.confidenceCeiling === "unknown"
     ) {
-      return undefined;
+      return selectedClaimIdSet.has(claimId) ? null : undefined;
     }
     return {
       alias,
@@ -790,10 +907,13 @@ export const createBoundedWriterRequest = (input: {
       confidenceCeiling: claim.confidenceCeiling
     };
   });
-  if (claims.some((claim) => !claim)) return err("WRITER_INPUT_MISMATCH");
+  if (claims.some((claim) => claim === null)) return err("WRITER_INPUT_MISMATCH");
   const resolvedClaims = claims.filter(
     (claim): claim is NonNullable<typeof claim> => Boolean(claim)
   );
+  if (input.standard.version >= 4) {
+    resolvedClaims.sort((left, right) => left.alias.localeCompare(right.alias));
+  }
   const keyJudgements = input.keyJudgementRecord.selection.selections.map(
     (selection) => {
       const alias = aliasesByClaimId.get(selection.claimId);
@@ -846,6 +966,47 @@ export const createBoundedWriterRequest = (input: {
   const alternatives = input.challengeRecord.results.filter(
     (result) => result.alternativeHypothesis?.status === "hypothesis"
   );
+  const standardForWriter = memoStandardForWriter(input.standard);
+  const normalizedRequirementTexts: Record<string, string> = {};
+  if (input.memoContext?.requirementTexts) {
+    for (const key of Object.keys(input.memoContext.requirementTexts).sort()) {
+      const text = input.memoContext.requirementTexts[key];
+      if (typeof text === "string" && text.trim().length > 0) {
+        normalizedRequirementTexts[key] = text.trim();
+      }
+    }
+  }
+  const normalizedMemoContext: WriterMemoContext | undefined =
+    standardForWriter.version === 4
+      ? {
+          title:
+            input.memoContext?.title?.trim() ||
+            input.question.researchThesis?.trim() ||
+            input.question.question.trim(),
+          ...(input.memoContext?.audience?.trim()
+            ? { audience: input.memoContext.audience.trim() }
+            : {}),
+          ...(input.memoContext?.purpose?.trim()
+            ? { purpose: input.memoContext.purpose.trim() }
+            : {}),
+          geographies: [...input.question.geographies],
+          windowFrom: input.question.timeWindow.from,
+          windowTo: input.question.timeWindow.to,
+          question: input.question.question,
+          requirementTexts: normalizedRequirementTexts
+        }
+      : undefined;
+  const resolvedClaimIdSet = new Set(resolvedClaims.map((entry) => entry.claimId));
+  const competingHypotheses =
+    standardForWriter.version === 4
+      ? alternatives
+          .filter((entry) => resolvedClaimIdSet.has(entry.claimId))
+          .map((entry) => ({
+            claimAlias: aliasesByClaimId.get(entry.claimId) ?? entry.claimId,
+            check: entry.check,
+            hypothesis: entry.alternativeHypothesis!.text
+          }))
+      : [];
   const body = {
     preparedAt,
     runId: input.buildRecord.runId,
@@ -874,6 +1035,7 @@ export const createBoundedWriterRequest = (input: {
     requiredOmissions: input.keyJudgementRecord.selection.omissions.map(
       (omission) => ({ ...omission })
     ),
+    ...(normalizedMemoContext ? { memoContext: normalizedMemoContext } : {}),
     derivedSourcingSummary: boundedSourceSummary(input.buildRecord),
     derivedLimitations: [
       ...boundedDerivedLimitations(
@@ -885,13 +1047,19 @@ export const createBoundedWriterRequest = (input: {
           `Key judgement omitted for ${omission.requirementId}: ${omission.reason}`
       )
     ],
-    standard: input.standard
+    standard: standardForWriter
   };
   const request: BoundedWriterRequest = {
     schemaVersion: BOUNDED_WRITER_REQUEST_SCHEMA_VERSION,
     id: `memo-writer-request-${sha256Text(canonicalJson(body)).slice(0, 32)}`,
     ...body,
-    prompt: boundedWriterPrompt(body)
+    prompt:
+      standardForWriter.version === 4 && normalizedMemoContext
+        ? executiveWriterPrompt(
+            { ...body, standard: standardForWriter, memoContext: normalizedMemoContext },
+            competingHypotheses
+          )
+        : boundedWriterPrompt(body)
   };
   if (input.wordBudget === false || !("maxWords" in input.standard.limits)) return ok(request);
   const fixed = composeWriterMemo({ ...input, request }, [], preparedAt);
@@ -966,8 +1134,21 @@ export const validateBoundedWriterRequest = (
     !Array.isArray(value.requiredOmissions) ||
     !Array.isArray(value.derivedLimitations) ||
     !isRecord(value.standard) ||
-    !validateMemoStandard(value.standard).ok ||
+    !validateMemoStandardForWriter(value.standard).ok ||
     !isRecord(value.prompt) ||
+    (value.standard.version === 4
+      ? !isRecord(value.memoContext) ||
+        !nonEmptyString(value.memoContext.title) ||
+        !nonEmptyString(value.memoContext.question) ||
+        !validTime(value.memoContext.windowFrom) ||
+        !validTime(value.memoContext.windowTo) ||
+        !Array.isArray(value.memoContext.geographies) ||
+        !value.memoContext.geographies.every(nonEmptyString) ||
+        (value.memoContext.audience !== undefined && !nonEmptyString(value.memoContext.audience)) ||
+        (value.memoContext.purpose !== undefined && !nonEmptyString(value.memoContext.purpose)) ||
+        !isRecord(value.memoContext.requirementTexts) ||
+        Object.values(value.memoContext.requirementTexts).some((entry) => !nonEmptyString(entry))
+      : value.memoContext !== undefined) ||
     (value.wordBudget !== undefined &&
       (value.standard.version !== 1 || !isRecord(value.wordBudget) || !hasOnlyKeys(value.wordBudget,
         ["schemaVersion", "fixedWords", "reservedStatementWords", "maxProseWords"]) ||
@@ -1101,11 +1282,17 @@ export const recordWriterResponse = (input: {
   }
   const bluf = proposal.value.filter((entry) => entry.section === "bluf");
   const judgments = proposal.value.filter((entry) => entry.section === "key-judgments");
+  const situation = proposal.value.filter((entry) => entry.section === "situation");
   const allAliases = input.request.claims.map((claim) => claim.alias).sort();
   if (
     (bounded
-      ? bluf.length !== 0 || judgments.length !== 0
+      ? input.standard.version === 4
+        ? judgments.length !== 0 ||
+          bluf.length > input.standard.limits.maxBlufStatements ||
+          situation.length > input.standard.limits.maxSituationStatements
+        : bluf.length !== 0 || judgments.length !== 0 || situation.length !== 0
       : bluf.length !== 1 ||
+        situation.length !== 0 ||
         [...bluf[0]!.claimAliases].sort().join() !== allAliases.join() ||
         judgments.length !== input.request.claims.length ||
         judgments.some((entry) => entry.claimAliases.length !== 1) ||
@@ -1155,7 +1342,8 @@ export const recordWriterResponse = (input: {
     memoId: memo.id,
     verifiedAt: recordedAt,
     contentVerdict: "pass",
-    publicationVerdict: "block",
+    publicationVerdict: memo.publicationBlockers.length || input.standard.status !== "approved-standard"
+      ? "block" : "eligible",
     checks,
     blockers: memo.publicationBlockers
   };
@@ -1242,7 +1430,7 @@ const composeWriterMemo = (input: Pick<Parameters<typeof recordWriterResponse>[0
       )
     ];
     const claimIds = claims.map((claim) => claim.id);
-    const text = entry.section === "bluf" ? derivedBluf : entry.text;
+    const text = entry.section === "bluf" && input.standard.version < 4 ? derivedBluf : entry.text;
     return {
       id: `memo-statement-${sha256Text(canonicalJson({ section: entry.section, text, claimIds })).slice(0, 24)}`,
       section: entry.section,
@@ -1260,12 +1448,30 @@ const composeWriterMemo = (input: Pick<Parameters<typeof recordWriterResponse>[0
     };
   };
   const modelStatements = proposal.map(makeStatement);
+  const modelBlufStatements = modelStatements.filter((statement) => statement.section === "bluf");
+  const nonBlufModelStatements = modelStatements.filter((statement) => statement.section !== "bluf");
+  const fallbackExecutiveBlufText =
+    bounded && boundedRequest.keyJudgements.length > 0
+      ? boundedRequest.keyJudgements.map((judgement) => judgement.judgementText).join(" ")
+      : "Available reviewed reporting within the assessment window did not establish verified claims answering the approved research question.";
+  const fallbackExecutiveBlufAliases =
+    bounded && boundedRequest.keyJudgements.length > 0
+      ? [...new Set(boundedRequest.keyJudgements.map((judgement) => judgement.claimAlias))]
+      : [];
   const fixedBluf = bounded
-    ? makeStatement({
-        section: "bluf",
-        text: derivedBluf,
-        claimAliases: [...new Set(input.request.claims.map((claim) => claim.alias))]
-      })
+    ? input.standard.version >= 4
+      ? modelBlufStatements.length > 0
+        ? undefined
+        : makeStatement({
+            section: "bluf",
+            text: fallbackExecutiveBlufText,
+            claimAliases: fallbackExecutiveBlufAliases
+          })
+      : makeStatement({
+          section: "bluf",
+          text: derivedBluf,
+          claimAliases: [...new Set(input.request.claims.map((claim) => claim.alias))]
+        })
     : undefined;
   const fixedKeyJudgementStatements = bounded
     ? boundedRequest.keyJudgements.map((judgement) =>
@@ -1277,7 +1483,13 @@ const composeWriterMemo = (input: Pick<Parameters<typeof recordWriterResponse>[0
       )
     : [];
   const statements = bounded
-    ? [fixedBluf!, ...fixedKeyJudgementStatements, ...modelStatements]
+    ? input.standard.version >= 4
+      ? [
+          ...(modelBlufStatements.length > 0 ? modelBlufStatements : [fixedBluf!]),
+          ...fixedKeyJudgementStatements,
+          ...nonBlufModelStatements
+        ]
+      : [fixedBluf!, ...fixedKeyJudgementStatements, ...modelStatements]
     : modelStatements;
   const keyJudgments = bounded
     ? boundedRequest.keyJudgements.map((judgement, index) => ({
@@ -1353,13 +1565,7 @@ const composeWriterMemo = (input: Pick<Parameters<typeof recordWriterResponse>[0
       ? ["PROVISIONAL_SOURCE_LINEAGE"]
       : []),
     ...(!bounded ? ["ADJUDICATION_NOT_PERFORMED"] : []),
-    ...(bounded &&
-    boundedRequest.keyJudgements.some(
-      (judgement) => judgement.status === "contested"
-    )
-      ? ["OPEN_KEY_JUDGEMENT_CONTEST"]
-      : []),
-    "PROVISIONAL_MEMO_STANDARD",
+    ...(input.standard.status === "approved-standard" ? [] : ["PROVISIONAL_MEMO_STANDARD"]),
     ...(approvedScope ? [] : ["LEGACY_SCOPE_LINEAGE_UNAVAILABLE"])
   ];
   const memoBody = {
@@ -1378,6 +1584,9 @@ const composeWriterMemo = (input: Pick<Parameters<typeof recordWriterResponse>[0
     memoStandardVersion: input.standard.version,
     approvedQuestionId: input.question.id,
     approvedScope,
+    ...(input.standard.version >= 4 && boundedRequest?.memoContext
+      ? { memoContext: boundedRequest.memoContext }
+      : {}),
     lineage: bounded
       ? {
           buildRecord: input.request.buildRecord,
@@ -1396,6 +1605,9 @@ const composeWriterMemo = (input: Pick<Parameters<typeof recordWriterResponse>[0
         },
     bluf: statements.filter((statement) => statement.section === "bluf"),
     keyJudgments,
+    ...(input.standard.version >= 4
+      ? { situation: statements.filter((statement) => statement.section === "situation") }
+      : {}),
     analysis: statements.filter((statement) => statement.section === "analysis"),
     uncertainties: statements.filter((statement) => statement.section === "uncertainties"),
     competingExplanations: alternatives,
@@ -1432,7 +1644,125 @@ const renderStatements = (statements: MemoStatement[]): string[] =>
         }`
       );
 
-export const renderMemoMarkdown = (memo: MemoDocument): string => [
+const MONTHS_UTC = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+const formatHumanDate = (iso: string): string => {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso.slice(0, 10);
+  return `${parsed.getUTCDate()} ${MONTHS_UTC[parsed.getUTCMonth()]} ${parsed.getUTCFullYear()}`;
+};
+
+const formatExecutiveTitle = (rawTitle?: string): string => {
+  const cleaned = (rawTitle ?? "").trim().replace(/\.+$/, "");
+  if (!cleaned) return "Intelligence Memorandum";
+  if (/^memorandum\b/i.test(cleaned)) return cleaned;
+  return `Memorandum: ${cleaned}`;
+};
+
+const capitalizeLabel = (value: string): string =>
+  value.length === 0 ? value : value.charAt(0).toUpperCase() + value.slice(1);
+
+const renderCitedSentence = (statement: MemoStatement): string =>
+  statement.claimCitations.length > 0
+    ? `${statement.text} ${statement.claimCitations.join(" ")}`
+    : statement.text;
+
+const renderProseParagraphs = (statements: MemoStatement[], sentencesPerParagraph: number): string[] => {
+  if (statements.length === 0) return [];
+  const paragraphs: string[] = [];
+  for (let index = 0; index < statements.length; index += sentencesPerParagraph) {
+    const chunk = statements.slice(index, index + sentencesPerParagraph);
+    if (paragraphs.length > 0) paragraphs.push("");
+    paragraphs.push(chunk.map(renderCitedSentence).join(" "));
+  }
+  return paragraphs;
+};
+
+const renderExecutiveGapBullet = (
+  gap: MemoDocument["gaps"][number],
+  requirementTexts?: Record<string, string>
+): string => {
+  const reqText = requirementTexts?.[gap.irId]?.trim();
+  if (reqText) {
+    return gap.disposition === "silent"
+      ? `- **Unresolved intelligence gap:** Available reporting in this window did not establish verified evidence addressing *“${reqText}”*`
+      : `- **Partial intelligence coverage:** Available reporting only partially addressed *“${reqText}”*`;
+  }
+  return `- **Intelligence gap (${gap.disposition}):** Coverage remained ${gap.disposition} for requirement ${gap.irId}.`;
+};
+
+const renderExecutiveMemoMarkdown = (memo: MemoDocument): string => {
+  const metaParts: string[] = [];
+  if (memo.memoContext?.audience) {
+    metaParts.push(`**To:** ${memo.memoContext.audience}`);
+  }
+  if (memo.memoContext) {
+    metaParts.push(
+      `**Window:** ${formatHumanDate(memo.memoContext.windowFrom)} – ${formatHumanDate(memo.memoContext.windowTo)}`
+    );
+    if (memo.memoContext.geographies.length > 0) {
+      metaParts.push(`**Scope:** ${memo.memoContext.geographies.join(", ")}`);
+    }
+  } else {
+    metaParts.push(`**Information cutoff:** ${formatHumanDate(memo.informationCutoffAt)}`);
+  }
+
+  const lines: string[] = [
+    `# ${formatExecutiveTitle(memo.memoContext?.title)}`,
+    "",
+    metaParts.join(" · "),
+    "",
+    "## Bottom Line",
+    ...renderProseParagraphs(memo.bluf, 3),
+    "",
+    "## Key Judgements",
+    ...(memo.keyJudgments.length > 0
+      ? memo.keyJudgments.map(
+          (entry) => `- ${renderCitedSentence(entry.statement)}`
+        )
+      : ["_No eligible key judgements were established from reviewed reporting within this window._"])
+  ];
+
+  const situation = memo.situation ?? [];
+  if (situation.length > 0) {
+    lines.push("", "## Situation", ...renderProseParagraphs(situation, 3));
+  }
+
+  if (memo.analysis.length > 0) {
+    lines.push("", "## Assessment & Implications", ...renderProseParagraphs(memo.analysis, 3));
+  }
+
+  if (memo.uncertainties.length > 0 || memo.gaps.length > 0) {
+    lines.push("", "## Uncertainties & Intelligence Gaps");
+    if (memo.uncertainties.length > 0) {
+      lines.push(...renderProseParagraphs(memo.uncertainties, 3));
+    }
+    if (memo.gaps.length > 0) {
+      if (memo.uncertainties.length > 0) lines.push("");
+      lines.push(
+        ...memo.gaps.map((gap) =>
+          renderExecutiveGapBullet(gap, memo.memoContext?.requirementTexts)
+        )
+      );
+    }
+  }
+
+  if (memo.indicators.length > 0) {
+    lines.push(
+      "",
+      "## Outlook & Indicators to Watch",
+      ...memo.indicators.map((statement) => `- ${renderCitedSentence(statement)}`)
+    );
+  }
+
+  lines.push("");
+  return lines.join("\n");
+};
+
+export const renderMemoMarkdown = (memo: MemoDocument): string =>
+  memo.memoStandardVersion >= 4
+    ? renderExecutiveMemoMarkdown(memo)
+    : [
   "# Threat Intelligence Memo",
   "",
   "> **NOT FOR PUBLICATION**",

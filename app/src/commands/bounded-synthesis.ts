@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { isRecord, pathSafeId, readArtifactBinding, validTime } from "../modules/assurance/validators.js";
 import type { ArtifactBinding } from "../modules/assurance/types.js";
-import { validateExceptionItem } from "../modules/exceptions/exception-item.js";
+import { loadExceptionState } from "./exception-io.js";
 import { validateOutletIdentityTable, validateSynthesisProfilePolicy } from "../modules/synthesis/policy.js";
 import { validateSynthesisBuildRecord } from "../modules/synthesis/response.js";
 import { createSynthesisBuildEnvelope } from "../modules/synthesis/build.js";
@@ -200,6 +200,7 @@ const freezeAuthorization = async (root: string, runId: string, analyst: string,
         outletIdentityTable: checkedOutlets.value, outletIdentityArtifact: outlets, createdAt: approvedAt
       });
       if (!envelope.ok) throw new Error(`Build envelope rejected before authorization: ${envelope.error}`);
+      sources = envelope.value.sourceNotes;
       buildEnvelopeId = envelope.value.id;
     }
   }
@@ -278,10 +279,11 @@ const scopedBlockers = async (root: string, authorization: SynthesisAuthorizatio
   }
   const blockers: WorkflowBlocker[] = [];
   for (const path of (await filesIn(resolve(root, authorization.runId))).filter(path => basename(path) === "exception-item.json")) {
-    const loaded = await loadJsonArtifact(path);
-    const exception = validateExceptionItem(loaded.value);
-    if (!exception.ok || exception.value.runId !== authorization.runId) throw new Error("Invalid run exception; execution integrity is uncertain.");
-    if (exception.value.status !== "open") continue;
+    const state = await loadExceptionState(path).catch(() => undefined);
+    if (!state || state.item.runId !== authorization.runId) throw new Error("Invalid run exception; execution integrity is uncertain.");
+    if (!state.open) continue;
+    const loaded = state.artifact;
+    const exception = { value: state.item };
     let relevant = false;
     let knownScope = exception.value.refs.length > 0;
     const paths = [];

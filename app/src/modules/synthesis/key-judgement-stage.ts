@@ -180,6 +180,54 @@ export const validatePerformedAdjudication = (
   return ok(value as PerformedAdjudication);
 };
 
+export const createAutomatedAdjudication = (input: {
+  buildRecord: SynthesisBuildRecord;
+  buildRecordArtifact: ArtifactBinding;
+  challengeRecord: ChallengeRecord;
+  challengeRecordArtifact: ArtifactBinding;
+  createdAt: string;
+}): Result<PerformedAdjudication, KeyJudgementStageError> => {
+  const buildRecordArtifact = readArtifactBinding(input.buildRecordArtifact);
+  const challengeRecordArtifact = readArtifactBinding(input.challengeRecordArtifact);
+  const createdAt = validTime(input.createdAt);
+  if (!buildRecordArtifact || !challengeRecordArtifact || !createdAt) {
+    return err({ code: "INVALID_ADJUDICATION" });
+  }
+  if (
+    input.challengeRecord.runId !== input.buildRecord.runId ||
+    input.challengeRecord.reviewStatus !== input.buildRecord.reviewStatus ||
+    input.challengeRecord.limitedEvidence !== input.buildRecord.limitedEvidence ||
+    canonicalJson(input.challengeRecord.buildRecord) !== canonicalJson(buildRecordArtifact)
+  ) {
+    return err({ code: "KEY_JUDGEMENT_INPUT_MISMATCH" });
+  }
+  const claims = input.buildRecord.synthesis.claims.map((claim) => {
+    const openChallengeIds = input.challengeRecord.results
+      .filter((result) => result.claimId === claim.id && result.verdict === "challenge")
+      .map((result) => result.id);
+    return {
+      claimId: claim.id,
+      status: (openChallengeIds.length === 0 ? "accepted" : "contested") as "accepted" | "contested",
+      openChallengeIds
+    };
+  });
+  const body = {
+    createdAt,
+    runId: input.buildRecord.runId,
+    adjudicationStatus: "performed" as const,
+    reviewStatus: input.buildRecord.reviewStatus,
+    limitedEvidence: input.buildRecord.limitedEvidence,
+    buildRecord: buildRecordArtifact,
+    challengeRecord: challengeRecordArtifact,
+    claims
+  };
+  return validatePerformedAdjudication({
+    schemaVersion: PERFORMED_ADJUDICATION_SCHEMA_VERSION,
+    id: `synthesis-adjudication-${sha256Text(canonicalJson(body)).slice(0, 32)}`,
+    ...body
+  });
+};
+
 export const projectClaimsForKeyJudgementSelection = (
   buildRecord: SynthesisBuildRecord,
   adjudication: PerformedAdjudication
@@ -281,7 +329,7 @@ const createPrompt = (input: {
     "Select bounded key judgements from the eligible claim aliases.",
     "Choose only aliases listed for the corresponding information requirement.",
     "For every requirement with eligible claims, return one selection or one explicit omission.",
-    "Word each selected judgement concisely without adding facts beyond its claim.",
+    "Write each selected judgement in plain, direct Executive Management (ExM) English: one crisp active-voice sentence (aim for 15-25 words) stating the headline takeaway without throat-clearing or adding facts beyond its claim.",
     "Return exactly selections and omissions. Do not return confidence, status, challenge ids, claim ids, or rationale fields outside omission reasons."
   ].join("\n"),
   user: JSON.stringify(

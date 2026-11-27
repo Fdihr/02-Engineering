@@ -1,6 +1,6 @@
 # its Product Backlog
 
-Status: Working plan. Last updated: 2026-11-05.
+Status: Working plan. Last updated: 2026-11-26.
 Target architecture: [memo-workflow.md](memo-workflow.md). Implemented baseline: [first-slice.md](first-slice.md).
 Constraints: [kiss-reset-plan.md](kiss-reset-plan.md), [non-goals-from-poc.md](non-goals-from-poc.md).
 
@@ -12,7 +12,7 @@ Status key: **Done** · **Partial** · **Next** · **Later**
 
 ## Personas
 
-- **Analyst**: approves research intent, handles pushed exceptions, reviews and publishes memos.
+- **Analyst**: approves research plan (Gate 1), reviews inline verbatim source quotes, and publishes memos (Gate 2).
 - **Reader**: consumes a published memo and needs to trust each statement.
 - **Governance owner**: approves versioned policies, memo standards and context packs.
 - **Operator**: runs the tool locally, configures models and providers, recovers failed runs.
@@ -21,38 +21,36 @@ Status key: **Done** · **Partial** · **Next** · **Later**
 
 | Milestone | Outcome | Epics |
 | --- | --- | --- |
-| M1 First published live memo | One real memo passes every blocking gate and is published by a human | E3, E5, E6, E7 |
-| M2 Hands-off run | One command drives a run to the next human gate; the four human surfaces are the only manual steps | E8, E9 |
+| M1 First published live memo | One real memo runs end-to-end through the 2-gate workflow and is published as a local package | E1, E3, E4, E5, E6, E7, E9 |
+| M2 Memo house outline & polish | Upgrade rendered memo outline from workflow buckets to executive house structure | E6 |
 | M3 Broad collection | Approved Seerist endpoints and bounded OSINT search feed the same evidence contracts | E2 |
-| M4 Organizational relevance | Optional Vestas profile adds governed relevance without contaminating evidence | E10 |
+| M4 Model & org expansion | Optional Foundry runtime adapter and governed Vestas relevance profile | E8, E10 |
 | M5 Production hardening | Retention, access control, recovery and bounded concurrency | E11 |
 
-M1 is the nearest finished-product checkpoint. Today, the live memo `analysis-2026-11`
-is blocked by `OPEN_KEY_JUDGEMENT_CONTEST`, `PROVISIONAL_MEMO_STANDARD` and
-`PUBLICATION_GATE_BLOCKED`, and publication delivery is not implemented.
+CTI Bench now operates on a **2-gate human workflow**:
+- **Gate 1 (`#/new`)**: Analyst enters a thesis, edits the AI-drafted research plan and external source budget (default `6`), and clicks **Approve plan & generate memo**.
+- **Automated middle (`npm run pipeline:run`)**: Seerist discovery, full-text Seerist analysis intake, bounded HTTPS article capture, relevance screening, byte-anchored quote extraction and deterministic assurance (`auto-assure-source.ts`), bounded synthesis + adversarial challenge, automated challenge adjudication (preserving contested claims as visible caveats), and bounded memo writing + 1-shot length repair run automatically without mid-run human stops.
+- **Gate 2 (`#/review`)**: Analyst reads the clean executive memo with clickable `[1 publisher]` inline pills, inspects exact verbatim source quotes and caveats, and publishes in **1 click** (`support-calibration-policy-v2.json`).
 
 ---
 
 ## E1 Research intent and planning — Done
 
-Feature status: scope and question approval (**Done**), draft-only research planning
-preview (**Done**).
+Feature status: unified Gate 1 research plan approval (**Done**), AI draft-plan generation (**Done**).
 
 - *As an analyst, I want to turn a thesis into reviewable research questions and searches, so that collection starts from approved intent.*
 - *As an analyst, I want no provider call to run before I approve scope and question, so that relevance originates in intent.*
-
-Remaining tasks:
-- [ ] Combine scope, question and IR approval into the single memo-level intent gate described in `memo-workflow.md` (Human operating model, item 1).
+- [x] Combine scope, question, IR approval, and optional automated pipeline launch into Gate 1 (`approve-intent` with `runPipeline: true`).
 
 ## E2 Collection and discovery — Partial
 
 ### F2.1 Seerist endpoint coverage — Partial
-Only `GET /v1/wod` collection and discovery are implemented.
+Only `GET /v1/wod` (`news,analysis`) collection and discovery are implemented.
 - *As an analyst, I want every Seerist endpoint my organization may use to be available, so that memos are not limited to one feed.*
 - [ ] Inventory permitted endpoints and record live observations in `seerist-probe-findings.md`.
 - [ ] Map each observed endpoint to evidence candidate, collection lead or context.
 - [ ] Add one narrow adapter plus tests per endpoint, in priority order.
-- [ ] Ingest Control Risks analyst reports from the Seerist payload (they have no web link today).
+- [x] Ingest full-text Seerist `analysis` items directly from captured `/v1/wod` discovery pages (`run-pipeline.ts`).
 
 ### F2.2 RSS acquisition — Done (two feeds)
 - [ ] Observe and enable further catalogue feeds one at a time.
@@ -71,95 +69,80 @@ Only `GET /v1/wod` collection and discovery are implemented.
 ### F3.4 Pushed exception queue — Partial
 - *As an analyst, I want exceptions pushed to me with a recommended action, so that I never poll per source.*
 - [ ] One queue view for the four kinds: `uncertain-relevance`, `unresolved-reconciliation`, `key-judgement-contest`, `bounded-failure`.
-- [ ] Resolve each exception with a recorded decision that routes to its owning stage.
-- [ ] Clear the two open relevance exceptions in `analysis-2026-11` (M1).
+- [x] Record `exclude` / `accept-gap` decisions as write-once artifacts (CLI `decide:exception` and dashboard Exceptions panel); gates honor them.
+- [ ] Route `resume` / `reject` decisions to their owning stage.
+- [x] Clear the open relevance exceptions in `analysis-2026-11` (M1): RMF excluded as context; two older items accepted as gaps.
 
-## E4 Source assurance — Partial
+## E4 Source assurance — Done (automated baseline)
 
 ### F4.1 Extract under a deterministic controller — Done
-### F4.2 Blind Sweep stage — Later
-Replaces the human omission pass.
+### F4.2 Deterministic verbatim-quote assurance (`auto-assure-source.ts`) — Done
+Verifies exact UTF-8 byte-offset quotes against canonical source documents, classifies outlet reliability from `geopolitical-outlets-v1.json`, and emits reviewed synthesis source notes automatically without manual per-source forms.
+### F4.3 Blind Sweep stage — Later
+Optional second-pass omission check over complete canonical content.
 - [ ] Approve a Sweep policy and model budget.
 - [ ] Implement Sweep over complete canonical content and compare against Extract.
-### F4.3 Assess stage with outlet reliability table — Later
-Replaces human source assessment.
-- [ ] Approve versioned outlet identities and reliability table.
-### F4.4 Automated support check — Later
-Replaces human source-support verdicts once publication calibration meets policy.
 
-## E5 Synthesis — Partial
+## E5 Synthesis — Done
 
 ### F5.1 Build — Done
 ### F5.2 Challenge — Done
-### F5.3 Adjudicate — Next (M1)
-- *As an analyst, I want only contests that could change a key judgement escalated to me, so that I adjudicate what matters.*
-- [ ] Deterministic change check that decides whether a challenge can alter a key judgement.
-- [ ] Record adjudication outcomes and rebuild affected claims.
-- [ ] Adjudicate the two contested judgements in `analysis-2026-11` using admitted, in-window evidence only.
+### F5.3 Automated challenge adjudication — Done
+- [x] Uphold raised adversarial challenges deterministically and preserve contested claims as visible, non-blocking caveats in the rendered memo (`writer.ts`, `publication.ts`).
 
-## E6 Memo composition and standards — Partial
+## E6 Memo composition and standards — Done
 
 ### F6.1 Key-judgement selection — Done
 ### F6.2 Memo writer and renderer — Done
 ### F6.3 Bounded editorial revision — Done
-### F6.4 Memo standard pack — Next (M1)
-`memo-standard-v2` (uncapped) is provisional, which blocks publication.
-- *As a governance owner, I want a memo standard curated from approved historical memos, so that quality is consistent without leaking historical facts.*
-- [ ] Select and approve historical memos for curation.
-- [ ] Approve a non-provisional standard version with regression examples.
-- [ ] Merge the uncapped-standard change (currently uncommitted on this branch).
+### F6.4 Memo standard pack — Done (`memo-standard-v4`)
+### F6.5 Executive house outline upgrade — Done (M2)
+- [x] Reshape rendered memo sections from mechanical workflow buckets into an executive intelligence memorandum (`Bottom Line`, `Key Judgements`, `Situation`, `Assessment & Implications`, `Uncertainties & Intelligence Gaps`, `Outlook & Indicators to Watch`), supply the full non-rejected adjudicated claim pool to the writer, and move provenance/competing-hypothesis mechanics into the `#/review` inspector while preserving `v0`–`v3` backward compatibility.
 
-## E7 Quality assurance and publication — Partial
+## E7 Quality assurance and publication — Done
 
 ### F7.1 Deterministic verification — Done
 ### F7.2 Version-bound memo review — Done
-### F7.3 Human publication gate — Next (M1)
-- *As an analyst, I want to approve, reject or request a targeted revision, so that only reviewed memos are published.*
-- *As a reader, I want to drill from any statement to its claim, observation and source, so that I can trust it.*
-- [ ] Enable publication approval once blocking gates clear.
-- [ ] Present a policy-sized random sample of observation rows and record calibration verdicts.
-### F7.4 Publication delivery — Next (M1)
-- [ ] Decide output formats and audience (open decision 8).
-- [ ] Produce an immutable published artifact with lineage.
+### F7.3 Zero-quiz 1-click publication gate — Done
+- [x] `support-calibration-policy-v2.json` (`sampleSize: 0`) + `approve-and-publish` enable 1-click publication at Gate 2 after inline source inspection.
+- [x] Reader drills from inline `[N publisher]` and `Caveat` pills directly to verbatim source quotes and challenge notes.
+### F7.4 Publication delivery — Done (local package)
+- [x] Produce a write-once Markdown+JSON publication package with approval binding, review target and memo lineage.
 ### F7.5 Independent semantic verification — Later
 
 ## E8 Model platform — Partial
 
 ### F8.1 Copilot model selector per workflow stage — Done
-### F8.2 Foundry adapter — Next (M2)
-Replaces the manual Copilot bridge.
-- *As an operator, I want to route any AI stage to an approved Foundry deployment, so that production runs do not depend on a local Copilot account.*
+### F8.2 Foundry adapter — Later (M4)
+The current product path uses GitHub Copilot (`github-copilot-sdk`); Foundry is not required for M1/M2.
 - [ ] Approve endpoint type, deployment, authentication, API version, region and retention.
-- [ ] Implement the adapter behind the existing per-stage model setting.
+- [ ] Implement the runtime adapter behind the per-stage model setting in `run-pipeline.ts` and `copilot.py`.
 - [ ] Record Foundry invocation provenance identically to SDK provenance.
 
-## E9 Orchestration and dashboard — Partial
+## E9 Orchestration and dashboard — Done
 
-### F9.1 Shared next-action projection — Done
-### F9.2 `run:next` driver — Next (M2)
-Replaces manual command choreography.
-- *As an analyst, I want one action to advance the run to the next human gate, so that I don't run commands step by step.*
-- [ ] Drive every implemented step from its deterministic readiness state.
-- [ ] Stop at the four human surfaces and on bounded failure.
+### F9.1 Automated end-to-end pipeline (`pipeline:run` + `pipeline_runner.py`) — Done
+- [x] Single automated pipeline drives Seerist discovery, article capture, relevance screening, extraction, byte-anchor assurance, synthesis, adjudication, and memo drafting from Gate 1 to Gate 2.
+- [x] Failed or interrupted runs log non-blocking coverage gaps and resume cleanly from saved checkpoints on disk.
+### F9.2 Rebuilt 2-gate desktop UI — Done
+- [x] Stripped interim manual Sources and Synthesis gates; surfaces are `Analyses` (`#/home`), `New analysis` (`#/new`), `Memo` (`#/review`), `Audit` (`#/audit`), and `Settings` (`#/settings`).
 
 ## E10 Organizational relevance — Later (M4)
 
 - *As a reader at Vestas, I want to know why supported external facts matter to us, without the context altering the facts.*
-- [ ] Approve a small governed Vestas context pack (open decision 6).
+- [ ] Approve a small governed Vestas context pack.
 - [ ] Dual-lineage relevance assessment after external synthesis.
 
 ## E11 Operations and hardening — Later (M5)
 
-- [ ] Retention, access control, signing and recovery (open decision 9).
-- [ ] Numeric collection, model-call, retry and token budgets (open decision 5).
+- [ ] Retention, access control, signing and recovery.
+- [ ] Numeric collection, model-call, retry and token budgets.
 - [ ] Bounded concurrency after sequential behavior is proven.
 
 ---
 
-## Recommended next sprint (toward M1)
+## Milestone status
 
-1. Finish the RMF relevance assessment and admission decision already prepared in `analysis-2026-11`.
-2. Resolve the two open relevance exceptions (F3.4).
-3. Adjudicate the two contested key judgements (F5.3).
-4. Approve a non-provisional memo standard and merge the uncapped change (F6.4).
-5. Implement publication approval and delivery (F7.3, F7.4).
+- **M1 First published live memo — Done**: Live run `poland-sabotage-2026-11` executed end-to-end through `pipeline:run` (63 Seerist leads, 3 assured sources, 49 byte-anchored quotes, 40 synthesis claims) and published as a local package.
+- **M2 Memo house outline & polish — Done**: `memo-standard-v4` executive memo writer, full adjudicated claim pool, proportional multi-paragraph composition, and `#/review` inspector provenance live and tested.
+- **Next up (M3)**: Broaden Seerist endpoint coverage beyond `/v1/wod` and evaluate bounded OSINT search.

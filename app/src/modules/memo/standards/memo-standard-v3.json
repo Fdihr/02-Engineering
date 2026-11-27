@@ -1,0 +1,145 @@
+{
+  "schemaVersion": "memo-standard-pack-v3",
+  "id": "memo-standard-v3",
+  "version": 3,
+  "status": "approved-standard",
+  "authoredAt": "2026-11-06T15:11:54.788Z",
+  "approvedAt": "2026-11-06T15:18:39.616Z",
+  "approvedBy": "Fdihr",
+  "sourceMemoRefs": [
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - August - Israel-Iran Situation Update.docx", "sha256": "4fe48fed720b21cb6376d2bcc943fda16ab40a6d7431b596c5becfe0d232759b", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - August - Ukraine-Russia Situation Update.docx", "sha256": "9bd00cc604430d84fd80145989fa77385f8457a7cf88406c2ce5b4e40c42ab66", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - August 21st - China's new anti-espionage law.docx", "sha256": "d5cfb228a63a64c932401c0a3e2a6ab8391769b84266bb3ec29ee04db583d740", "purpose": "citation" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - DATE - Threat development Russia September 2023.docx", "sha256": "ae60dd34050e557b967d59e2814ed8e15a2d8d826313dae86928bb0e52f84b1d", "purpose": "confidence" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - Dec 15th - FE's Udsyn 2023.docx", "sha256": "ba799415f930eea8dd7be706f575270364a833a0f7c107c5a8fcdd0ec54a4d53", "purpose": "voice" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - February - Coordinated Cyber Attack on Polish Energy Sector.docx", "sha256": "67880df66e950c3c2cc2773cfdd00d34882373abf3d9c52c8695451acc8401fc", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - May 14th - India cyber threat Assesment.docx", "sha256": "484591e7b305ccc319b3c2dbb37afb84fc10b502a1e5a8f99b66d101b9dedfc8", "purpose": "voice" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - Nov 22th - Rusiawest escalation.docx", "sha256": "eba4bbb04880343495907667e300a9d9d351faf810fcefc10202258dcea9ad4b", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - Oct 5th - China's new anti-espionage law.docx", "sha256": "5eaa0096120bbef21d94c549129faa323169905fcf9cfd4e6926cb3510e61100", "purpose": "citation" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - October - Russis Historic Background.docx", "sha256": "2bff13d217eb85d47f9b8ae0f3ef0cd60098934020a7f32ea2edb53d0aab6be7", "purpose": "analysis-depth" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - October - What will Russia do next.docx", "sha256": "db66bca4a2fc3edd34e98cd518dc71bb43efdc8b8da2043e2f4d8dff90a04898", "purpose": "analysis-depth" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - September 15th - Russia hybrid war.docx", "sha256": "1624e2c41f71ffc856e281d1934938a96aab5afcbc2dcf569921c8936a476958", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - Updated July 6th - Threat development Russia june 28h -2023.docx", "sha256": "3e8b1d349aa252e043bfb361a3f505c1499f3e0443b2a2d20bd374a06983ab0e", "purpose": "analysis-depth" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - sept 12th - China's cyber threat 2023 yearly .docx", "sha256": "bab4e913d7832d8e8ee0fbd85755b10dda20196efcb6a1a13854200d3309c69b", "purpose": "confidence" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum - August - Cyber Threat Landscape Ongoing Updates.docx", "sha256": "691479019a8d2e1964d249780498491190bd5c338626231101705e063097229e", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum - Feb 25th - Bitter APT Group Threat Report Appendix.docx", "sha256": "88134a4896d3ea6aee99b9ded2c1b665149778765ddeba235ab7849760b44c82", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum - june 4th - Dansihe auth increase cyber threat rating.docx", "sha256": "5a1b24eac37cdafb6ce79fd390ffd06e20619c9929b353f5a3efe825ffdb0a43", "purpose": "voice" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum-sept 2024-Hezbollah-pager-attack.docx", "sha256": "6a019b38e84d767b1170077eafe901137a87f3182716a0f247f5a80a933d771b", "purpose": "analysis-depth" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/03-Critical-Infrastructure/Memorandum - Dec 5th - Vestas-DTEK Collab.docx", "sha256": "fe1145e7fc5e41885da93ab3baccf53b00f2e70ceabfd415e79cda03e2104d4b", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/03-Critical-Infrastructure/Memorandum - January - Fortinet Finland Vulnerability.docx", "sha256": "bfcfae2eff5fc54bfa8ed945b651b9cf83f41c674a0c572cd8dcb1fd011a0e6c", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/03-Critical-Infrastructure/Memorandum - May 23rd - Chinese 'rogue' hardware.docx", "sha256": "0b53f89126864ef1f502cdafdf616629259d11eba67187a42290be09893f1a16", "purpose": "voice" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/03-Critical-Infrastructure/Memorandum - Nov 21th - Optic Fiber Cut in Baltic Sea.docx", "sha256": "96a9243cfee5ab9d5b0caa6ebb9efd6a822bd5efa5cb030c180e732c9617a87b", "purpose": "structure" },
+    { "artifactRef": "01-Intelligence/03-Archive/Memo-Archive/04-Policy-Regulation/Memorandum - March 24st - EU Energy Security Policy Development 2025.docx", "sha256": "3640969c73d516905bd24f82fbc17cc0c9186f29f0e2b56d633dcecf1ce2021b", "purpose": "voice" }
+  ],
+  "archiveCoverage": {
+    "listedMemoCount": 32,
+    "verifiedAndCuratedCount": 23,
+    "excludedCount": 9,
+    "exclusionReasons": [
+      "Three valid Open XML documents were listed but could not be opened from the current OneDrive workspace.",
+      "Six files named .docx are legacy binary .doc files, not readable Open XML documents."
+    ],
+    "excludedArtifactRefs": [
+      "01-Intelligence/03-Archive/Memo-Archive/03-Critical-Infrastructure/Memorandum - February - Threat Warning to Nordic Critical Energy Infrastructure.docx",
+      "01-Intelligence/03-Archive/Memo-Archive/03-Critical-Infrastructure/Memorandum - June 25th - GNSS Jamming and Its Impact on Offshore Communication and Navigation Systems.docx",
+      "01-Intelligence/03-Archive/Memo-Archive/04-Policy-Regulation/Memorandum - March 24st - EU Emerging security strategy and the implication to Vestas.docx",
+      "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - April 10th - US China Tariff Analysis.docx",
+      "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - May 14th - India Assesment.docx",
+      "01-Intelligence/03-Archive/Memo-Archive/01-Geopolitical-Risk/Memorandum - Nov 22th - Russia-west escalation.docx",
+      "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum - Feb 25th - Bitter APT.docx",
+      "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum - Feb 25th - Signal Linked Device Exploit.docx",
+      "01-Intelligence/03-Archive/Memo-Archive/02-Cyber-Threat-Operations/Memorandum - Feb 25th - Signal Linked Device Exploit (JCAVE backup).docx"
+    ]
+  },
+  "curationSummary": [
+    "Archived memos inform form only; their facts, entities, claims, judgments, and wording are not evidence or reusable content.",
+    "Three compact event or update examples were approximately 490, 530, and 640 words, while a longer outlook example was approximately 2,400 words. This supports proportional depth, not a single target length or hard cap.",
+    "Purpose, situation, and assessment recur, but headings, bullet lists, and bold run-in labels vary. The core workflow sections remain required; archived layout should not impose a rigid order or formatting template.",
+    "The examples use explicit uncertainty and contrast where evidence or interpretation is limited. Longer analysis gives more room to alternatives, context, and scenarios rather than compressing them into an alert format.",
+    "Concise examples prioritize the assessment and key facts; supporting context and references follow. Detail should answer the approved question, not repeat background."
+  ],
+  "requiredSections": [
+    "bluf",
+    "key-judgments",
+    "analysis",
+    "uncertainties",
+    "competing-explanations",
+    "gaps",
+    "sourcing-summary",
+    "indicators"
+  ],
+  "confidenceLexicon": {
+    "low": "Low confidence: limited, provisional, single-source, or weakly corroborated evidence.",
+    "moderate": "Moderate confidence: credible evidence with material limitations or incomplete corroboration.",
+    "high": "High confidence: multiple independent credible sources with no material unresolved contradiction."
+  },
+  "citationRule": "Render every claim-bearing statement with inline [claim:<claim-id>] citations. Archived citation formats do not override the current claim-lineage contract.",
+  "prohibitedPatterns": [
+    "high confidence",
+    "independently confirmed",
+    "conclusive evidence",
+    "verified beyond doubt"
+  ],
+  "limits": {
+    "blufStatements": 1,
+    "maxAnalysisStatements": 2,
+    "maxUncertaintyStatements": 2,
+    "maxIndicatorStatements": 4
+  },
+  "keyJudgementPolicy": {
+    "policyId": "memo-standard-v3-key-judgements-v1",
+    "maxKeyJudgements": 3,
+    "maxKeyJudgementsStatus": "approved",
+    "allowContested": true,
+    "judgementTextMaxChars": 240
+  },
+  "styleGuidance": [
+    "Lead with a clear bottom line that answers the approved question; follow with the evidence and reasoning that support it.",
+    "Use concise paragraphs, headings, and bullets to make the memo scannable, but do not force one archived layout or section order.",
+    "Distinguish reported information from analysis and implications; explain the transition rather than presenting interpretation as sourced fact.",
+    "State material uncertainty, evidence limitations, and plausible competing explanations where they affect the assessment.",
+    "Use confidence language consistently with the evidence. Distinguish confidence in the evidence from likelihood of an outcome, and state a time horizon for forecasts when supported.",
+    "Include indicators only when they are observable and relevant to a judgement. Do not invent actions, recommendations, or implications unsupported by the approved scope and evidence.",
+    "Be concise and remove repetition, but scale depth to the question and evidence. There is no overall word-count target or hard word limit.",
+    "Use a direct, neutral voice suitable for the memo profile and audience; expand specialist abbreviations when needed for comprehension.",
+    "Historical memos are style-only references. Do not reuse their facts, entities, claims, judgments, or distinctive wording."
+  ],
+  "regressionExamples": [
+    {
+      "id": "synthetic-concise-event",
+      "case": "A narrow approved question has one supported event claim and a material evidence gap.",
+      "expected": [
+        "Open with the bottom line.",
+        "Keep supporting prose concise without omitting the material gap.",
+        "Cite the supported claim and do not fill the gap with archive facts."
+      ]
+    },
+    {
+      "id": "synthetic-evidence-limited-analysis",
+      "case": "Two independent synthetic claims support a qualified assessment, while one plausible alternative remains unresolved.",
+      "expected": [
+        "Make confidence and uncertainty explicit.",
+        "Present the alternative without falsely resolving it.",
+        "Cite each claim-bearing statement."
+      ]
+    },
+    {
+      "id": "synthetic-longer-outlook",
+      "case": "A broad approved question requires multiple synthetic scenarios and observable indicators.",
+      "expected": [
+        "Give each scenario and indicator enough explanation to be useful.",
+        "Do not truncate material analysis to meet a word target.",
+        "Keep indicators tied to claims and distinguish them from predictions."
+      ]
+    },
+    {
+      "id": "synthetic-layout-variation",
+      "case": "The same evidence can be presented as a brief update or a deeper analysis.",
+      "expected": [
+        "Choose headings and bullets for readability.",
+        "Preserve the required workflow sections and citation contract.",
+        "Do not copy an archived memo's unique layout or wording."
+      ]
+    }
+  ]
+}

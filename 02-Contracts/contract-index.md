@@ -21,6 +21,7 @@ Use this file as the index of active contracts. Historical retrieval contracts a
 15. [Bounded post-adjudication selection and writing](bounded-memo-execution.md)
 16. [Version-bound memo review and publication decisions](memo-review-and-publication-decision.md)
 17. [Bounded editorial memo revision](bounded-memo-revision.md)
+18. [Approved memo standard pack](memo-standard-pack.md)
 
 ## Retired acquisition contracts
 

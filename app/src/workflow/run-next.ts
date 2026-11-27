@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import {
   projectWorkflow,
   type WorkflowBlocker,
@@ -9,12 +10,38 @@ import {
 
 export type DeterministicRunStep = {
   command:
+    | "record:research-question-draft"
+    | "record:question-relevance"
+    | "record:assurance-extract"
     | "record:synthesis-build"
     | "record:synthesis-challenge"
     | "record:key-judgements"
     | "record:memo-writer";
   requestPath: string;
   responsePath: string;
+};
+
+export const deterministicRecorderForRequest = (
+  fileName: string
+): DeterministicRunStep["command"] | undefined => {
+  switch (fileName) {
+    case "draft-request.json":
+      return "record:research-question-draft";
+    case "question-relevance-request.json":
+      return "record:question-relevance";
+    case "extract-request.json":
+      return "record:assurance-extract";
+    case "build-request.json":
+      return "record:synthesis-build";
+    case "challenge-request.json":
+      return "record:synthesis-challenge";
+    case "key-judgement-request.json":
+      return "record:key-judgements";
+    case "writer-request.json":
+      return "record:memo-writer";
+    default:
+      return undefined;
+  }
 };
 
 export type RunNextFacts = {
@@ -41,23 +68,62 @@ export type RunNextAction =
   | { kind: "machine-wait"; replacement: "foundry-adapter"; paths: string[] }
   | { kind: "complete" };
 
+export type RunNextExecution = {
+  action: Exclude<RunNextAction, { kind: "execute" }>;
+  executed: DeterministicRunStep[];
+};
+
+export const driveRunNext = async (
+  inspect: () => Promise<RunNextFacts>,
+  execute: (step: DeterministicRunStep) => Promise<void>
+): Promise<RunNextExecution> => {
+  const executed: DeterministicRunStep[] = [];
+  const attempted = new Set<string>();
+  while (true) {
+    const action = chooseRunNextAction(await inspect());
+    if (action.kind !== "execute") return { action, executed };
+    const key = JSON.stringify(action.step);
+    if (attempted.has(key)) {
+      throw new Error(`Deterministic recorder did not consume its response: ${action.step.responsePath}`);
+    }
+    await execute(action.step);
+    attempted.add(key);
+    executed.push(action.step);
+  }
+};
+
 const requestStage = (path: string): WorkflowStage => {
+  const command = deterministicRecorderForRequest(basename(path));
+  if (command) return recorderOrder[command].stage;
   if (path.includes("/assurance/") || path.startsWith("assurance/")) return "assure";
   if (path.includes("/memo/") || path.startsWith("memo/")) return "memo";
   return "synthesise";
 };
 
+const recorderOrder: Record<DeterministicRunStep["command"], { stage: WorkflowStage; priority: number }> = {
+  "record:research-question-draft": { stage: "intent", priority: 700 },
+  "record:question-relevance": { stage: "evidence", priority: 600 },
+  "record:assurance-extract": { stage: "assure", priority: 500 },
+  "record:synthesis-build": { stage: "synthesise", priority: 400 },
+  "record:synthesis-challenge": { stage: "synthesise", priority: 390 },
+  "record:key-judgements": { stage: "memo", priority: 300 },
+  "record:memo-writer": { stage: "memo", priority: 290 }
+};
+
 const toProjectionInput = (facts: RunNextFacts): WorkflowProjectionInput => {
-  const deterministic: WorkflowWork[] = facts.deterministicSteps.map((step) => ({
-    id: `record:${step.requestPath}`,
-    stage: step.command === "record:memo-writer" ? "memo" : "synthesise",
-    actor: "machine",
-    kind: "work",
-    title: step.command,
-    detail: "Record the validated response",
-    paths: [step.requestPath, step.responsePath],
-    priority: 100
-  }));
+  const deterministic: WorkflowWork[] = facts.deterministicSteps.map((step) => {
+    const order = recorderOrder[step.command];
+    return {
+      id: `record:${step.requestPath}`,
+      stage: order.stage,
+      actor: "machine",
+      kind: "work",
+      title: step.command,
+      detail: "Record the saved response",
+      paths: [step.requestPath, step.responsePath],
+      priority: order.priority
+    };
+  });
   const model: WorkflowWork[] = facts.pendingModelRequestPaths.map((path) => ({
     id: `model:${path}`,
     stage: requestStage(path),

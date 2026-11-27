@@ -64,8 +64,11 @@ before invoking that same selector; it does not persist another queue/status
 database. For isolated run roots, absolute and app-relative bindings to known scanned artifacts
 are canonicalized only in the dashboard presentation so recorded stages and
 the human handoff stay connected; persisted lineage is never rewritten.
-`run:next` displays bounded status and the explicit resume handoff
-when this authority exists; it does not invoke models or advance later stages.
+When this authority exists, `run:next` may resume it only if inspection finds
+runnable deterministic work, a saved response, or a call already covered by
+the immutable authorization. It uses the frozen models and remaining call
+allowance, never creates or replenishes authority, and stops at human gates,
+active workers, indeterminate reservations, or terminal failures.
 
 Only the existing tool-disabled, empty-session Copilot SDK transport is used.
 The effective Build and Challenge model IDs are frozen from saved Settings.

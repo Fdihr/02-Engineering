@@ -54,7 +54,8 @@ A newly reviewed revision can separately authorize another revision, up to the
 bounded lineage depth of 16 versions. Revising an older draft while a newer one
 exists is refused.
 
-All current drafts remain not-for-publication under the provisional standard.
-No writer or review action overrides the gate, approves a standard or delivers
-a memo externally. Dashboard status and `run:next` prefer the latest revision
-authority over the original memo execution handoff.
+Drafts bound to provisional v1/v2 remain not-for-publication under their frozen
+standard. New starts may use approved v3, but no writer or review action
+overrides the gate, approves a standard or delivers a memo externally.
+Dashboard status and `run:next` prefer the latest revision authority over the
+original memo execution handoff.

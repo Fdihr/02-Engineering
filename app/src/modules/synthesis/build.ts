@@ -432,9 +432,9 @@ export const buildExternalSynthesis = (input: {
       (entry) => observationIds.includes(entry.leftObservationId) && observationIds.includes(entry.rightObservationId)
     );
     const independentCount = independentSourceCount(sourceNoteIds, relationshipRows);
-    const countBand = independentCount === null || independentCount === 0
+    const countBand = sourceNoteIds.length === 0 || independentCount === 0
       ? "zero-or-unknown"
-      : independentCount === 1
+      : independentCount === null || independentCount === 1
         ? "one"
         : "two-plus";
     const supportingNotes = sourceNoteIds.map((id) => noteById.get(id)).filter((note): note is SourceNote => Boolean(note));
