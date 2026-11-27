@@ -673,18 +673,20 @@ const executiveWriterPrompt = (
   competingHypotheses: Array<{ claimAlias: string; check: string; hypothesis: string }>
 ): BoundedWriterRequest["prompt"] => ({
   system: [
-    "You are a senior intelligence analyst writing an executive intelligence memorandum for operational and security leadership.",
+    "You are writing a concise Executive Management (ExM) intelligence memorandum.",
+    "Target 1 to 1.5 pages total (roughly 350–550 words across the entire finished memo). Be brief, sharp, and straight to the point.",
+    "Write in plain, direct business English: use active voice, lead every section with the takeaway, and keep sentences short (aim for 15–25 words per sentence).",
+    "Cut all analyst throat-clearing, passive hedging, and filler transitions ('Analytically,', 'Similarly,', 'Furthermore,', 'Following investigations into,', 'Media reporting indicated that').",
+    "Select only the most decision-relevant facts and operational implications from the claim pool—do not turn the memo into an exhaustive police blotter or repeat minor sub-details.",
     "Ground every single statement strictly in the provided adjudicated claims (`claims` aliases). Never invent facts, actors, dates, incidents, attributions, or confidence levels beyond the provided claims.",
-    "Write clear, authoritative, well-paced intelligence prose that directly answers the approved research question rather than reading like a mechanical audit checklist.",
-    "Scale section depth proportionally to the adjudicated evidence: synthesize all distinct, material verified developments across the full claim pool into cohesive multi-sentence narrative and analytical prose, while keeping thin evidence concise without filler.",
     "Do not emit `key-judgments` statements; fixed Key Judgements are bound separately and rendered automatically under `## Key Judgements`.",
-    "Never mention internal workflow terms, claim aliases (such as c01), requirement IDs (such as ir-01), calibration verdicts, or source-limitation counters inside statement `text`; reference aliases only in `claims`.",
+    "Never mention internal workflow terms, claim aliases (such as c01), requirement IDs (such as ir-01), confidence parentheticals, calibration verdicts, or source-limitation counters inside statement `text`; reference aliases only in `claims`.",
     ...request.standard.styleGuidance,
     "Return a JSON object `{ \"statements\": [...] }` only. Unknown fields are rejected."
   ].join("\n"),
   user: JSON.stringify(
     {
-      task: "Draft executive memorandum prose across bluf, situation, analysis, uncertainties, and indicators grounded strictly in the adjudicated claim pool.",
+      task: "Draft a crisp 1 to 1.5 page (350–550 word) Executive Management memorandum across bluf, situation, analysis, uncertainties, and indicators grounded strictly in the adjudicated claim pool.",
       brief: {
         title: request.memoContext.title,
         researchQuestion: request.memoContext.question,
@@ -697,16 +699,17 @@ const executiveWriterPrompt = (
         }
       },
       sectionBlueprint: {
-        bluf: `1-${request.standard.limits.maxBlufStatements} crisp sentences directly answering the research question: what is occurring, how credible/corroborated the reporting is, and the operational bottom line. Never write source-count boilerplate.`,
-        situation: `2-${request.standard.limits.maxSituationStatements} factual sentences (proportional to evidence) synthesizing concrete reported events, official warnings, law-enforcement actions, detentions, plots, and attributed incidents across the full claim pool in chronological or thematic order so consecutive sentences read as cohesive paragraphs.`,
-        analysis: `2-${request.standard.limits.maxAnalysisStatements} analytical sentences (proportional to evidence) assessing adversary intent, operational pattern, exposure for the target audience, single-source vs. corroborated reporting, and plausible alternative explanations.`,
-        uncertainties: `1-${request.standard.limits.maxUncertaintyStatements} plain-English sentences stating material analytical unknowns, attribution limits, and reporting blind spots.`,
-        indicators: `2-${request.standard.limits.maxIndicatorStatements} concrete, observable near-term indicators or signposts to watch that would confirm escalation, clarify attribution, or shift operational risk.`
+        bluf: `1-${request.standard.limits.maxBlufStatements} short, direct sentences (~45–70 words total) answering the research question upfront: what is happening, how solid the reporting is, and the operational bottom line. Never write source-count boilerplate.`,
+        situation: `3-${request.standard.limits.maxSituationStatements} crisp factual sentences (~90–140 words total) summarizing only the material events, official actions, and attributed incidents—skip granular tactical trivia.`,
+        analysis: `2-${request.standard.limits.maxAnalysisStatements} plain-English sentences (~80–130 words total) explaining what this means for business/operational risk, adversary intent, and the main alternative explanation.`,
+        uncertainties: `1-${request.standard.limits.maxUncertaintyStatements} short sentences (~35–65 words total) stating only the main unverified gaps or single-source limits that could change leadership's view.`,
+        indicators: `2-${request.standard.limits.maxIndicatorStatements} crisp one-line signposts (~40–75 words total) naming specific, observable near-term triggers to watch.`
       },
       hardRules: [
-        "Every statement `text` must be one complete, standalone sentence ending in terminal punctuation.",
+        "Every statement `text` must be one complete, standalone sentence ending in terminal punctuation (aim for 15–25 words; avoid multi-clause 35+ word sentences).",
+        "Keep total statements lean so the entire rendered memo reads in ~2 minutes (roughly 350–550 words / 1 to 1.5 pages).",
         "Every statement must cite at least one supporting alias from `adjudicatedClaims` in `claims`.",
-        "Do not repeat `fixedKeyJudgements` verbatim; build on them with concrete event specifics in `situation` and operational implications in `analysis`.",
+        "Do not repeat `fixedKeyJudgements` verbatim; add concrete context in `situation` and operational meaning in `analysis`.",
         `Never use prohibited phrases: ${request.standard.prohibitedPatterns.join(", ")}.`
       ],
       fixedKeyJudgements: request.keyJudgements.map((judgement) => ({
@@ -1715,15 +1718,14 @@ const renderExecutiveMemoMarkdown = (memo: MemoDocument): string => {
     "## Key Judgements",
     ...(memo.keyJudgments.length > 0
       ? memo.keyJudgments.map(
-          (entry) =>
-            `- ${renderCitedSentence(entry.statement)} *(${capitalizeLabel(entry.confidence.level)} confidence)*`
+          (entry) => `- ${renderCitedSentence(entry.statement)}`
         )
       : ["_No eligible key judgements were established from reviewed reporting within this window._"])
   ];
 
   const situation = memo.situation ?? [];
   if (situation.length > 0) {
-    lines.push("", "## Situation", ...renderProseParagraphs(situation, 4));
+    lines.push("", "## Situation", ...renderProseParagraphs(situation, 3));
   }
 
   if (memo.analysis.length > 0) {

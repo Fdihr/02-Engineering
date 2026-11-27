@@ -53,9 +53,9 @@
   },
   "curationSummary": [
     "Archived memos inform form only; their facts, entities, claims, judgments, and wording are not evidence or reusable content.",
-    "Executive memorandums open with a direct Bottom Line answering the approved research question, followed by concise Key Judgements, a factual Situation narrative, Assessment & Operational Implications, plain-English Uncertainties & Intelligence Gaps, and Outlook & Indicators to Watch.",
-    "Depth scales proportionally to the adjudicated claim pool rather than clipping prose at artificial two-sentence limits.",
-    "Mechanical audit metadata, source-limitation counters, raw requirement identifiers, and calibration status strings belong in canonical JSON and the verification inspector rather than executive prose."
+    "Executive memorandums are written for Executive Management (ExM): crisp, plain-English briefings of roughly 1 to 1.5 pages (350–550 words) opening with a direct Bottom Line, 2–3 headline Key Judgements, a tight Situation summary, Assessment & Implications, Uncertainties & Intelligence Gaps, and 2–4 Outlook & Indicators to Watch.",
+    "Prioritize strategic and operational signal over tactical minutiae; every sentence uses plain, active-voice English rather than analyst filler.",
+    "Mechanical audit metadata, inline confidence parentheticals, source-limitation counters, raw requirement identifiers, and calibration status strings belong in canonical JSON, hover cards, and the verification inspector rather than memo prose."
   ],
   "requiredSections": [
     "bluf",
@@ -80,26 +80,27 @@
   ],
   "limits": {
     "maxBlufStatements": 3,
-    "maxSituationStatements": 18,
-    "maxAnalysisStatements": 14,
-    "maxUncertaintyStatements": 8,
-    "maxIndicatorStatements": 8
+    "maxSituationStatements": 6,
+    "maxAnalysisStatements": 5,
+    "maxUncertaintyStatements": 3,
+    "maxIndicatorStatements": 4
   },
   "keyJudgementPolicy": {
     "policyId": "memo-standard-v4-key-judgements-v1",
-    "maxKeyJudgements": 4,
+    "maxKeyJudgements": 3,
     "maxKeyJudgementsStatus": "approved",
     "allowContested": true,
-    "judgementTextMaxChars": 280
+    "judgementTextMaxChars": 200
   },
   "styleGuidance": [
-    "Write a real executive intelligence memorandum tailored to the approved research question and audience, not a mechanical checklist.",
-    "Open the Bottom Line (bluf) with 1–3 crisp sentences that directly answer the approved research question—what is occurring, how credible the reporting is, and the near-term operational bottom line.",
-    "In Situation, synthesize concrete reported events, official warnings, security operations, and attributed reporting across the full adjudicated claim pool into natural, chronological sentences that flow together as cohesive paragraphs.",
-    "In Assessment & Implications (analysis), interpret what those reported developments mean for operations in scope, distinguish reported fact from analytic judgement, and weigh plausible alternative explanations where evidence is single-source or contested.",
-    "In Uncertainties, state material analytical unknowns and source caveats in plain executive English; never reference internal identifiers such as claim aliases (c01) or requirement codes (ir-01) in prose.",
-    "In Indicators, provide concrete, observable near-term developments that would confirm escalation, clarify attribution, or alter the operational risk posture.",
-    "Scale depth proportionally to the available evidence without padding or repeating the fixed Key Judgements verbatim.",
+    "Write for busy Executive Management (ExM): keep the entire memorandum tight, clear, and straight to the point—roughly 1 to 1.5 pages (350–550 words total).",
+    "Use plain, direct English in active voice. Aim for 15–25 words per sentence and cut throat-clearing transitions ('Analytically,', 'Similarly,', 'Furthermore,', 'Media reporting indicated that').",
+    "Open the Bottom Line (bluf) with 1–3 short sentences stating what is happening, how solid the reporting is, and why leadership should care.",
+    "In Situation, summarize only the most material events, official actions, and attributed incidents in 3–6 crisp sentences—omit granular police blotter or tactical trivia.",
+    "In Assessment & Implications (analysis), state directly in 2–5 sentences what the reporting means for business and operational risk, adversary intent, and any key alternative explanation.",
+    "In Uncertainties, capture only decision-relevant unknowns and single-source limits in 1–3 plain-English sentences; never reference internal identifiers such as c01 or ir-01.",
+    "In Indicators, list 2–4 short, observable signposts that would confirm escalation, clarify attribution, or change operational posture.",
+    "Do not pad thin evidence or repeat the fixed Key Judgements verbatim.",
     "Historical memos are style-only references. Do not reuse their facts, entities, claims, judgments, or distinctive wording."
   ],
   "regressionExamples": [

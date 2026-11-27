@@ -763,7 +763,8 @@ test("writer v2 consumes bounded selected judgements without model rewriting", a
   assert.match(v4Markdown, /^# Memorandum: Reported diplomatic visit and operational posture/m);
   assert.match(v4Markdown, /\*\*To:\*\* Regional Security Leadership/);
   assert.match(v4Markdown, /## Bottom Line\nSingle-source reporting indicates an official visit occurred/);
-  assert.match(v4Markdown, /## Key Judgements\n- The visit is reported by one source\. \[claim:[^\]]+\] \*\(Moderate confidence\)\*/);
+  assert.match(v4Markdown, /## Key Judgements\n- The visit is reported by one source\. \[claim:[^\]]+\]$/m);
+  assert.doesNotMatch(v4Markdown, /\(Moderate confidence\)/);
   assert.match(v4Markdown, /## Situation\nInitial reporting described the arrival of the delegation\. \[claim:[^\]]+\] Subsequent commentary noted that officials have not disclosed the agenda\. \[claim:[^\]]+\]/);
   assert.match(v4Markdown, /## Assessment & Implications/);
   assert.match(v4Markdown, /Were energy infrastructure sites affected during the visit\?/);

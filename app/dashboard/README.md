@@ -132,11 +132,12 @@ model/paste-back controls cannot add authority. Complete output stops at
 gate. Publication is not authorized by this action. See
 [`bounded-memo-execution.md`](../../02-Contracts/bounded-memo-execution.md).
 
-New starts use approved `memo-standard-v4`: executive memo layout (`Bottom Line`,
-`Key Judgements`, `Situation`, `Assessment & Implications`,
-`Uncertainties & Intelligence Gaps`, and `Outlook & Indicators to Watch`), no
-hard word limit, full adjudicated claim pool access for the writer, and depth
-proportional to the question and evidence. Historical draft/authority standards
+New starts use approved `memo-standard-v4`: concise 1 to 1.5 page Executive
+Management (ExM) memo layout (`Bottom Line`, `Key Judgements`, `Situation`,
+`Assessment & Implications`, `Uncertainties & Intelligence Gaps`, and
+`Outlook & Indicators to Watch`), clean uninterrupted prose with sentence hover
+source previews and click-to-pin quote inspection, and full adjudicated claim
+pool access for the writer. Historical draft/authority standards
 are preserved, and manual writer preparation uses the selection's bound
 standard. Changing the default never reruns a model or rewrites a draft.
 

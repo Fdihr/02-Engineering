@@ -1177,15 +1177,111 @@
     ].filter(Boolean).join(' · ');
   }
 
-  var review = { mode: 'text', selected: null, cleared: false, focusSourceNum: 0, order: [] };
+  var review = { mode: 'text', selected: null, pinned: false, cleared: false, focusSourceNum: 0, order: [] };
+  var hoverHideTimer = null;
 
   function stripReaderNoise(raw) {
     return String(raw || '')
+      .replace(/^\s*\*{0,2}(?:low|moderate|high)\s+confidence:\*{0,2}\s+/i, '')
       .replace(/\s*\[claim:[^\]]+\]/g, '')
+      .replace(/\s*\*{0,2}\(\s*(?:low|moderate|high|[a-z-]+)\s+confidence\s*\)\*{0,2}(?=\s|[.,;:]|$)/gi, '')
       .replace(/\s*\*{0,2}(?:Status:\s*[^.*\n]+\.|Contested:\s*\d+\s+open challenges?\.)\*{0,2}/gi, '')
       .replace(/\s*\*{0,2}Confidence:\s*[^.*\n]+\.\*{0,2}/gi, '')
       .replace(/\s*\*{2,}\s*$/g, '')
       .trim();
+  }
+
+  var CONF_RANK = { low: 3, moderate: 2, high: 1 };
+  function anchorConfidence(anchor, m) {
+    var worst = '';
+    var worstRank = 0;
+    anchor.claimIds.forEach(function (id) {
+      var level = ((m.claims[id] || {}).confidence || '').toLowerCase();
+      var rank = CONF_RANK[level] || 0;
+      if (rank > worstRank) { worstRank = rank; worst = level; }
+    });
+    return worst ? capital(worst) + ' confidence' : '';
+  }
+
+  function anchorLeadQuote(anchor, m) {
+    for (var i = 0; i < anchor.claimIds.length; i++) {
+      var cl = m.claims[anchor.claimIds[i]];
+      var sources = (cl && cl.sources) || [];
+      for (var s = 0; s < sources.length; s++) {
+        var quotes = sources[s].quotes || [];
+        for (var q = 0; q < quotes.length; q++) {
+          var raw = (quotes[q].quote || quotes[q].text || '').trim();
+          if (raw) return raw.length > 175 ? raw.slice(0, 172).trim() + '…' : raw;
+        }
+      }
+    }
+    return '';
+  }
+
+  function anchorLeadCaveat(anchor, m) {
+    for (var i = 0; i < anchor.claimIds.length; i++) {
+      var cl = m.claims[anchor.claimIds[i]];
+      var chs = (cl && cl.challenges) || [];
+      if (cl && cl.status === 'contested' && chs.length) {
+        var ch = chs[0];
+        var label = capital(humanise(ch.check || ch.challengeType || 'Caveat'));
+        var rat = (ch.rationale || ch.description || '').trim();
+        var full = rat ? (label + ': ' + rat) : label;
+        return full.length > 155 ? full.slice(0, 152).trim() + '…' : full;
+      }
+    }
+    return '';
+  }
+
+  function populateHoverCard(card, anchor, ctx) {
+    card.replaceChildren();
+    var m = ctx.memo;
+    var nums = ctx.refs ? sourceRefs(anchor, ctx) : [];
+    var hasCaveat = anchorHasCaveat(anchor, m);
+    var confText = anchorConfidence(anchor, m);
+
+    var head = el('div', 'claim-hover-head');
+    var srcWrap = el('div', 'claim-hover-sources');
+    var firstExternalUrl = '';
+    nums.forEach(function (n) {
+      var src = ctx.byNum[n];
+      if (!firstExternalUrl && src && /^https?:\/\//i.test(src.url || '')) firstExternalUrl = src.url;
+      var chip = el('button', 'claim-hover-src', '[' + n + '] ' + shortPublisher(src));
+      chip.type = 'button';
+      chip.title = 'Pin quote from ' + ((src && src.title) || ('Source ' + n));
+      chip.addEventListener('click', function (e) {
+        e.stopPropagation();
+        ctx.select(anchor, n);
+      });
+      srcWrap.appendChild(chip);
+    });
+    if (!nums.length) {
+      add(srcWrap, el('span', 'meta', plural(anchor.claimIds.length, 'claim')));
+    }
+
+    var badges = el('div', 'claim-hover-badges');
+    if (confText) add(badges, el('span', 'meta', confText));
+    if (hasCaveat) add(badges, el('span', 'mark partial', 'Caveat'));
+    add(head, srcWrap, badges);
+    card.appendChild(head);
+
+    var quote = anchorLeadQuote(anchor, m);
+    if (quote) {
+      add(card, el('blockquote', 'claim-hover-quote', '“' + quote + '”'));
+    }
+
+    var caveatLine = hasCaveat ? anchorLeadCaveat(anchor, m) : '';
+    if (caveatLine) {
+      add(card, el('p', 'claim-hover-caveat', caveatLine));
+    }
+
+    var foot = el('div', 'claim-hover-foot');
+    add(foot, el('span', 'meta', 'Click sentence to pin all quotes'));
+    if (firstExternalUrl && ctx.journey) {
+      var ext = sourceAccessLink(ctx.journey, firstExternalUrl, 'Open source');
+      if (ext) foot.appendChild(ext);
+    }
+    card.appendChild(foot);
   }
 
   function renderMarkdown(text, ctx) {
@@ -1206,46 +1302,23 @@
         ctx.used[anchor.claimIds.join(',')] = true;
         if (ctx.order) ctx.order.push(anchor);
         var selected = Boolean(ctx.selected && ctx.selected.text === anchor.text);
-        var btn = el('span', 'claim' + (ctx.mode === 'confidence' ? ' ' + anchorShade(anchor, ctx.memo) : ''));
+        var btn = el('span', 'claim' + (ctx.mode === 'confidence' ? ' is-audit ' + anchorShade(anchor, ctx.memo) : ''));
         btn.setAttribute('role', 'button');
         btn.tabIndex = 0;
         btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
+        if (selected && ctx.pinned) btn.setAttribute('data-pinned', 'true');
         btn.addEventListener('click', function () { ctx.select(anchor, 0); });
         btn.addEventListener('keydown', function (e) {
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ctx.select(anchor, 0); }
         });
+        if (ctx.hover) {
+          btn.addEventListener('mouseenter', function () { ctx.hover(anchor, btn); });
+          btn.addEventListener('focus', function () { ctx.hover(anchor, btn); });
+          btn.addEventListener('mouseleave', function () { ctx.unhover(); });
+          btn.addEventListener('blur', function () { ctx.unhover(); });
+        }
         inlineMarkdown(btn, seg.text);
         node.appendChild(btn);
-
-        if (ctx.refs) {
-          var nums = sourceRefs(anchor, ctx);
-          var hasCaveat = anchorHasCaveat(anchor, ctx.memo);
-          if (nums.length || hasCaveat) {
-            var pills = el('span', 'cite-pills');
-            nums.forEach(function (n) {
-              var src = ctx.byNum[n];
-              var pill = el('button', 'cite-pill', '[' + n + ' ' + shortPublisher(src) + ']');
-              pill.type = 'button';
-              pill.title = 'Inspect verbatim quote from ' + ((src && src.title) || ('Source ' + n));
-              pill.addEventListener('click', function (e) {
-                e.stopPropagation();
-                ctx.select(anchor, n);
-              });
-              pills.appendChild(pill);
-            });
-            if (hasCaveat) {
-              var cav = el('button', 'cite-caveat', 'Caveat');
-              cav.type = 'button';
-              cav.title = 'View analytical caveat in the inspector';
-              cav.addEventListener('click', function (e) {
-                e.stopPropagation();
-                ctx.select(anchor, 0);
-              });
-              pills.appendChild(cav);
-            }
-            node.appendChild(pills);
-          }
-        }
       });
     }
     var isV4 = Boolean(ctx.memo && Number(ctx.memo.memoStandardVersion || 0) >= 4);
@@ -1417,7 +1490,7 @@
       var headReady = el('div', 'section-head');
       add(headReady, el('h3', null, 'Gate 2 · Publication'), el('span', 'mark covered', 'Ready'));
       add(box, headReady,
-        el('p', 'meta', 'Click any statement or source pill in the memo to inspect verbatim quotes and open original articles. Publish when satisfied.'));
+        el('p', 'meta', 'Hover any sentence in the memo to preview its sources and confidence, or click to pin verbatim quotes in the inspector. Publish when satisfied.'));
       var pubBtn = C.actButton('Publish memo', 'btn-primary', function () {
         C.postAction({
           action: 'approve-and-publish',
@@ -1459,7 +1532,7 @@
     sec.id = 'quote-inspector';
     add(sec, C.sectionHead('Source & quote inspector', 'h3', el('span', 'meta', sel ? plural(sel.claimIds.length, 'claim') : '')));
     if (!sel) {
-      add(sec, el('p', 'meta', 'Click any highlighted statement or [Source] pill in the memo (or press J / K) to inspect its verbatim quotes and open the original source.'));
+      add(sec, el('p', 'meta', 'Hover any sentence in the memo to preview its sources, or click a sentence (or press J / K) to pin its verbatim quotes here.'));
       return sec;
     }
     add(sec, el('p', 'panel-claim', sel.text));
@@ -1608,28 +1681,63 @@
     var canvas = el('div', 'doc-canvas');
     canvas.id = 'doc';
     var page = el('div', 'page');
+    var hoverCard = el('div', 'claim-hover-card');
+    hoverCard.id = 'claim-hover-card';
+    hoverCard.hidden = true;
+    hoverCard.addEventListener('mouseenter', function () {
+      if (hoverHideTimer) { clearTimeout(hoverHideTimer); hoverHideTimer = null; }
+    });
+    hoverCard.addEventListener('mouseleave', function () {
+      if (hoverHideTimer) clearTimeout(hoverHideTimer);
+      hoverHideTimer = setTimeout(function () { hoverCard.hidden = true; }, 120);
+    });
+
     var used = {};
     review.order = [];
     if (md.state === 'ready') {
-      var rendered = renderMarkdown(md.text, {
+      var selectAnchor = function (anchor, sourceNum) {
+        var same = review.pinned && activeSel && activeSel.text === anchor.text && (!sourceNum || review.focusSourceNum === sourceNum);
+        review.cleared = Boolean(same);
+        review.pinned = !same;
+        review.selected = same ? null : anchor;
+        review.focusSourceNum = same ? 0 : (sourceNum || 0);
+        if (hoverHideTimer) { clearTimeout(hoverHideTimer); hoverHideTimer = null; }
+        C.render(true);
+      };
+      var renderCtx = {
         memo: m,
+        journey: j,
         anchors: anchors,
         used: used,
         mode: review.mode,
         selected: activeSel,
+        pinned: review.pinned,
         order: review.order,
         refs: refInfo.refs,
         byNum: refInfo.byNum,
         subtitle: memoSubtitle(m, j),
         judgements: true,
-        select: function (anchor, sourceNum) {
-          var same = activeSel && activeSel.text === anchor.text && (!sourceNum || review.focusSourceNum === sourceNum);
-          review.cleared = Boolean(same);
-          review.selected = same ? null : anchor;
-          review.focusSourceNum = same ? 0 : (sourceNum || 0);
-          C.render(true);
+        select: selectAnchor,
+        hover: function (anchor, targetEl) {
+          if (hoverHideTimer) { clearTimeout(hoverHideTimer); hoverHideTimer = null; }
+          populateHoverCard(hoverCard, anchor, renderCtx);
+          hoverCard.hidden = false;
+          var pageRect = page.getBoundingClientRect();
+          var spanRect = targetEl.getBoundingClientRect();
+          if (pageRect.width > 0 && spanRect.height > 0) {
+            var top = (spanRect.bottom - pageRect.top) + 8;
+            var maxLeft = Math.max(24, pageRect.width - 384);
+            var left = Math.max(24, Math.min(spanRect.left - pageRect.left, maxLeft));
+            hoverCard.style.top = Math.round(top) + 'px';
+            hoverCard.style.left = Math.round(left) + 'px';
+          }
+        },
+        unhover: function () {
+          if (hoverHideTimer) clearTimeout(hoverHideTimer);
+          hoverHideTimer = setTimeout(function () { hoverCard.hidden = true; }, 160);
         }
-      });
+      };
+      var rendered = renderMarkdown(md.text, renderCtx);
       if (!review.selected && !review.cleared && review.order.length) {
         activeSel = review.order[0];
         review.selected = activeSel;
@@ -1652,6 +1760,7 @@
         rendered.appendChild(notes);
       }
       page.appendChild(rendered);
+      page.appendChild(hoverCard);
     } else if (md.state === 'loading') {
       add(page, add(el('div', 'doc-empty'), el('p', null, 'Loading memo text…')));
     } else {
@@ -1671,8 +1780,11 @@
   C.reviewKey = function (e) {
     var order = review.order || [];
     if (e.key === 'Escape') {
+      var hc = document.getElementById('claim-hover-card');
+      if (hc) hc.hidden = true;
       if (review.selected || !review.cleared) {
         review.selected = null;
+        review.pinned = false;
         review.cleared = true;
         review.focusSourceNum = 0;
         C.render(true);
@@ -1686,6 +1798,7 @@
     order.forEach(function (a, i) { if (review.selected && a.text === review.selected.text && at < 0) at = i; });
     var next = at < 0 ? (stepDir > 0 ? 0 : order.length - 1) : Math.max(0, Math.min(order.length - 1, at + stepDir));
     review.cleared = false;
+    review.pinned = true;
     review.selected = order[next];
     review.focusSourceNum = 0;
     C.render(true);

@@ -329,7 +329,7 @@ const createPrompt = (input: {
     "Select bounded key judgements from the eligible claim aliases.",
     "Choose only aliases listed for the corresponding information requirement.",
     "For every requirement with eligible claims, return one selection or one explicit omission.",
-    "Word each selected judgement concisely without adding facts beyond its claim.",
+    "Write each selected judgement in plain, direct Executive Management (ExM) English: one crisp active-voice sentence (aim for 15-25 words) stating the headline takeaway without throat-clearing or adding facts beyond its claim.",
     "Return exactly selections and omissions. Do not return confidence, status, challenge ids, claim ids, or rationale fields outside omission reasons."
   ].join("\n"),
   user: JSON.stringify(

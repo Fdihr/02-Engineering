@@ -5,13 +5,15 @@ Status: Active. `memo-standard-v4` was approved on 2026-11-27 (superseding `memo
 ## Versioning and approval
 
 `src/modules/memo/standards/memo-standard-v4.json` is the default for new memo
-work. It is an approved, domain-neutral executive memo standard with a style-only
-archive curation, up to four key judgements, proportional section statement limits
-(`maxBlufStatements: 3`, `maxSituationStatements: 18`, `maxAnalysisStatements: 14`,
-`maxUncertaintyStatements: 8`, `maxIndicatorStatements: 8`), full non-rejected
-adjudicated claim pool access for the writer, and no total word-count limit. Its
-required workflow sections, claim-linked citation rule, confidence lexicon,
-prohibited patterns, and per-section statement limits remain deterministic.
+work. It is an approved, domain-neutral Executive Management (ExM) memo standard
+(~1 to 1.5 pages / 350–550 words) with a style-only archive curation, up to three
+key judgements (`judgementTextMaxChars: 200`), concise section statement limits
+(`maxBlufStatements: 3`, `maxSituationStatements: 6`, `maxAnalysisStatements: 5`,
+`maxUncertaintyStatements: 3`, `maxIndicatorStatements: 4`), full non-rejected
+adjudicated claim pool access for the writer, and no arbitrary total word-count
+hard failure. Its required workflow sections, claim-linked citation rule,
+confidence lexicon, prohibited patterns, and per-section statement limits remain
+deterministic.
 
 The pack records 23 hash-verified archived memos as style references. Nine
 additional archive items were excluded: three valid Open XML files could not be

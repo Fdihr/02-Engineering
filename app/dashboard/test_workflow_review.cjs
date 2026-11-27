@@ -234,19 +234,18 @@ test('automated pipeline workspace shows 5-stage progress and triggers run-pipel
   });
 });
 
-test('Gate 2 memo reader renders inline source pills, contested caveats, verbatim quote inspector, and 1-click publish without quiz', async () => {
+test('Gate 2 memo reader renders clean prose without inline pill clutter, hover source preview card, verbatim quote inspector, and 1-click publish', async () => {
   const review = reviewReady();
   const h = harness(readyMemoJourney(), 'memo', { memoReview: review, markdown: SAMPLE_MARKDOWN });
   await h.flush();
 
   assert.equal(h.document.querySelectorAll('input[type="checkbox"]').length, 0);
+  assert.equal(h.document.querySelectorAll('.cite-pill').length, 0);
+  assert.equal(h.document.querySelectorAll('.cite-caveat').length, 0);
 
-  const sourcePills = [...h.document.querySelectorAll('.cite-pill')];
-  assert.ok(sourcePills.some(p => p.textContent.includes('[1 Kyiv Post]')));
-  assert.ok(sourcePills.some(p => p.textContent.includes('[2 Seerist]')));
-  const caveatPills = [...h.document.querySelectorAll('.cite-caveat')];
-  assert.ok(caveatPills.length >= 1);
-  assert.equal(caveatPills[0].textContent, 'Caveat');
+  const docText = h.document.querySelector('#doc .page-inner').textContent;
+  assert.doesNotMatch(docText, /\[1\s+Kyiv Post\]/);
+  assert.doesNotMatch(docText, /low confidence|moderate confidence/i);
 
   const endnotes = [...h.document.querySelectorAll('.endnotes li')];
   assert.equal(endnotes.length, 2);
@@ -254,7 +253,24 @@ test('Gate 2 memo reader renders inline source pills, contested caveats, verbati
 
   const inspector = h.document.querySelector('#quote-inspector');
   assert.match(inspector.textContent, /Officers entered full readiness from Nov\. 2 to 8/);
-  caveatPills[0].click();
+
+  const hoverCard = h.document.querySelector('#claim-hover-card');
+  assert.equal(hoverCard.hidden, true);
+  const claims = [...h.document.querySelectorAll('.page .claim')];
+  const contestedSpan = claims.find(el => el.textContent.includes('confirmed incursion'));
+  assert.ok(contestedSpan);
+
+  contestedSpan.dispatchEvent(new h.document.defaultView.Event('mouseenter'));
+  assert.equal(hoverCard.hidden, false);
+  assert.match(hoverCard.textContent, /\[2\] Seerist/);
+  assert.match(hoverCard.textContent, /Low confidence/);
+  assert.match(hoverCard.textContent, /Caveat/);
+  assert.match(hoverCard.textContent, /Authorities have not reported a confirmed incursion/);
+
+  contestedSpan.click();
+  const pinnedSpan = h.document.querySelector('.page .claim[data-pinned="true"]');
+  assert.ok(pinnedSpan);
+  assert.match(pinnedSpan.textContent, /confirmed incursion/);
   assert.match(h.document.querySelector('#quote-inspector').textContent, /Absence of reports is weak single-source evidence/);
   assert.match(h.document.querySelector('#quote-inspector').textContent, /Authorities have not reported a confirmed incursion/);
 
@@ -289,7 +305,7 @@ test('editorial revision drawer records revision feedback and chains start-memo-
   assert.equal(h.actions[1].memoId, 'memo-1');
 });
 
-test('v4 executive memo renders prose Situation and Assessment paragraphs with clickable inline citations and inspector provenance', async () => {
+test('v4 executive memo renders clean Situation and Assessment prose with hover provenance and inspector trace', async () => {
   const review = reviewReady();
   const journey = readyMemoJourney();
   journey.memo.memoStandardVersion = 4;
@@ -316,8 +332,8 @@ test('v4 executive memo renders prose Situation and Assessment paragraphs with c
     'Poland heightened police readiness amid sabotage warnings. [claim:claim-1]',
     '',
     '## Key Judgements',
-    '- **Moderate confidence:** Sabotage alerts prompted heightened readiness. [claim:claim-1]',
-    '- **Low confidence:** No confirmed incursion has been disclosed. [claim:claim-2]',
+    '- Sabotage alerts prompted heightened readiness. [claim:claim-1] *(Moderate confidence)*',
+    '- No confirmed incursion has been disclosed. [claim:claim-2] *(Low confidence)*',
     '',
     '## Situation',
     'Polish police entered full readiness over sabotage warnings. [claim:claim-1] Authorities have not reported a confirmed incursion. [claim:claim-2]',
@@ -337,17 +353,20 @@ test('v4 executive memo renders prose Situation and Assessment paragraphs with c
   const h = harness(journey, 'memo', { memoReview: review, markdown: v4Markdown });
   await h.flush();
 
-  const bodyText = h.document.querySelector('#doc').textContent;
+  const bodyText = h.document.querySelector('#doc .page-inner').textContent;
   assert.match(bodyText, /Memorandum: Poland Sabotage Readiness/);
   assert.doesNotMatch(bodyText, /\[claim:/);
+  assert.doesNotMatch(bodyText, /Moderate confidence|Low confidence/i);
+  assert.doesNotMatch(bodyText, /\[1 Kyiv Post\]|Caveat/);
   assert.match(bodyText, /Situation/);
   assert.match(bodyText, /Assessment & Implications/);
-  assert.match(bodyText, /Moderate confidence:/);
 
-  const sourcePills = [...h.document.querySelectorAll('.cite-pill')];
-  assert.ok(sourcePills.some(p => p.textContent.includes('[1 Kyiv Post]')));
-  assert.ok(sourcePills.some(p => p.textContent.includes('[2 Seerist]')));
-  assert.ok(h.document.querySelector('.cite-caveat'));
+  const firstClaim = h.document.querySelector('.page .claim');
+  firstClaim.dispatchEvent(new h.document.defaultView.Event('mouseenter'));
+  const hoverText = h.document.querySelector('#claim-hover-card').textContent;
+  assert.match(hoverText, /\[1\] Kyiv Post/);
+  assert.match(hoverText, /Moderate confidence/);
+  assert.match(hoverText, /Open source/);
 
   const drawerText = h.document.body.textContent;
   assert.match(drawerText, /2 sources \(1 OSINT, 1 Seerist\)/);
