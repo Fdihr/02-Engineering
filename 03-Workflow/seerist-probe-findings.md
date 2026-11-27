@@ -1,17 +1,19 @@
 # Seerist Reality-Check Findings
 
-Date: 2026-08-28
-Status: Twenty-two successful read-only calls across twelve endpoint paths
+Date: 2026-11-27 (expanded from 2026-08-28 baseline)
+Status: All 28 read-only GET endpoint paths in `api-blueprint-seerist.apib` verified live (`200 OK`)
 
 ## Confirmed request contract
 
 - Base URL: `https://app.seerist.com/hyperionapi/`
-- Tested endpoints: `GET /v1/wod`, `GET /v1/wod/country-background/{countryCode}`, `GET /v1/wod/risk-rating/{geoCode}`, `GET /v1/hotspots`, `GET /v1/config/topics`, `GET /v1/config/calendar-events`, `GET /v2/clusters/{category}`, `GET /v2/clusters/{id}/articles`, `GET /v2/pulse/country/{code}`, `GET /v1/wod/breaking-events`, `GET /v1/wod/calendar-events`, and `GET /v2/auto-summary/{locationCode}/{locationType}`
+- Tested endpoints: all 28 read-only `GET` paths in `api-blueprint-seerist.apib`, including `GET /v1/wod`, `GET /v1/wod/breaking-events`, `GET /v1/wod/calendar-events`, `GET /v1/wod/country-background/{countryCode}`, `GET /v1/wod/risk-rating`, `GET /v1/wod/risk-rating/{geoCode}`, `GET /v1/hotspots`, `GET /v1/hotspots/topic/top`, `GET /v2/clusters/{category}`, `GET /v2/clusters/{id}/articles`, `GET /v2/pulse/{country|region|city|county}`, `GET /v2/pulse/{country|region|city|county}/{code}`, `GET /v2/auto-summary/{locationCode}/{locationType}`, `GET /v1/aois/{country|city|county}`, `GET /v1/savedsearch`, and all seven `/v1/config/*` taxonomy helpers.
+- Mutation endpoints (`POST /v1/searches-notifications`, `PUT /v1/savedsearch/{searchId}`, `DELETE /v1/savedsearch/{searchId}`) remain outside CTI Bench's read-only provider boundary.
 - Authentication: `x-api-key` request header
 - Input: manually defined relative GET path and query parameters
-- World of Data and cluster responses were GeoJSON `FeatureCollection` objects with `metadata` and `features`.
-- The topics helper returned a plain JSON array, disproving the blueprint's global claim that all GET responses are GeoJSON.
-- All observed feature geometries were GeoJSON `Point` objects.
+- World of Data, breaking/calendar events, hotspots, Pulse, risk-rating, and cluster responses were GeoJSON `FeatureCollection` objects with `metadata` and `features`.
+- AOI lookup (`/v1/aois/*`) and config helpers (`/v1/config/topics`, `/v1/config/risk-categories`, `/v1/config/verified/*`) returned plain JSON arrays, while `/v1/config/calendar-events`, `/v1/savedsearch`, and `/v2/auto-summary/*` returned plain JSON objects, disproving the blueprint's global claim that all GET responses are GeoJSON.
+- All observed point-feature geometries were GeoJSON `Point` objects.
+- **Pagination credential quirk**: GeoJSON `metadata.next` and `metadata.prev` URLs echo `&x-api-key=<KEY>` in the query string. Any derived discovery, pagination, or summary artifact must strip `x-api-key` before persistence or display.
 
 ## Live query results
 
@@ -176,10 +178,48 @@ The live top events did not contain the blueprint's nested `newspaper` or `src` 
 
 Scribe can support orientation, comparison, and candidate lead discovery because its events remain traceable. Its generated narrative paragraphs are not source evidence; source URLs or cluster IDs should be resolved through an evidence endpoint before claim use.
 
+## Full Permitted Endpoint Inventory and Role Mapping (2026-11-27)
+
+Every read-only `GET` endpoint in `03-Workflow/api-blueprint-seerist.apib` returned `200 OK` against the issued organization key. Each endpoint is mapped below to its governed CTI Bench role:
+
+| Endpoint | Live HTTP & Shape | Key Live Observations | Governed Role |
+| --- | --- | --- | --- |
+| `GET /v1/wod` | `200` `FeatureCollection` | Supports `aoiId` (lowercase ISO2), `search`, `sources`, `topics`, `eventType=verified`, `clusterId`, `from`/`to`, `includeFilterCounts`. Valid `sources` enum confirmed via live `400` validation response: `analysis`, `political`, `maritime`, `news`, `foreign`, plus 44 social/forum sources (`security` is **not** a valid `sources` value). | `evidence_candidate` when `source === "analysis"` with captured body; `context` when `source === "country-background"`; `collection_lead` otherwise |
+| `GET /v1/wod/breaking-events` | `200` `FeatureCollection` | Supports `aoiId` (e.g. `pl`), `start`/`end`. Features expose `properties.id`, `type: "event"`, `subtype: "breaking-event"`, `status` (`Confirmed` / `Verified` / `Update`), `publishedHistory`, HTML `<p>...</p>` `content.en`, primary `source` URL, and `sources[]` `{ name, url }` publisher links. | `evidence_candidate` (native early-warning report with explicit status/revision limitation) + external publisher `sourceLinks` (`collection_lead`) |
+| `GET /v1/wod/calendar-events` | `200` `FeatureCollection` | Supports `aoiId` (e.g. `pl`), `start`/`end`. Features expose `subtype: "calendar"`, `@eventDaterange.{gte,lte}`, HTML `content.en`, `category`, `impactCategory`, `severity`, and `source` URL. | `context` (`context_only`; scheduled/anticipated future events, never proof an incident occurred) |
+| `GET /v1/wod/country-background/{countryCode}` | `200` `FeatureCollection` | Uses uppercase ISO2 (e.g. `PL`). Single feature with `body`/`sanitizedBody`, 22 `riskContent` sections, and 3 `scenarios`. | `context` (`context_only`) |
+| `GET /v1/wod/risk-rating` | `200` `FeatureCollection` | `784` country/sub-national risk-rating features; no item timestamp. | `context` (`context_only`) |
+| `GET /v1/wod/risk-rating/{geoCode}` | `200` `FeatureCollection` | Uses uppercase ISO3 (e.g. `POL`) or region code. `29` leaf ratings across `6` parent categories. | `context` (`context_only`) |
+| `GET /v2/pulse/{country\|region\|city\|county}` | `200` `FeatureCollection` | Bulk stability score snapshots across countries, regions, cities, or US counties. | `context` (`context_only`) |
+| `GET /v2/pulse/{country\|region\|city\|county}/{code}` | `200` `FeatureCollection` | Targeted stability score + optional 7-day `metadata.forecast` (`omitGeometry=true`, `includeForecast=true`). Country code uses lowercase ISO2 (`pl`). | `context` (`context_only`) |
+| `GET /v1/hotspots` | `200` `FeatureCollection` | Anomaly detection spikes (`clusterIds[]`, `headline`, `topics`, `keywords`, `age_in_hours`). Empty `features: []` is normal when quiet. | Discovery signal -> resolves `clusterIds` via `GET /v1/wod?clusterId=...` into `collection_lead` items |
+| `GET /v1/hotspots/topic/top` | `200` `FeatureCollection` | Top topic-driven hotspots (`count`, `window`, `aoiId`). | Discovery signal -> resolves `clusterIds` into `collection_lead` items |
+| `GET /v2/clusters/{category}` | `200` `FeatureCollection` | Story clusters for a topic/category (`cluster_id`, `cluster_size`, summary metadata). | `collection_lead` |
+| `GET /v2/clusters/{id}/articles` | `200` `FeatureCollection` | Articles inside a cluster (`title`, `summary`, `source`, `source_url`; no full body). | `collection_lead` |
+| `GET /v2/auto-summary/{locationCode}/{locationType}` | `200` `{ narrative }` | Country (`pl/country`) and city (`city441573/city`) Scribe summaries. Generated prose is non-evidential; `top_events.events[]`, `hotspots.event`, and `explanation.event` expose `source_url`, `summary`, and `cluster_id`. | Event items -> `collection_lead` (`narrative` text excluded from evidence) |
+| `GET /v1/aois/country` | `200` `Feature[]` | `236` country definitions (`properties.iso2` uppercase, `properties.iso3` uppercase, `displayName`, `officialName`, `capital`, `geonameId`; top-level `id` is absent). | `config/helper` (AOI code & casing normalization) |
+| `GET /v1/aois/city` | `200` `Feature[]` | `1,401` city AOIs (`cityId`, `displayName`, `countryIso2`). | `config/helper` |
+| `GET /v1/aois/county` | `200` `Feature[]` | `3,234` US county AOIs (`fips`, `name`, `state`). | `config/helper` |
+| `GET /v1/savedsearch` | `200` `{ savedSearches }` | `5` organization saved searches (`Ransomware in Energy Sector`, `Cyber`, `China Nation State/APTs`, `Russia Nation State/APTs`, etc.). | `config/helper` (reusable query templates; mutations out-of-scope) |
+| `GET /v1/config/topics` | `200` `Topic[]` | `111` topic records (`109` unique `apiName` values). | `config/helper` |
+| `GET /v1/config/risk-categories` | `200` `Category[]` | `40` risk-category definitions (`id`, `name`, `parentId`). | `config/helper` |
+| `GET /v1/config/calendar-events` | `200` `{ impactTypes, ... }` | Lookup vocabulary for calendar-event categories, severities, and impact types. | `config/helper` |
+| `GET /v1/config/verified/security/{sectors\|asset-types\|attack-types\|perpetrators}` | `200` `Array<{Id, Name}>` | `28` sectors, `106` asset types, `35` attack types, and `18` perpetrator classifications for verified events. | `config/helper` |
+| `GET /v1/config/verified/maritime/{subcategories\|vessel-types}` | `200` `Array<{Id, Name}>` | `11` maritime subcategories and `10` vessel types. | `config/helper` |
+
+### AOI Identifier Casing Matrix
+
+Live probes confirmed three distinct country-code conventions across Hyperion endpoints:
+
+- **Lowercase ISO-2 (`pl`)**: `/v1/wod` (`aoiId`), `/v1/wod/breaking-events` (`aoiId`), `/v1/wod/calendar-events` (`aoiId`), `/v1/hotspots` (`aoiId`), `/v2/pulse/country/{code}`, `/v2/auto-summary/{code}/country`
+- **Uppercase ISO-2 (`PL`)**: `/v1/wod/country-background/{countryCode}`, `/v1/aois/country` (`properties.iso2`)
+- **Uppercase ISO-3 (`POL`)**: `/v1/wod/risk-rating/{geoCode}`, `/v1/aois/country` (`properties.iso3`)
+
 ## Errors and rate limits
 
+- Passing an unsupported `sources` value (`sources=security`) to `GET /v1/wod` returned HTTP `400 Bad Request` with an explicit enumeration of valid `sources` values (`political,maritime,news,foreign,twitter,telegram,...`, plus `analysis`).
 - The script's missing-query validation was exercised locally and produced a failed JSONL event without making a provider request.
-- No provider-side `400`, `401`, or `429` response was deliberately triggered.
+- No `401` or `429` response was triggered.
 - The blueprint states that `429` indicates exhausted daily quota and that quota resets daily. This remains documentation evidence, not live observation.
 
 ## Contract implications

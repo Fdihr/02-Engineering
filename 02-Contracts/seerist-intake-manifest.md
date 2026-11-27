@@ -1,7 +1,7 @@
 # Seerist Intake Manifest Contract
 
-Status: Active `/v1/wod` baseline
-Validated: 2026-08-31
+Status: Active multi-endpoint GeoJSON baseline
+Validated: 2026-11-27
 Implementation: `../app/src/commands/intake-seerist.ts`, `../app/src/workflow/process-source.ts`
 
 ## Purpose
@@ -23,7 +23,7 @@ The response manifest and approved question must remain inside the configured `S
 Before item selection, the command requires:
 
 1. The response manifest at `runs/<runId>/provider-operations/<operationId>/raw-provider-artifact.json`.
-2. A successful Seerist `/v1/wod` response with valid ordered request and receipt timestamps.
+2. A successful Seerist response from a supported GeoJSON feature-collection endpoint (`/v1/wod`, `/v1/wod/breaking-events`, `/v1/wod/calendar-events`, `/v1/wod/country-background/{countryCode}`, `/v1/wod/risk-rating`, `/v1/wod/risk-rating/{geoCode}`, `/v2/pulse/*`, `/v2/clusters/*`) with valid ordered request and receipt timestamps.
 3. The raw response at the exact manifest reference and canonical operation path.
 4. Exact equality between the raw bytes' SHA-256 and the response manifest.
 5. The sibling `collection-request.json` with matching run, operation, question, provider, method, endpoint, and request time.
@@ -31,7 +31,7 @@ Before item selection, the command requires:
 7. Exact equality between the externally hashed approved question and the question lineage embedded at collection time.
 8. Exact run-ID equality between the approved question, provider operation, response manifest, intake ledger, and output path.
 
-The implemented adapter is deliberately limited to the observed `/v1/wod` GeoJSON `features[]` shape. Additional Seerist endpoints require observed response evidence, a narrow selector and role mapping, and focused tests before entering this contract.
+The implemented intake selector operates over observed GeoJSON `features[]` collections across the supported endpoints above. Plain-JSON helper endpoints (`/v1/aois/*`, `/v1/config/*`, `/v1/savedsearch`) and Scribe narrative summaries (`/v2/auto-summary/*`) do not enter single-feature intake directly; Scribe event links and hotspot cluster IDs enter as discovery leads.
 
 ## Persisted lineage
 

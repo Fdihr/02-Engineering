@@ -9,8 +9,8 @@
       "tier": 1,
       "id": "control-risks-analysis",
       "label": "Control Risks analyst report",
-      "basis": "Written by Control Risks human analysts and delivered through Seerist; attributed provider analysis, not independent corroboration.",
-      "sourceTypes": ["analysis"],
+      "basis": "Written or verified by Control Risks / Seerist human analysts (analyst reports and breaking-event alerts); attributed provider reporting, not independent corroboration.",
+      "sourceTypes": ["analysis", "breaking-event"],
       "domains": []
     },
     {

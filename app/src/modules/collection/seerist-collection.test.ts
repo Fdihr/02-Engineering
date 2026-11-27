@@ -88,6 +88,48 @@ test("rejects operations bound to another question or research run", () => {
   assert.deepEqual(wrongRun, { ok: false, error: "RESEARCH_RUN_MISMATCH" });
 });
 
+test("permits inventoried read-only Hyperion GET endpoints and rejects unknown or traversal paths", () => {
+  const allowedEndpoints = [
+    "/v1/wod",
+    "/v1/wod/breaking-events",
+    "/v1/wod/calendar-events",
+    "/v1/wod/risk-rating",
+    "/v1/wod/risk-rating/pl",
+    "/v1/wod/country-background/POL",
+    "/v1/hotspots",
+    "/v1/hotspots/topic/top",
+    "/v2/auto-summary/pl/country",
+    "/v2/clusters/cluster-123",
+    "/v2/clusters/cluster-123/articles",
+    "/v2/pulse/country",
+    "/v2/pulse/country/pl",
+    "/v1/aois/country",
+    "/v1/config/risk-categories"
+  ];
+  for (const endpoint of allowedEndpoints) {
+    const res = prepareSeeristCollection(
+      { ...operation, endpoint },
+      approvedQuestion,
+      "2026-08-28T09:00:00.000Z"
+    );
+    assert.equal(res.ok, true, `Expected ${endpoint} to be permitted`);
+  }
+
+  for (const invalidEndpoint of [
+    "/v1/risk-ratings",
+    "/v1/searches",
+    "/v2/auto-summary/pl/unknown",
+    "/v1/wod/../searches"
+  ]) {
+    const res = prepareSeeristCollection(
+      { ...operation, endpoint: invalidEndpoint },
+      approvedQuestion,
+      "2026-08-28T09:00:00.000Z"
+    );
+    assert.deepEqual(res, { ok: false, error: "INVALID_PROVIDER_OPERATION" });
+  }
+});
+
 test("rejects provider endpoints outside the implemented collection boundary", () => {
   const result = prepareSeeristCollection(
     { ...operation, endpoint: "/v1/risk-ratings" },

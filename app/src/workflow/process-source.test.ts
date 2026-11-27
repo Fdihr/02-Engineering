@@ -283,3 +283,100 @@ test("does not treat arbitrary nested content as a captured analyst report", () 
   assert.equal(result.value.item.role, "collection_lead");
   assert.equal(result.value.item.contentCompleteness, "summary_only");
 });
+
+test("routes a captured breaking-event report with HTML content.en and outlet sources[] to canonicalization", () => {
+  const result = processSource(
+    runId,
+    occurredAt,
+    selectedItem(
+      {
+        id: "8680",
+        subtype: "breaking-event",
+        status: "Confirmed",
+        source: "https://www.reuters.com/world/europe/rail-alert-2026-08-27/",
+        sources: [
+          { name: "Reuters", url: "https://www.reuters.com/world/europe/rail-alert-2026-08-27/" },
+          { name: "PAP", url: "https://www.pap.pl/en/news/rail-alert" }
+        ],
+        title: "Rail security alert in eastern corridor",
+        content: {
+          en: "<p>Authorities increased patrols along eastern rail corridors.</p><p>No casualties reported.</p>"
+        }
+      },
+      "/v1/wod/breaking-events"
+    )
+  );
+
+  assert.equal(result.ok, true);
+  if (!result.ok) {
+    return;
+  }
+
+  assert.equal(result.value.item.role, "evidence_candidate");
+  assert.equal(result.value.item.providerItemId, "8680");
+  assert.equal(result.value.item.sourceType, "breaking-event");
+  assert.equal(result.value.item.contentCompleteness, "captured_content");
+  assert.equal(result.value.item.referenceCount, 2);
+  assert.deepEqual(result.value.item.sourceLinks, [
+    "https://www.reuters.com/world/europe/rail-alert-2026-08-27/",
+    "https://www.pap.pl/en/news/rail-alert"
+  ]);
+  assert.equal(result.value.decision.destination, "source_canonicalization");
+});
+
+test("routes calendar-events and risk-rating items to context_only and cluster items to collection_lead", () => {
+  const calendarResult = processSource(
+    runId,
+    occurredAt,
+    selectedItem(
+      {
+        id: "cal-001",
+        subtype: "calendar-events",
+        title: "Parliamentary transport committee session",
+        summary: "Scheduled parliamentary session."
+      },
+      "/v1/wod/calendar-events"
+    )
+  );
+  assert.equal(calendarResult.ok, true);
+  if (calendarResult.ok) {
+    assert.equal(calendarResult.value.item.role, "context");
+    assert.equal(calendarResult.value.decision.destination, "context_only");
+  }
+
+  const riskResult = processSource(
+    runId,
+    occurredAt,
+    selectedItem(
+      {
+        id: "risk-001",
+        subtype: "risk-rating",
+        title: "Operational security risk rating update"
+      },
+      "/v1/wod/risk-rating"
+    )
+  );
+  assert.equal(riskResult.ok, true);
+  if (riskResult.ok) {
+    assert.equal(riskResult.value.item.role, "context");
+    assert.equal(riskResult.value.decision.destination, "context_only");
+  }
+
+  const clusterResult = processSource(
+    runId,
+    occurredAt,
+    selectedItem(
+      {
+        clusterId: "cluster-hotspot-99",
+        severity: 4,
+        categories: ["Security"]
+      },
+      "/v2/clusters/hotspots"
+    )
+  );
+  assert.equal(clusterResult.ok, true);
+  if (clusterResult.ok) {
+    assert.equal(clusterResult.value.item.role, "collection_lead");
+    assert.equal(clusterResult.value.item.providerItemId, "cluster-hotspot-99");
+  }
+});

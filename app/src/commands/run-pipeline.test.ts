@@ -586,3 +586,474 @@ test("runPipeline executes the full automated pipeline from Gate 1 approval to r
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("runPipeline executes autoExpandGeography multi-endpoint Seerist discovery, native breaking-events, Scribe leads, and hotspot cluster follow-ups", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "run-pipeline-m3-"));
+  try {
+    const runId = "analysis-2026-m3";
+    const runDir = resolve(root, runId);
+    const approvedAt = "2026-03-15T09:00:00.000Z";
+    const analystId = "FDIHR";
+    const thesis = "Assess hybrid rail sabotage readiness in Poland.";
+
+    const scope = approveMemoScope(
+      {
+        id: "scope-m3",
+        runId,
+        version: 1,
+        status: "proposed",
+        purpose: { value: "Assess hybrid sabotage indicators in Poland.", origin: "human" },
+        researchThesis: { value: thesis, origin: "human" },
+        threatTopic: { value: "Hybrid sabotage", origin: "human" },
+        audience: { value: "Executive Management", origin: "human" },
+        geographies: { value: ["Poland"], origin: "human" },
+        timeWindow: {
+          value: { from: "2026-03-01T00:00:00.000Z", to: "2026-03-20T23:59:59.999Z" },
+          origin: "human"
+        },
+        requestedOutput: { value: "memo", origin: "human" }
+      },
+      analystId,
+      approvedAt
+    );
+    assert.ok(scope.ok);
+    const scopePath = resolve(runDir, "memo-scopes", "scope-m3", "v1", "approved-memo-scope.json");
+    await mkdir(dirname(scopePath), { recursive: true });
+    await writeFile(scopePath, `${JSON.stringify(scope.value, null, 2)}\n`, "utf8");
+    const scopeArtifact = await loadJsonArtifact(scopePath);
+
+    const question = approveResearchQuestion(
+      {
+        id: "rq-m3",
+        runId,
+        scopeVersion: 1,
+        researchThesis: thesis,
+        status: "proposed",
+        question: "What credible evidence indicates hybrid sabotage readiness along Polish rail corridors?",
+        rationale: "Focus on verified alerts and corroborated reporting.",
+        geographies: ["Poland"],
+        timeWindow: scope.value.timeWindow.value
+      },
+      { ...scope.value, ...scopeArtifact.binding },
+      analystId,
+      approvedAt
+    );
+    assert.ok(question.ok);
+    const questionPath = resolve(runDir, "research-questions", "rq-m3", "approved-research-question.json");
+    await mkdir(dirname(questionPath), { recursive: true });
+    await writeFile(questionPath, `${JSON.stringify(question.value, null, 2)}\n`, "utf8");
+    const questionArtifact = await loadJsonArtifact(questionPath);
+
+    const proposalPath = resolve(runDir, "requirements", "proposal-m3.json");
+    await mkdir(dirname(proposalPath), { recursive: true });
+    const proposal = {
+      proposalId: "req-prop-m3",
+      questionId: question.value.id,
+      runId,
+      requirements: [
+        { irId: "ir-01", text: "Have Polish authorities elevated rail patrol readiness?" }
+      ]
+    };
+    await writeFile(proposalPath, `${JSON.stringify(proposal, null, 2)}\n`, "utf8");
+    const proposalArtifact = await loadJsonArtifact(proposalPath);
+    const approvedReq = approveRequirements({
+      proposalValue: proposal,
+      proposalArtifactRef: proposalArtifact.binding.artifactRef,
+      proposalArtifactSha256: proposalArtifact.binding.artifactSha256,
+      researchQuestionValue: { ...question.value, ...questionArtifact.binding },
+      reviewerId: analystId,
+      approvedAt
+    });
+    assert.ok(approvedReq.ok);
+    const reqPath = resolve(runDir, "requirements", approvedReq.value.proposalId, "approved-requirements.json");
+    await mkdir(dirname(reqPath), { recursive: true });
+    await writeFile(reqPath, `${JSON.stringify(approvedReq.value, null, 2)}\n`, "utf8");
+
+    const discoveryPlanPath = resolve(runDir, "proposals", `${runId}-dp-01.json`);
+    await mkdir(dirname(discoveryPlanPath), { recursive: true });
+    await writeFile(
+      discoveryPlanPath,
+      `${JSON.stringify(
+        {
+          id: `${runId}-dp-01`,
+          runId,
+          researchQuestionId: question.value.id,
+          provider: "seerist",
+          endpoint: "/v1/wod",
+          queries: [
+            { id: "q-01", search: "Poland rail sabotage", sources: "news,analysis,political,maritime" }
+          ],
+          autoExpandGeography: true,
+          rankingTerms: ["Poland", "rail", "sabotage", "patrols"],
+          pageSize: 20,
+          maxPagesPerQuery: 1,
+          maxApiCalls: 10,
+          maxResults: 20,
+          minimumScore: 1
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    await writeFile(
+      resolve(root, ".copilot-settings.json"),
+      `${JSON.stringify(
+        {
+          model: "model-default",
+          stages: {
+            relevance: { provider: "github-copilot-sdk", model: "model-relevance" },
+            extract: { provider: "github-copilot-sdk", model: "model-extract" },
+            build: { provider: "github-copilot-sdk", model: "model-build" },
+            challenge: { provider: "github-copilot-sdk", model: "model-challenge" },
+            "key-judgements": { provider: "github-copilot-sdk", model: "model-selection" },
+            "memo-writer": { provider: "github-copilot-sdk", model: "model-writer" }
+          }
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    const requestedEndpoints: string[] = [];
+    const mockSeeristFetch: typeof fetch = async (inputUrl) => {
+      const urlObj = new URL(String(inputUrl));
+      const path = urlObj.pathname.replace(/^\/hyperionapi/, "");
+      const tag =
+        urlObj.searchParams.has("clusterId")
+          ? `${path}?clusterId`
+          : urlObj.searchParams.get("eventType") === "verified"
+            ? `${path}?eventType=verified`
+            : path;
+      requestedEndpoints.push(tag);
+
+      if (path === "/v1/wod/breaking-events") {
+        return new Response(
+          JSON.stringify({
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                properties: {
+                  id: "8680",
+                  subtype: "breaking-event",
+                  status: "Confirmed",
+                  publishedDate: "2026-03-14T10:00:00.000Z",
+                  title: "Poland expands armed rail patrols along eastern corridor",
+                  content: {
+                    en: "<p>Polish railway security guards expanded armed patrols along eastern freight junctions after sabotage warnings.</p><p>Transport officials maintained freight schedules under heightened inspection.</p>"
+                  },
+                  source: "https://www.reuters.com/world/europe/poland-rail-patrols-2026-03-14/",
+                  sources: [
+                    { name: "Reuters", url: "https://www.reuters.com/world/europe/poland-rail-patrols-2026-03-14/" }
+                  ]
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (path === "/v1/hotspots") {
+        return new Response(
+          JSON.stringify({
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                properties: {
+                  headline: "Poland rail corridor security alert",
+                  topics: ["Security"],
+                  keywords: ["Poland", "rail", "sabotage"],
+                  clusterIds: ["cluster-pl-rail-1"]
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (path === "/v1/wod" && urlObj.searchParams.get("clusterId") === "cluster-pl-rail-1") {
+        return new Response(
+          JSON.stringify({
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                properties: {
+                  id: "wod-cluster-item-1",
+                  source: "news",
+                  "@timestamp": "2026-03-14T11:00:00.000Z",
+                  title: "Reuters follow-up on Poland rail sabotage patrols",
+                  summary: "Cluster-linked article on Polish rail security.",
+                  link: "https://www.reuters.com/world/europe/poland-rail-cluster-2026-03-14/"
+                }
+              }
+            ],
+            metadata: { pageSize: "20", total: 1, prev: null, next: null }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (path.startsWith("/v2/auto-summary/")) {
+        return new Response(
+          JSON.stringify({
+            narrative: {
+              summary: "AI country narrative.",
+              top_events: {
+                events: [
+                  {
+                    id: "scribe-pl-1",
+                    title: "Polish interior ministry briefing on rail sabotage patrols",
+                    summary: "Rail sabotage readiness measures reviewed.",
+                    source_url: "https://www.bbc.com/news/world-europe-poland-rail-briefing"
+                  }
+                ]
+              }
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          type: "FeatureCollection",
+          features: [],
+          metadata: { pageSize: "20", total: 0, prev: null, next: null }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    };
+
+    const mockArticleFetch = async (url: string, requestedAt: string) => {
+      const receivedAt = new Date().toISOString();
+      const host = new URL(url).hostname;
+      const html = `<!doctype html><html><head><title>Rail Patrol Report (${host})</title>
+        <meta property="article:published_time" content="2026-03-14T12:00:00.000Z" />
+        </head><body><article><h1>Rail Patrol Report (${host})</h1>
+        <p>Polish authorities deployed joint police and railway guard patrols across eastern rail corridors on March 14 after counterintelligence warnings of sabotage plots targeting cross-border transport hubs and logistics depots.</p>
+        <p>Security services inspected signal boxes, switching yards, overhead catenary lines, and traction power substations along cross-border freight corridors connecting eastern provinces to regional rail terminals.</p>
+        <p>Interior Ministry and national rail operator representatives stated that freight operators maintained scheduled transit times while heightened physical patrols, drone surveillance, and allied intelligence coordination remained active throughout the readiness window.</p>
+        </article></body></html>`;
+      return {
+        raw: Buffer.from(html, "utf8"),
+        response: {
+          requestedAt,
+          receivedAt,
+          finalUrl: url,
+          redirects: [],
+          httpStatus: 200,
+          mediaType: "text/html",
+          etag: null,
+          lastModified: null
+        }
+      };
+    };
+
+    const runModel = async (input: unknown) => {
+      assert.ok(typeof input === "object" && input !== null && "action" in input);
+      const call = input as { action: string; model?: string; prompt?: unknown };
+      if (call.action === "models") {
+        return {
+          models: [
+            { id: "model-default" },
+            { id: "model-relevance" },
+            { id: "model-extract" },
+            { id: "model-build" },
+            { id: "model-challenge" },
+            { id: "model-selection" },
+            { id: "model-writer" }
+          ]
+        };
+      }
+
+      const startedAt = new Date().toISOString();
+      const completedAt = new Date(Date.now() + 5).toISOString();
+      const files = await allFiles(runDir);
+
+      if (call.model === "model-relevance") {
+        const reqFiles = files.filter((f) => basename(f) === "question-relevance-request.json");
+        const loaded = await Promise.all(reqFiles.map(readJson));
+        const match = loaded
+          .sort((a, b) => Date.parse(b.preparedAt) - Date.parse(a.preparedAt))
+          .find((r) => validateQuestionRelevanceRequest(r).ok);
+        assert.ok(match);
+        const seg =
+          match.sourceDocument.segments.find((s: { kind: string }) => s.kind === "paragraph") ??
+          match.sourceDocument.segments[0];
+        const quote = String(seg.text).slice(0, Math.min(48, String(seg.text).length));
+        return {
+          invocationId: "m3-rel",
+          provider: "github-copilot-sdk",
+          model: call.model,
+          startedAt,
+          completedAt,
+          freshSession: true,
+          content: JSON.stringify({
+            verdict: "relevant",
+            rationale: "Directly addresses Polish rail patrol readiness.",
+            support: [
+              {
+                segment: seg.id,
+                quote,
+                relationToQuestion: "Addresses Polish rail readiness."
+              }
+            ],
+            limitations: ["Automated relevance screening requires extraction verification."]
+          })
+        };
+      }
+
+      if (call.model === "model-extract") {
+        const extFiles = files.filter((f) => basename(f) === "extract-request.json");
+        const extLoaded = await Promise.all(extFiles.map(readJson));
+        const extMatch = extLoaded.find((r) => JSON.stringify(r.prompt) === JSON.stringify(call.prompt));
+        assert.ok(extMatch);
+        const sourceDoc = await readJson(resolve(extMatch.lineage.sourceDocument.artifactRef));
+        const seg1 = sourceDoc.segments.find((s: { kind: string }) => s.kind === "paragraph") ?? sourceDoc.segments[0];
+        const q1 = String(seg1.text).slice(0, Math.min(120, String(seg1.text).length)).trim();
+        return {
+          invocationId: "m3-ext",
+          provider: "github-copilot-sdk",
+          model: call.model,
+          startedAt,
+          completedAt,
+          freshSession: true,
+          content: JSON.stringify({
+            observations: [
+              {
+                segment: String(seg1.ordinal + 1).padStart(2, "0"),
+                quote: q1,
+                text: q1,
+                claimKind: "event",
+                attribution: { kind: "direct" },
+                irIds: ["ir-01"]
+              }
+            ],
+            dispositions: [{ irId: "ir-01", disposition: "covered" }]
+          })
+        };
+      }
+
+      if (call.model === "model-build") {
+        const buildFiles = files.filter((f) => f.endsWith("build-request.json"));
+        const buildLoaded = await Promise.all(buildFiles.map(readJson));
+        const buildMatch = buildLoaded.find((r) => JSON.stringify(r.prompt) === JSON.stringify(call.prompt));
+        const parsed = validateSynthesisBuildRequest(buildMatch);
+        assert.ok(parsed.ok);
+        return {
+          invocationId: "m3-build",
+          provider: "github-copilot-sdk",
+          model: call.model,
+          startedAt,
+          completedAt,
+          freshSession: true,
+          content: JSON.stringify({
+            claims: [
+              {
+                statement: "Polish security forces expanded armed rail patrols along eastern freight junctions.",
+                kind: "reported-fact",
+                supportAliases: parsed.value.observations.map((o) => o.alias),
+                confidence: { level: "low", rationale: "Corroborated across breaking-event and external reporting." }
+              }
+            ]
+          })
+        };
+      }
+
+      if (call.model === "model-challenge") {
+        const chalFiles = files.filter((f) => f.endsWith("challenge-request.json"));
+        const chalLoaded = await Promise.all(chalFiles.map(readJson));
+        const chalMatch = chalLoaded.find((r) => JSON.stringify(r.prompt) === JSON.stringify(call.prompt));
+        const parsed = validateChallengeRequest(chalMatch);
+        assert.ok(parsed.ok);
+        return {
+          invocationId: "m3-challenge",
+          provider: "github-copilot-sdk",
+          model: call.model,
+          startedAt,
+          completedAt,
+          freshSession: true,
+          content: JSON.stringify({
+            claims: parsed.value.claims.map((claim) => ({
+              claim: claim.claimAlias,
+              checks: parsed.value.checklist.map((check) => ({ item: check.check, result: "none" }))
+            }))
+          })
+        };
+      }
+
+      if (call.model === "model-selection") {
+        const reqFiles = files.filter((f) => basename(f) === "key-judgement-request.json");
+        const loaded = await Promise.all(reqFiles.map(readJson));
+        const match = loaded.find((r) => JSON.stringify(r.prompt) === JSON.stringify(call.prompt));
+        assert.ok(match);
+        const selections = Object.entries(match.eligibility.eligibleAliasesByRequirement)
+          .filter(([, aliases]) => Array.isArray(aliases) && aliases.length > 0)
+          .map(([requirementId, aliases]) => ({
+            requirementId,
+            claim: (aliases as string[])[0]!,
+            judgementText: "Polish authorities elevated armed rail patrol readiness along eastern corridors."
+          }));
+        return {
+          invocationId: "m3-kj",
+          provider: "github-copilot-sdk",
+          model: call.model,
+          startedAt,
+          completedAt,
+          freshSession: true,
+          content: JSON.stringify({ selections, omissions: [] })
+        };
+      }
+
+      return {
+        invocationId: "m3-writer",
+        provider: "github-copilot-sdk",
+        model: call.model ?? "model-writer",
+        startedAt,
+        completedAt,
+        freshSession: true,
+        content: JSON.stringify({ statements: [] })
+      };
+    };
+
+    const status = await runPipeline(root, runId, {
+      analystId,
+      maxExternalArticles: 4,
+      effects: {
+        seeristApiKey: "test-seerist-key",
+        fetchSeerist: mockSeeristFetch,
+        fetchArticle: mockArticleFetch,
+        runModel: runModel as never
+      }
+    });
+
+    assert.equal(status.state, "memo-review", status.error ?? "expected memo-review");
+    assert.ok(requestedEndpoints.includes("/v1/wod/breaking-events"));
+    assert.ok(requestedEndpoints.includes("/v1/wod?eventType=verified"));
+    assert.ok(requestedEndpoints.includes("/v1/hotspots"));
+    assert.ok(requestedEndpoints.includes("/v1/wod?clusterId"));
+    assert.ok(requestedEndpoints.includes("/v2/auto-summary/pl/country"));
+    assert.equal(status.counts.seeristAnalysisFound, 1); // native breaking-event 8680
+    assert.equal(status.counts.externalArticlesCaptured, 3); // breaking Reuters URL + hotspot cluster Reuters URL + Scribe BBC URL
+
+    // Verify native breaking-event snapshot carries early-warning status limitation
+    const breakingSnapshot = await readJson(
+      resolve(runDir, "seerist-admissions", "seerist-8680", "approved-evidence-snapshot.json")
+    );
+    assert.ok(
+      breakingSnapshot.item.limitations.some((line: string) =>
+        line.includes("Seerist breaking-event report (status: Confirmed)")
+      )
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+

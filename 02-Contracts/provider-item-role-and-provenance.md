@@ -6,7 +6,7 @@ Implementation: `../app/src/core/types.ts`, `../app/src/modules/intake/intake.ts
 
 ## Scope
 
-This contract covers classification of one selected Seerist item. The executable command selects one feature by provider ID from a verified `/v1/wod` collection bundle. Bundle and checksum requirements are defined in [Seerist Intake Manifest](seerist-intake-manifest.md). It does not define batch ingestion, source retrieval, or source assurance.
+This contract covers classification of one selected Seerist item from an explicitly supported Seerist collection bundle (`/v1/wod`, `/v1/wod/breaking-events`, `/v1/wod/calendar-events`, `/v1/wod/country-background/*`, `/v1/wod/risk-rating*`, `/v2/pulse/*`, `/v2/clusters/*`). Bundle and checksum requirements are defined in [Seerist Intake Manifest](seerist-intake-manifest.md). It does not define batch ingestion, source retrieval, or source assurance.
 
 ## Selected item input
 
@@ -47,7 +47,7 @@ The command also renders `intake-summary.md` from the accepted provider-neutral 
 
 Completeness is assigned by structural field presence in this order:
 
-1. `captured_content`: an explicit `sanitizedBody` or `body` string, English localized string, or unambiguous single localized string is present. Generic nested `content` may establish completeness only for an endpoint or source already classified as context.
+1. `captured_content`: an explicit `sanitizedBody` or `body` string, English localized string, or unambiguous single localized string is present; OR `/v1/wod/breaking-events` provides localized HTML text in `content` (`content.en` or single localized entry), normalized to plain text with paragraph boundaries preserved. Generic nested `content` on other endpoints may establish completeness only for an endpoint or source already classified as context.
 2. `summary_only`: `sanitizedSummary` or `summary` contains text.
 3. `metadata_only`: neither captured content nor summary text is present.
 
@@ -57,12 +57,13 @@ The check determines availability only. It does not judge truth, relevance, qual
 
 | Condition | Role |
 | --- | --- |
-| Country-background, risk-rating, or Pulse endpoint | `context` |
+| Country-background, risk-rating (`/v1/wod/risk-rating*`), Pulse (`/v2/pulse/*`), or calendar/future-events (`/v1/wod/calendar-events`) endpoint | `context` |
 | `/v1/wod` item with observed source `country-background` | `context` |
 | `/v1/wod` item with source `analysis` and captured content | `evidence_candidate` |
-| Other accepted `/v1/wod` item | `collection_lead` |
+| `/v1/wod/breaking-events` item (`subtype === "breaking-event"`) with captured content | `evidence_candidate` |
+| Other accepted `/v1/wod` or `/v2/clusters/*` item | `collection_lead` |
 
-An evidence candidate requires a provider item ID. Classification uses endpoint, source discriminator, and content depth; narrative wording is not an input to the routing decision.
+An evidence candidate requires a provider item ID. For `/v1/wod/breaking-events`, `item.source` is an external URL rather than a source-type discriminator, so `sourceType` falls back to `item.subtype` (`"breaking-event"`), and `sourceLinks` includes both `item.source` and external `item.sources[].url` entries. Classification uses endpoint, source discriminator, and content depth; narrative wording is not an input to the routing decision.
 
 ## Routing
 

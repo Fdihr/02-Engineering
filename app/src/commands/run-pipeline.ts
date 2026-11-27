@@ -13,8 +13,11 @@ import { adaptArticleContent, prepareArticle, type ArticlePlan } from "../module
 import { prepareSeeristCollection } from "../modules/collection/seerist-collection.js";
 import {
   assessSeeristDiscoveryPagination,
+  buildSupplementalSeeristOperation,
+  extractHotspotClusterIds,
   prepareSeeristDiscovery,
   rankSeeristDiscoveryCandidates,
+  resolveSupplementalQueries,
   type CollectedSeeristPage,
   type SeeristDiscoveryCandidate
 } from "../modules/discovery/seerist-discovery.js";
@@ -448,6 +451,7 @@ const ensureDiscoveryResults = async (
       pageManifests.push({
         operationId,
         queryId: query.id,
+        endpoint: "/v1/wod",
         pageOffset,
         requestedAt,
         receivedAt,
@@ -465,6 +469,7 @@ const ensureDiscoveryResults = async (
         queryId: query.id,
         pageOffset,
         artifactRef: rawRef,
+        endpoint: "/v1/wod",
         cacheStatus: response.headers.get("x-cache") ?? undefined,
         payload
       });
@@ -474,6 +479,130 @@ const ensureDiscoveryResults = async (
         typeof payload.metadata.next === "string" &&
         payload.metadata.next.length > 0;
       if (!hasNext) break;
+    }
+  }
+
+  const supplementalQueries = resolveSupplementalQueries(
+    prepared.value.plan,
+    prepared.value.researchQuestion.geographies
+  );
+  for (const supp of supplementalQueries) {
+    if (apiCalls >= prepared.value.plan.maxApiCalls) break;
+    const requestedAt = new Date().toISOString();
+    const suppOp = buildSupplementalSeeristOperation({
+      planId,
+      runId,
+      researchQuestion: prepared.value.researchQuestion,
+      supplementalQuery: supp,
+      referenceNowIso: requestedAt
+    });
+    const preparedSupp = prepareSeeristCollection(
+      suppOp,
+      prepared.value.researchQuestion,
+      requestedAt
+    );
+    if (!preparedSupp.ok) {
+      throw new Error(`Supplemental Seerist operation rejected: ${preparedSupp.error}`);
+    }
+    const response = await fetchImpl(preparedSupp.value.requestUrl, {
+      headers: { accept: "application/json", "x-api-key": apiKey }
+    });
+    apiCalls += 1;
+    const receivedAt = new Date().toISOString();
+    const rawBytes = Buffer.from(await response.arrayBuffer());
+    const safeSuppName = pathSafeId(supp.id) ?? "supplemental";
+    const rawPath = resolve(rawDirectory, `${safeSuppName}.json`);
+    await writeFile(longPath(rawPath), rawBytes);
+    const rawRef = artifactRef(rawPath);
+    pageManifests.push({
+      operationId: suppOp.id,
+      queryId: supp.id,
+      endpoint: suppOp.endpoint,
+      pageOffset: 0,
+      requestedAt,
+      receivedAt,
+      httpStatus: response.status,
+      mediaType: response.headers.get("content-type") ?? "unknown",
+      cacheStatus: response.headers.get("x-cache") ?? "unknown",
+      artifactRef: rawRef,
+      sha256: sha256Bytes(rawBytes)
+    });
+    if (!response.ok) {
+      continue;
+    }
+    const payload: unknown = JSON.parse(rawBytes.toString("utf8"));
+    pages.push({
+      queryId: supp.id,
+      pageOffset: 0,
+      artifactRef: rawRef,
+      endpoint: suppOp.endpoint,
+      cacheStatus: response.headers.get("x-cache") ?? undefined,
+      payload
+    });
+
+    if (supp.kind === "hotspots" && (supp.maxClusterFollowups ?? 1) > 0) {
+      const clusterIds = extractHotspotClusterIds(
+        payload,
+        prepared.value.plan.rankingTerms,
+        supp.maxClusterFollowups ?? 1
+      );
+      for (const [clusterIndex, clusterId] of clusterIds.entries()) {
+        if (apiCalls >= prepared.value.plan.maxApiCalls) break;
+        const clusterQueryId = `${safeSuppName}-cluster-${clusterIndex + 1}`;
+        const clusterOpId = `${planId}-${clusterQueryId}`;
+        const clusterRequestedAt = new Date().toISOString();
+        const preparedCluster = prepareSeeristCollection(
+          {
+            id: clusterOpId,
+            runId,
+            researchQuestionId: prepared.value.researchQuestion.id,
+            provider: "seerist",
+            method: "GET",
+            endpoint: "/v1/wod",
+            filters: {
+              clusterId,
+              pageSize: Math.min(20, prepared.value.plan.pageSize),
+              pageOffset: 0,
+              sortDirection: "desc"
+            }
+          },
+          prepared.value.researchQuestion,
+          clusterRequestedAt
+        );
+        if (!preparedCluster.ok) continue;
+        const clusterResp = await fetchImpl(preparedCluster.value.requestUrl, {
+          headers: { accept: "application/json", "x-api-key": apiKey }
+        });
+        apiCalls += 1;
+        const clusterReceivedAt = new Date().toISOString();
+        const clusterBytes = Buffer.from(await clusterResp.arrayBuffer());
+        const clusterRawPath = resolve(rawDirectory, `${clusterQueryId}.json`);
+        await writeFile(longPath(clusterRawPath), clusterBytes);
+        const clusterRawRef = artifactRef(clusterRawPath);
+        pageManifests.push({
+          operationId: clusterOpId,
+          queryId: clusterQueryId,
+          endpoint: "/v1/wod",
+          pageOffset: 0,
+          requestedAt: clusterRequestedAt,
+          receivedAt: clusterReceivedAt,
+          httpStatus: clusterResp.status,
+          mediaType: clusterResp.headers.get("content-type") ?? "unknown",
+          cacheStatus: clusterResp.headers.get("x-cache") ?? "unknown",
+          artifactRef: clusterRawRef,
+          sha256: sha256Bytes(clusterBytes)
+        });
+        if (!clusterResp.ok) continue;
+        const clusterPayload: unknown = JSON.parse(clusterBytes.toString("utf8"));
+        pages.push({
+          queryId: clusterQueryId,
+          pageOffset: 0,
+          artifactRef: clusterRawRef,
+          endpoint: "/v1/wod",
+          cacheStatus: clusterResp.headers.get("x-cache") ?? undefined,
+          payload: clusterPayload
+        });
+      }
     }
   }
 
@@ -761,13 +890,24 @@ const processSeeristAnalysisCandidate = async (input: {
     return { status: "fetch-skipped", detail: `Seerist feature selection failed (${selected.error})` };
   }
 
+  const endpoint =
+    input.candidate.endpoint ??
+    (manifest && typeof manifest.endpoint === "string" ? manifest.endpoint : "/v1/wod");
+  const sourceLimitations =
+    input.candidate.sourceType === "breaking-event"
+      ? [
+          ...NATIVE_SOURCE_LIMITATIONS,
+          `Seerist breaking-event report (status: ${input.candidate.breakingStatus ?? "unspecified"}); early-warning reporting subject to revision.`
+        ]
+      : NATIVE_SOURCE_LIMITATIONS;
+
   const intakeDir = resolve(input.root, input.runId, "provider-intakes", operationId, itemId);
   await ensureDirectory(intakeDir);
   const intakePath = resolve(intakeDir, "intake-result.json");
   if (!(await exists(intakePath))) {
     const processed = processSource(input.runId, new Date().toISOString(), {
       provider: "seerist",
-      endpoint: "/v1/wod",
+      endpoint,
       retrievedAt:
         manifest && typeof manifest.receivedAt === "string" ? manifest.receivedAt : new Date().toISOString(),
       rawArtifactRef: rawArtifact.binding.artifactRef,
@@ -813,7 +953,7 @@ const processSeeristAnalysisCandidate = async (input: {
     sourceItemId: itemId,
     sourceDocument: createdDoc.value,
     sourceDocumentPath: docPath,
-    sourceLimitations: NATIVE_SOURCE_LIMITATIONS,
+    sourceLimitations,
     question: input.question,
     model: input.relevanceModel,
     runModel: input.runModel
@@ -864,7 +1004,7 @@ const processSeeristAnalysisCandidate = async (input: {
         publisherHost: "app.seerist.com",
         title: input.candidate.title ?? createdDoc.value.segments.find(segment => segment.kind === "heading")?.text ?? `Seerist analysis ${itemId}`
       },
-      limitations: NATIVE_SOURCE_LIMITATIONS,
+      limitations: sourceLimitations,
       questionRelevance: {
         assessmentArtifactRef: assessmentArtifact.binding.artifactRef,
         assessmentArtifactSha256: assessmentArtifact.binding.artifactSha256,
@@ -1194,24 +1334,33 @@ export const runPipeline = async (
       : [];
     status.counts.discoveredCandidates = candidates.length;
 
+    const isNativeSeeristCandidate = (candidate: SeeristDiscoveryCandidate): boolean =>
+      candidate.sourceType === "analysis" || candidate.sourceType === "breaking-event";
+
     const analysisCandidates = candidates
-      .filter((candidate) => candidate.sourceType === "analysis")
+      .filter(
+        (candidate) =>
+          candidate.sourceType === "analysis" ||
+          (candidate.sourceType === "breaking-event" && candidate.matchedTerms.length > 0)
+      )
       .slice(0, 4);
     status.counts.seeristAnalysisFound = analysisCandidates.length;
     await persistStatus({
       currentStage: "collection",
-      stageDetail: `Discovered ${candidates.length} Seerist items (${analysisCandidates.length} full-text analysis). Screening sources...`
+      stageDetail: `Discovered ${candidates.length} Seerist items (${analysisCandidates.length} full-text Seerist reports). Screening sources...`
     });
 
     const admittedSnapshots: Array<{ rowId: string; snapshotPath: string }> = [];
 
-    // 1. Process full-text Seerist analysis items directly from captured discovery pages
+    // 1. Process full-text Seerist analysis and breaking-event items directly from captured discovery pages
     for (const candidate of analysisCandidates) {
-      const title = candidate.title ?? `Seerist analysis ${candidate.providerItemId}`;
+      const labelPrefix =
+        candidate.sourceType === "breaking-event" ? "Seerist breaking event" : "Seerist analysis";
+      const title = candidate.title ?? `${labelPrefix} ${candidate.providerItemId}`;
       const rowId = `seerist-${candidate.providerItemId}`;
       await persistStatus({
         currentStage: "relevance",
-        stageDetail: `Screening Seerist analysis: ${title.slice(0, 72)}`
+        stageDetail: `Screening ${labelPrefix.toLowerCase()}: ${title.slice(0, 72)}`
       });
       const outcome = await processSeeristAnalysisCandidate({
         root,
@@ -1244,8 +1393,8 @@ export const runPipeline = async (
     // 2. Capture & screen up to maxExternalArticles public HTTPS external articles
     const seenUrls = new Set<string>();
     const externalCandidates = [
-      ...candidates.filter((c) => c.shortlisted && c.sourceType !== "analysis"),
-      ...candidates.filter((c) => !c.shortlisted && c.sourceType !== "analysis")
+      ...candidates.filter((c) => c.shortlisted && !isNativeSeeristCandidate(c)),
+      ...candidates.filter((c) => !c.shortlisted && !isNativeSeeristCandidate(c))
     ].filter((candidate) => {
       const rawUrl = typeof candidate.sourceUrl === "string" ? candidate.sourceUrl.trim() : "";
       if (!rawUrl.startsWith("https://")) return false;

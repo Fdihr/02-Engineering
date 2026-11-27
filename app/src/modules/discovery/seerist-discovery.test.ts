@@ -3,8 +3,12 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   assessSeeristDiscoveryPagination,
+  buildSupplementalSeeristOperation,
+  extractHotspotClusterIds,
   prepareSeeristDiscovery,
   rankSeeristDiscoveryCandidates,
+  redactSeeristUrl,
+  resolveSupplementalQueries,
   type CollectedSeeristPage,
   type SeeristDiscoveryPlan
 } from "./seerist-discovery.js";
@@ -234,4 +238,168 @@ test("flags changing totals, timestamp inversions, duplicate IDs, and exhausted 
     candidates[0]?.collectionLimitations[0] ?? "",
     /pagination snapshot-drift/
   );
+});
+
+test("redacts x-api-key query parameters from persisted pagination metadata URLs", () => {
+  assert.equal(
+    redactSeeristUrl(
+      "https://app.seerist.com/hyperionapi/v1/wod?pageOffset=20&pageSize=20&x-api-key=SUPER_SECRET_KEY"
+    ),
+    "https://app.seerist.com/hyperionapi/v1/wod?pageOffset=20&pageSize=20"
+  );
+
+  const assessments = assessSeeristDiscoveryPagination(plan, [
+    {
+      queryId: "person",
+      pageOffset: 0,
+      artifactRef: "person-0.json",
+      payload: {
+        features: [{ properties: { id: "item-1", title: "John Ratcliffe" } }],
+        metadata: {
+          pageSize: "20",
+          total: 25,
+          prev: null,
+          next: "https://app.seerist.com/hyperionapi/v1/wod?pageOffset=20&x-api-key=LEAKED_TOKEN"
+        }
+      }
+    }
+  ]);
+  const serialized = JSON.stringify(assessments);
+  assert.equal(serialized.includes("LEAKED_TOKEN"), false);
+  assert.equal(
+    assessments[0]?.observations[0]?.next,
+    "https://app.seerist.com/hyperionapi/v1/wod?pageOffset=20"
+  );
+});
+
+test("autoExpandGeography synthesizes AOI-scoped supplemental operations and extracts breaking, Scribe, and hotspot leads", () => {
+  const expandedPlan: SeeristDiscoveryPlan = {
+    ...plan,
+    autoExpandGeography: true,
+    maxApiCalls: 12
+  };
+  const validated = prepareSeeristDiscovery(
+    expandedPlan,
+    approvedQuestion,
+    "2026-08-28T09:00:00.000Z"
+  );
+  assert.equal(validated.ok, true);
+  if (!validated.ok) return;
+
+  const supplementals = resolveSupplementalQueries(
+    validated.value.plan,
+    approvedQuestion.geographies
+  );
+  assert.deepEqual(
+    supplementals.map((q) => [q.id, q.kind]),
+    [
+      ["auto-breaking-ru", "breaking-events"],
+      ["auto-verified-ru", "verified-events"],
+      ["auto-scribe-ru", "scribe-country"],
+      ["auto-hotspots-ru", "hotspots"],
+      ["auto-breaking-us", "breaking-events"],
+      ["auto-verified-us", "verified-events"],
+      ["auto-scribe-us", "scribe-country"],
+      ["auto-hotspots-us", "hotspots"]
+    ]
+  );
+
+  const breakingOp = buildSupplementalSeeristOperation({
+    planId: expandedPlan.id,
+    runId: expandedPlan.runId,
+    researchQuestion: validated.value.researchQuestion,
+    supplementalQuery: supplementals[0]!,
+    referenceNowIso: "2026-08-28T09:00:00.000Z"
+  });
+  assert.equal(breakingOp.endpoint, "/v1/wod/breaking-events");
+  assert.equal(breakingOp.filters?.aoiId, "ru");
+
+  const hotspotPayload = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: {
+          headline: "Moscow diplomatic quarter security alert",
+          topics: ["Security"],
+          keywords: ["Moscow", "NATO"],
+          clusterIds: ["cluster-moscow-1"]
+        }
+      },
+      {
+        type: "Feature",
+        properties: {
+          headline: "Regional weather update",
+          topics: ["Weather"],
+          keywords: ["rain"],
+          clusterIds: ["cluster-other-2"]
+        }
+      }
+    ]
+  };
+  assert.deepEqual(
+    extractHotspotClusterIds(hotspotPayload, expandedPlan.rankingTerms, 1),
+    ["cluster-moscow-1"]
+  );
+
+  const multiPages: CollectedSeeristPage[] = [
+    {
+      queryId: "auto-breaking-ru",
+      pageOffset: 0,
+      endpoint: "/v1/wod/breaking-events",
+      artifactRef: "breaking.json",
+      payload: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {
+              id: "8680",
+              subtype: "breaking-event",
+              status: "Confirmed",
+              publishedDate: "2026-08-27T14:00:00.000Z",
+              title: "CIA Director John Ratcliffe delegation arrives in Moscow",
+              content: { en: "<p>Delegation held NATO security talks in Moscow.</p>" },
+              source: "https://www.reuters.com/world/ratcliffe-moscow/",
+              sources: [
+                { name: "Reuters", url: "https://www.reuters.com/world/ratcliffe-moscow/" }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      queryId: "auto-scribe-ru",
+      pageOffset: 0,
+      endpoint: "/v2/auto-summary/ru/country",
+      artifactRef: "scribe-ru.json",
+      payload: {
+        narrative: {
+          summary: "AI-generated narrative that must never become direct evidence.",
+          top_events: {
+            events: [
+              {
+                id: "evt-901",
+                title: "Moscow airport security cordon for US delegation",
+                summary: "John Ratcliffe convoy reported near diplomatic quarter.",
+                source_url: "https://www.bbc.com/news/world-europe-901"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ];
+
+  const ranked = rankSeeristDiscoveryCandidates(validated.value.plan, multiPages, tierPolicy);
+  assert.deepEqual(
+    ranked.map((c) => [c.providerItemId, c.sourceType, c.tier, c.endpoint ?? "/v1/wod"]),
+    [
+      ["8680", "breaking-event", 1, "/v1/wod/breaking-events"],
+      ["breaking-8680-lead-1", "news", 3, "/v1/wod/breaking-events"],
+      ["scribe-evt-901", "scribe-event", 3, "/v2/auto-summary/ru/country"]
+    ]
+  );
+  assert.equal(ranked[0]?.breakingStatus, "Confirmed");
 });
