@@ -90,14 +90,14 @@ Optional second-pass omission check over complete canonical content.
 ### F5.3 Automated challenge adjudication — Done
 - [x] Uphold raised adversarial challenges deterministically and preserve contested claims as visible, non-blocking caveats in the rendered memo (`writer.ts`, `publication.ts`).
 
-## E6 Memo composition and standards — Partial
+## E6 Memo composition and standards — Done
 
 ### F6.1 Key-judgement selection — Done
 ### F6.2 Memo writer and renderer — Done
 ### F6.3 Bounded editorial revision — Done
-### F6.4 Memo standard pack — Done (`memo-standard-v3`)
-### F6.5 Executive house outline upgrade — Next (M2)
-- [ ] Reshape rendered memo sections from mechanical workflow buckets (`BLUF`, `Key Judgments`, `Analysis`, `Uncertainties`, `Competing Explanations`, `Gaps`, `Indicators`, `Sourcing Summary`) toward the house memorandum structure (`proposals/house-standard-v1.proposed.json`).
+### F6.4 Memo standard pack — Done (`memo-standard-v4`)
+### F6.5 Executive house outline upgrade — Done (M2)
+- [x] Reshape rendered memo sections from mechanical workflow buckets into an executive intelligence memorandum (`Bottom Line`, `Key Judgements`, `Situation`, `Assessment & Implications`, `Uncertainties & Intelligence Gaps`, `Outlook & Indicators to Watch`), supply the full non-rejected adjudicated claim pool to the writer, and move provenance/competing-hypothesis mechanics into the `#/review` inspector while preserving `v0`–`v3` backward compatibility.
 
 ## E7 Quality assurance and publication — Done
 
@@ -141,6 +141,8 @@ The current product path uses GitHub Copilot (`github-copilot-sdk`); Foundry is 
 
 ---
 
-## Remaining work toward M1
+## Milestone status
 
-Execute one fresh live run end-to-end through `pipeline:run` and 1-click `approve-and-publish` to record a verified `published/` package on disk under the unified `memo-standard-v3` + expanded outlet table lineage.
+- **M1 First published live memo — Done**: Live run `poland-sabotage-2026-11` executed end-to-end through `pipeline:run` (63 Seerist leads, 3 assured sources, 49 byte-anchored quotes, 40 synthesis claims) and published as a local package.
+- **M2 Memo house outline & polish — Done**: `memo-standard-v4` executive memo writer, full adjudicated claim pool, proportional multi-paragraph composition, and `#/review` inspector provenance live and tested.
+- **Next up (M3)**: Broaden Seerist endpoint coverage beyond `/v1/wod` and evaluate bounded OSINT search.

@@ -289,6 +289,72 @@ test('editorial revision drawer records revision feedback and chains start-memo-
   assert.equal(h.actions[1].memoId, 'memo-1');
 });
 
+test('v4 executive memo renders prose Situation and Assessment paragraphs with clickable inline citations and inspector provenance', async () => {
+  const review = reviewReady();
+  const journey = readyMemoJourney();
+  journey.memo.memoStandardVersion = 4;
+  journey.memo.memoContext = {
+    title: 'Poland Sabotage Readiness',
+    audience: 'Executive leadership',
+    windowFrom: '2026-11-01',
+    windowTo: '2026-11-09',
+    geographies: ['Poland']
+  };
+  journey.memo.situation = [
+    { text: 'Polish police entered full readiness over sabotage warnings.', claimIds: ['claim-1'] },
+    { text: 'Authorities have not reported a confirmed incursion.', claimIds: ['claim-2'] }
+  ];
+  journey.memo.sourcing = { text: '2 sources (1 OSINT, 1 Seerist); 1 contested caveat retained.' };
+  journey.memo.limitations = ['Unclassified reporting only.'];
+  journey.memo.competing = [{ claimId: 'claim-2', check: 'plausible-alternative', text: 'Limited disclosure may explain the absence of public reports.' }];
+  const v4Markdown = [
+    '# Memorandum: Poland Sabotage Readiness',
+    '',
+    '**To:** Executive leadership · **Window:** 2026-11-01 to 2026-11-09 · **Scope:** Poland',
+    '',
+    '## Bottom Line',
+    'Poland heightened police readiness amid sabotage warnings. [claim:claim-1]',
+    '',
+    '## Key Judgements',
+    '- **Moderate confidence:** Sabotage alerts prompted heightened readiness. [claim:claim-1]',
+    '- **Low confidence:** No confirmed incursion has been disclosed. [claim:claim-2]',
+    '',
+    '## Situation',
+    'Polish police entered full readiness over sabotage warnings. [claim:claim-1] Authorities have not reported a confirmed incursion. [claim:claim-2]',
+    '',
+    '## Assessment & Implications',
+    'Polish police entered full readiness over sabotage warnings. [claim:claim-1]',
+    '',
+    '## Uncertainties & Intelligence Gaps',
+    '- None identified in the current evidence.',
+    '',
+    '## Outlook & Indicators to Watch',
+    '- None specified in the current evidence.',
+    '',
+    '*Information cutoff: 2026-11-04T13:00:00Z*'
+  ].join('\n');
+
+  const h = harness(journey, 'memo', { memoReview: review, markdown: v4Markdown });
+  await h.flush();
+
+  const bodyText = h.document.querySelector('#doc').textContent;
+  assert.match(bodyText, /Memorandum: Poland Sabotage Readiness/);
+  assert.doesNotMatch(bodyText, /\[claim:/);
+  assert.match(bodyText, /Situation/);
+  assert.match(bodyText, /Assessment & Implications/);
+  assert.match(bodyText, /Moderate confidence:/);
+
+  const sourcePills = [...h.document.querySelectorAll('.cite-pill')];
+  assert.ok(sourcePills.some(p => p.textContent.includes('[1 Kyiv Post]')));
+  assert.ok(sourcePills.some(p => p.textContent.includes('[2 Seerist]')));
+  assert.ok(h.document.querySelector('.cite-caveat'));
+
+  const drawerText = h.document.body.textContent;
+  assert.match(drawerText, /2 sources \(1 OSINT, 1 Seerist\)/);
+  assert.match(drawerText, /Limited disclosure may explain the absence of public reports/);
+  assert.match(drawerText, /Unclassified reporting only/);
+});
+
 test('legacy blocked memo offers automatic pipeline regeneration', async () => {
   const j = readyMemoJourney();
   j.memo.blockers = [{ code: 'PROVISIONAL_MEMO_STANDARD', label: 'Provisional standard' }];

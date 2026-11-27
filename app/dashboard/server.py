@@ -474,7 +474,7 @@ def _handle_assurance_review(runs_root: Path, payload: dict[str, Any]) -> tuple[
     return (200 if succeeded else 400), {"ok": succeeded, "runId": run_id, "steps": steps, "error": "" if succeeded else steps[-1]["stderr"]}
 
 
-MEMO_STANDARD = "src/modules/memo/standards/memo-standard-v3.json"
+MEMO_STANDARD = "src/modules/memo/standards/memo-standard-v4.json"
 ASSURANCE_POLICY = "src/modules/assurance/policies/geopolitical-source-assurance-v4.json"
 SYNTHESIS_POLICY = "src/modules/synthesis/policies/geopolitical-synthesis-v1.json"
 OUTLET_TABLE = "src/modules/synthesis/policies/geopolitical-outlets-v1.json"

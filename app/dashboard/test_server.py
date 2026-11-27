@@ -705,7 +705,7 @@ C.panes.settings();
             status, result = _handle_analyst_action(runs_root, run_dir, base)
             self.assertEqual(status, 200, result)
             self.assertEqual(runner.call_args.args[0], "prepare:key-judgements")
-            self.assertEqual(runner.call_args.args[1][-1], "src/modules/memo/standards/memo-standard-v3.json")
+            self.assertEqual(runner.call_args.args[1][-1], "src/modules/memo/standards/memo-standard-v4.json")
             self.assertEqual(runner.call_args.kwargs["runs_root"], runs_root)
             self.assertEqual(_handle_analyst_action(runs_root, run_dir, base)[0], 409)
         out = run_dir / "synthesis" / "adjudication" / "synthesis-challenge-record-abc"

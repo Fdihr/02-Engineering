@@ -31,7 +31,11 @@ import { reserveManualMemo, loadMemoInputs } from "./memo-execution-io.js";
 import { DEFAULT_MEMO_STANDARD_PATH } from "../modules/memo/standard-v1.js";
 import { validatePerformedAdjudication } from "../modules/synthesis/key-judgement-stage.js";
 
-const now = () => new Date().toISOString();
+let lastNowMs = 0;
+const now = () => {
+  lastNowMs = Math.max(Date.now(), lastNowMs + 1);
+  return new Date(lastNowMs).toISOString();
+};
 const json = async (path: string, value: unknown): Promise<ArtifactBinding> => {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
@@ -321,20 +325,21 @@ test("new bounded memo permits a long draft without word budgeting or another ca
   const f = await memoFixture();
   try {
     const runner = memoRunner(f, stage => stage === "writer" ? { statements: [
-      { section: "analysis", text: Array<string>(450).fill("x").join(" "), claims: ["c01"] },
-      { section: "analysis", text: Array<string>(450).fill("x").join(" "), claims: ["c01"] }
+      { section: "analysis", text: Array<string>(400).fill("x").join(" "), claims: ["c01"] },
+      { section: "analysis", text: Array<string>(400).fill("x").join(" "), claims: ["c01"] },
+      { section: "analysis", text: Array<string>(400).fill("x").join(" "), claims: ["c01"] }
     ] } : { selections: [{ requirementId: "ir-01", claim: "c01", judgementText: "A review is reported." }], omissions: [] });
     const result = await runBoundedMemo(f.root, f.runId, "start", "TESTER", f.adjudicationPath, runner);
     assert.equal(result.status, "memo-review", JSON.stringify(result));
     const execution = await inspectBoundedMemo(f.root, f.runId);
-    assert.equal(execution.input.standard.version, 3);
+    assert.equal(execution.input.standard.version, 4);
     assert.equal("maxWords" in execution.input.standard.limits, false);
     const request = await read(execution.stages.writer.request!.artifactRef);
     assert.equal(request.wordBudget, undefined);
     const record = await read(execution.stages.writer.record!.artifactRef);
     const markdown = await readFile(resolve(dirname(execution.stages.writer.record!.artifactRef), "memo.md"), "utf8");
     assert.ok(markdown.trim().split(/\s+/).length > 1_000);
-    assert.equal(record.memo.memoStandardVersion, 3);
+    assert.equal(record.memo.memoStandardVersion, 4);
     assert.ok(!record.memo.publicationBlockers.includes("PROVISIONAL_MEMO_STANDARD"));
     assert.equal((await inspectMemoReview(f.root, f.runId, record.memo.id)).approvalAvailable, true);
     assert.equal((await inspectMemoReview(f.root, f.runId, record.memo.id, 0, LEGACY_CALIBRATION_POLICY_PATH)).approvalAvailable, false);

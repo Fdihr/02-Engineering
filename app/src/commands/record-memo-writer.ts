@@ -1,6 +1,6 @@
 import { appendFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { reserveManualMemo } from "./memo-execution-io.js";
+import { loadWriterMemoContext, reserveManualMemo } from "./memo-execution-io.js";
 import { validateApprovedResearchQuestion } from "../modules/research/research-question.js";
 import {
   validateChallengeRecord,
@@ -174,6 +174,9 @@ const main = async (): Promise<void> => {
       }
       standard = validated.value;
     }
+    const memoContext = isBounded && (standard as MemoStandard).version >= 4
+      ? await loadWriterMemoContext(runRoot, question.value, build.value)
+      : undefined;
     const recomputed = isBounded
       ? createBoundedWriterRequest({
           buildRecord: build.value,
@@ -188,6 +191,7 @@ const main = async (): Promise<void> => {
           questionArtifact: questionArtifact.binding,
           standard: standard as MemoStandard,
           standardArtifact: standardArtifact.binding,
+          ...(memoContext ? { memoContext } : {}),
           preparedAt: request.preparedAt,
           wordBudget: boundedRequest.value.wordBudget !== undefined
         })

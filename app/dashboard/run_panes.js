@@ -1081,7 +1081,7 @@
     function push(text, claimIds, source) {
       if (text && text.length > 12 && claimIds && claimIds.length) list.push({ text: text, claimIds: claimIds, source: source });
     }
-    ['bluf', 'keyJudgments', 'analysis', 'uncertainties', 'indicators'].forEach(function (k) {
+    ['bluf', 'keyJudgments', 'situation', 'analysis', 'uncertainties', 'indicators'].forEach(function (k) {
       (m[k] || []).forEach(function (s) { push(s.text, s.claimIds, s); });
     });
     (m.competing || []).forEach(function (c) { push(c.text, c.claimId ? [c.claimId] : [], c); });
@@ -1248,14 +1248,21 @@
         }
       });
     }
+    var isV4 = Boolean(ctx.memo && Number(ctx.memo.memoStandardVersion || 0) >= 4);
     function flush() {
-      if (para.length) { var p = el('p'); fill(p, para.join(' ')); container.appendChild(p); }
+      if (para.length) {
+        var joined = para.join(' ');
+        var isMetaLine = isV4 && container === root && /^\*\*(?:To|Window|Scope|Information cutoff):/i.test(joined);
+        var p = el('p', isMetaLine ? 'doc-meta' : null);
+        fill(p, joined);
+        container.appendChild(p);
+      }
       para = [];
       if (list) {
         var l = el(list.tag);
         list.items.forEach(function (item) {
           var li = el('li');
-          var judgement = ctx.judgements && section === 'key judgements' ? matchJudgement(item, ctx.memo) : null;
+          var judgement = !isV4 && ctx.judgements && section === 'key judgements' ? matchJudgement(item, ctx.memo) : null;
           fill(li, judgement ? judgement.text : item);
           l.appendChild(li);
         });
@@ -1269,7 +1276,7 @@
       var li = /^\s*(?:([-*+])|\d+[.)])\s+(.*)$/.exec(line);
       if (h) {
         flush();
-        if (h[1].length === 1) { add(root, el('h3', 'doc-title', h[2])); if (ctx.subtitle) add(root, el('p', 'doc-meta', ctx.subtitle)); }
+        if (h[1].length === 1) { add(root, el('h3', 'doc-title', h[2])); if (!isV4 && ctx.subtitle) add(root, el('p', 'doc-meta', ctx.subtitle)); }
         else if (h[1].length === 2) { section = h[2].toLowerCase(); container = el('section'); add(container, el('h4', null, h[2])); root.appendChild(container); }
         else add(container, el('h5', null, h[2]));
       } else if (li) {
@@ -1517,7 +1524,27 @@
     var label = checks.length ? ('Verification & provenance · ' + passed + '/' + checks.length + ' checks passed') : 'Verification & provenance';
     add(det, el('summary', null, label));
     var body = el('div', 'panel-sec');
+    if (m.sourcing && m.sourcing.text) {
+      add(body, el('p', 'panel-head', 'Sourcing summary'), el('p', 'meta', m.sourcing.text));
+    }
+    if ((m.competing || []).length) {
+      add(body, el('p', 'panel-head', 'Competing hypotheses (' + m.competing.length + ')'));
+      var cl = el('ul', 'rows-list');
+      m.competing.forEach(function (c) {
+        add(cl, add(el('li'), el('span', 'meta', c.text)));
+      });
+      body.appendChild(cl);
+    }
+    if ((m.limitations || []).length) {
+      add(body, el('p', 'panel-head', 'Provenance & limitations'));
+      var ll = el('ul', 'rows-list');
+      m.limitations.forEach(function (lim) {
+        add(ll, add(el('li'), el('span', 'meta', lim)));
+      });
+      body.appendChild(ll);
+    }
     if (checks.length) {
+      add(body, el('p', 'panel-head', 'Verification checks'));
       var vl = el('ul', 'rows-list');
       checks.forEach(function (c) {
         var status = c.status || (c.passed ? 'pass' : 'fail');

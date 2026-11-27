@@ -11,7 +11,8 @@ import type { KeyJudgementPolicy } from "../synthesis/key-judgements.js";
 export const MEMO_STANDARD_V1_SCHEMA_VERSION = "memo-standard-pack-v1" as const;
 export const MEMO_STANDARD_V2_SCHEMA_VERSION = "memo-standard-pack-v2" as const;
 export const MEMO_STANDARD_V3_SCHEMA_VERSION = "memo-standard-pack-v3" as const;
-export const DEFAULT_MEMO_STANDARD_PATH = "src/modules/memo/standards/memo-standard-v3.json";
+export const MEMO_STANDARD_V4_SCHEMA_VERSION = "memo-standard-pack-v4" as const;
+export const DEFAULT_MEMO_STANDARD_PATH = "src/modules/memo/standards/memo-standard-v4.json";
 
 export type MemoStandardV1 = {
   schemaVersion: typeof MEMO_STANDARD_V1_SCHEMA_VERSION;
@@ -84,7 +85,25 @@ export type MemoStandardV3 = Omit<
   };
 };
 
-export type MemoStandard = MemoStandardV1 | MemoStandardV2 | MemoStandardV3;
+export type MemoStandardV4Limits = {
+  maxBlufStatements: number;
+  maxSituationStatements: number;
+  maxAnalysisStatements: number;
+  maxUncertaintyStatements: number;
+  maxIndicatorStatements: number;
+};
+
+export type MemoStandardV4 = Omit<
+  MemoStandardV3,
+  "schemaVersion" | "id" | "version" | "limits"
+> & {
+  schemaVersion: typeof MEMO_STANDARD_V4_SCHEMA_VERSION;
+  id: "memo-standard-v4";
+  version: 4;
+  limits: MemoStandardV4Limits;
+};
+
+export type MemoStandard = MemoStandardV1 | MemoStandardV2 | MemoStandardV3 | MemoStandardV4;
 
 export type MemoStandardV3ForWriter = Pick<
   MemoStandardV3,
@@ -100,7 +119,25 @@ export type MemoStandardV3ForWriter = Pick<
   | "styleGuidance"
 >;
 
-export type MemoStandardForWriter = MemoStandardV1 | MemoStandardV2 | MemoStandardV3ForWriter;
+export type MemoStandardV4ForWriter = Pick<
+  MemoStandardV4,
+  | "schemaVersion"
+  | "id"
+  | "version"
+  | "requiredSections"
+  | "confidenceLexicon"
+  | "citationRule"
+  | "prohibitedPatterns"
+  | "limits"
+  | "keyJudgementPolicy"
+  | "styleGuidance"
+>;
+
+export type MemoStandardForWriter =
+  | MemoStandardV1
+  | MemoStandardV2
+  | MemoStandardV3ForWriter
+  | MemoStandardV4ForWriter;
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
@@ -175,7 +212,10 @@ export const validateMemoStandard = (
     value.id === "memo-standard-v2" && value.version === 2;
   const isV3 = value.schemaVersion === MEMO_STANDARD_V3_SCHEMA_VERSION &&
     value.id === "memo-standard-v3" && value.version === 3;
-  const v3Keys = [
+  const isV4 = value.schemaVersion === MEMO_STANDARD_V4_SCHEMA_VERSION &&
+    value.id === "memo-standard-v4" && value.version === 4;
+  const isApproved = isV3 || isV4;
+  const approvedKeys = [
     "approvedAt",
     "approvedBy",
     "archiveCoverage",
@@ -197,14 +237,14 @@ export const validateMemoStandard = (
       "prohibitedPatterns",
       "limits",
       "keyJudgementPolicy",
-      ...(isV3 ? v3Keys : [])
+      ...(isApproved ? approvedKeys : [])
     ]) ||
-    !(isV1 || isV2 || isV3) ||
-    value.status !== (isV3 ? "approved-standard" : "provisional-standard") ||
+    !(isV1 || isV2 || isV3 || isV4) ||
+    value.status !== (isApproved ? "approved-standard" : "provisional-standard") ||
     !validTime(value.authoredAt) ||
-    (isV3 && (!validTime(value.approvedAt) || !nonEmptyString(value.approvedBy))) ||
+    (isApproved && (!validTime(value.approvedAt) || !nonEmptyString(value.approvedBy))) ||
     !Array.isArray(value.sourceMemoRefs) ||
-    (isV3
+    (isApproved
       ? value.sourceMemoRefs.length === 0 ||
         !value.sourceMemoRefs.every(isSourceMemoRef) ||
         new Set(value.sourceMemoRefs.map((ref) => (ref as MemoStandardSourceRef).artifactRef)).size !== value.sourceMemoRefs.length ||
@@ -226,18 +266,31 @@ export const validateMemoStandard = (
       Boolean(nonEmptyString(pattern))
     ) ||
     !isRecord(value.limits) ||
-    !hasOnlyKeys(value.limits, [
-      ...(value.version === 1 ? ["maxWords"] : []),
-      "blufStatements",
-      "maxAnalysisStatements",
-      "maxUncertaintyStatements",
-      "maxIndicatorStatements"
-    ]) ||
-    (value.version === 1 && !positiveInteger(value.limits.maxWords)) ||
-    value.limits.blufStatements !== 1 ||
-    !positiveInteger(value.limits.maxAnalysisStatements) ||
-    !positiveInteger(value.limits.maxUncertaintyStatements) ||
-    !positiveInteger(value.limits.maxIndicatorStatements) ||
+    (isV4
+      ? !hasOnlyKeys(value.limits, [
+          "maxBlufStatements",
+          "maxSituationStatements",
+          "maxAnalysisStatements",
+          "maxUncertaintyStatements",
+          "maxIndicatorStatements"
+        ]) ||
+        !positiveInteger(value.limits.maxBlufStatements) ||
+        !positiveInteger(value.limits.maxSituationStatements) ||
+        !positiveInteger(value.limits.maxAnalysisStatements) ||
+        !positiveInteger(value.limits.maxUncertaintyStatements) ||
+        !positiveInteger(value.limits.maxIndicatorStatements)
+      : !hasOnlyKeys(value.limits, [
+          ...(value.version === 1 ? ["maxWords"] : []),
+          "blufStatements",
+          "maxAnalysisStatements",
+          "maxUncertaintyStatements",
+          "maxIndicatorStatements"
+        ]) ||
+        (value.version === 1 && !positiveInteger(value.limits.maxWords)) ||
+        value.limits.blufStatements !== 1 ||
+        !positiveInteger(value.limits.maxAnalysisStatements) ||
+        !positiveInteger(value.limits.maxUncertaintyStatements) ||
+        !positiveInteger(value.limits.maxIndicatorStatements)) ||
     !isRecord(value.keyJudgementPolicy) ||
     !hasOnlyKeys(value.keyJudgementPolicy, [
       "policyId",
@@ -248,10 +301,10 @@ export const validateMemoStandard = (
     ]) ||
     !nonEmptyString(value.keyJudgementPolicy.policyId) ||
     !positiveInteger(value.keyJudgementPolicy.maxKeyJudgements) ||
-    value.keyJudgementPolicy.maxKeyJudgementsStatus !== (isV3 ? "approved" : "provisional") ||
+    value.keyJudgementPolicy.maxKeyJudgementsStatus !== (isApproved ? "approved" : "provisional") ||
     typeof value.keyJudgementPolicy.allowContested !== "boolean" ||
     !positiveInteger(value.keyJudgementPolicy.judgementTextMaxChars) ||
-    (isV3 &&
+    (isApproved &&
       (!isStringList(value.styleGuidance) ||
         !Array.isArray(value.regressionExamples) ||
         value.regressionExamples.length === 0 ||
@@ -263,7 +316,7 @@ export const validateMemoStandard = (
 };
 
 export const memoStandardForWriter = (standard: MemoStandard): MemoStandardForWriter => {
-  if (standard.version !== 3) return standard;
+  if (standard.version !== 3 && standard.version !== 4) return standard;
   return {
     schemaVersion: standard.schemaVersion,
     id: standard.id,
@@ -275,7 +328,7 @@ export const memoStandardForWriter = (standard: MemoStandard): MemoStandardForWr
     limits: standard.limits,
     keyJudgementPolicy: standard.keyJudgementPolicy,
     styleGuidance: standard.styleGuidance
-  };
+  } as MemoStandardForWriter;
 };
 
 const isMemoStandardV3ForWriter = (value: unknown): value is MemoStandardV3ForWriter =>
@@ -327,6 +380,57 @@ const isMemoStandardV3ForWriter = (value: unknown): value is MemoStandardV3ForWr
   isPositiveInteger(value.keyJudgementPolicy.judgementTextMaxChars) &&
   isStringList(value.styleGuidance);
 
+const isMemoStandardV4ForWriter = (value: unknown): value is MemoStandardV4ForWriter =>
+  isRecord(value) &&
+  hasOnlyKeys(value, [
+    "schemaVersion",
+    "id",
+    "version",
+    "requiredSections",
+    "confidenceLexicon",
+    "citationRule",
+    "prohibitedPatterns",
+    "limits",
+    "keyJudgementPolicy",
+    "styleGuidance"
+  ]) &&
+  value.schemaVersion === MEMO_STANDARD_V4_SCHEMA_VERSION &&
+  value.id === "memo-standard-v4" &&
+  value.version === 4 &&
+  isStringList(value.requiredSections) &&
+  isRecord(value.confidenceLexicon) &&
+  hasOnlyKeys(value.confidenceLexicon, ["low", "moderate", "high"]) &&
+  Object.values(value.confidenceLexicon).every((entry) => Boolean(nonEmptyString(entry))) &&
+  isNonEmptyString(value.citationRule) &&
+  isStringList(value.prohibitedPatterns) &&
+  isRecord(value.limits) &&
+  hasOnlyKeys(value.limits, [
+    "maxBlufStatements",
+    "maxSituationStatements",
+    "maxAnalysisStatements",
+    "maxUncertaintyStatements",
+    "maxIndicatorStatements"
+  ]) &&
+  isPositiveInteger(value.limits.maxBlufStatements) &&
+  isPositiveInteger(value.limits.maxSituationStatements) &&
+  isPositiveInteger(value.limits.maxAnalysisStatements) &&
+  isPositiveInteger(value.limits.maxUncertaintyStatements) &&
+  isPositiveInteger(value.limits.maxIndicatorStatements) &&
+  isRecord(value.keyJudgementPolicy) &&
+  hasOnlyKeys(value.keyJudgementPolicy, [
+    "policyId",
+    "maxKeyJudgements",
+    "maxKeyJudgementsStatus",
+    "allowContested",
+    "judgementTextMaxChars"
+  ]) &&
+  isNonEmptyString(value.keyJudgementPolicy.policyId) &&
+  isPositiveInteger(value.keyJudgementPolicy.maxKeyJudgements) &&
+  value.keyJudgementPolicy.maxKeyJudgementsStatus === "approved" &&
+  typeof value.keyJudgementPolicy.allowContested === "boolean" &&
+  isPositiveInteger(value.keyJudgementPolicy.judgementTextMaxChars) &&
+  isStringList(value.styleGuidance);
+
 export const validateMemoStandardForWriter = (
   value: unknown
 ): Result<MemoStandardForWriter, "INVALID_MEMO_STANDARD"> => {
@@ -335,8 +439,13 @@ export const validateMemoStandardForWriter = (
       ? ok(value)
       : err("INVALID_MEMO_STANDARD");
   }
+  if (isRecord(value) && value.version === 4) {
+    return isMemoStandardV4ForWriter(value)
+      ? ok(value)
+      : err("INVALID_MEMO_STANDARD");
+  }
   const result = validateMemoStandard(value);
-  return result.ok && result.value.version !== 3
+  return result.ok && result.value.version !== 3 && result.value.version !== 4
     ? ok(result.value)
     : err("INVALID_MEMO_STANDARD");
 };

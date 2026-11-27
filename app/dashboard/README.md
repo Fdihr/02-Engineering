@@ -132,11 +132,13 @@ model/paste-back controls cannot add authority. Complete output stops at
 gate. Publication is not authorized by this action. See
 [`bounded-memo-execution.md`](../../02-Contracts/bounded-memo-execution.md).
 
-New starts use approved `memo-standard-v3`: no hard word limit, with brevity as
-guidance and depth proportional to the question and evidence. Historical
-draft/authority standards are preserved, and manual writer preparation uses the
-selection's bound standard. Changing the default never reruns a model or rewrites
-a draft.
+New starts use approved `memo-standard-v4`: executive memo layout (`Bottom Line`,
+`Key Judgements`, `Situation`, `Assessment & Implications`,
+`Uncertainties & Intelligence Gaps`, and `Outlook & Indicators to Watch`), no
+hard word limit, full adjudicated claim pool access for the writer, and depth
+proportional to the question and evidence. Historical draft/authority standards
+are preserved, and manual writer preparation uses the selection's bound
+standard. Changing the default never reruns a model or rewrites a draft.
 
 A historical word-limited `MEMO_TOO_LONG` failure can receive exactly one
 separately approved, writer-only repair through

@@ -1,15 +1,17 @@
 # Approved Memo Standard Pack
 
-Status: Active. `memo-standard-v3` was approved by the governance owner on
-2026-11-06.
+Status: Active. `memo-standard-v4` was approved on 2026-11-27 (superseding `memo-standard-v3` for new memo work while keeping `v0`–`v3` immutable).
 
 ## Versioning and approval
 
-`src/modules/memo/standards/memo-standard-v3.json` is the default for new memo
-work. It is an approved, domain-neutral standard with a style-only archive
-curation, a three-key-judgement cap, and no total word-count limit. Its required
-workflow sections, claim-linked citation rule, confidence lexicon, prohibited
-patterns, and per-section statement limits remain deterministic.
+`src/modules/memo/standards/memo-standard-v4.json` is the default for new memo
+work. It is an approved, domain-neutral executive memo standard with a style-only
+archive curation, up to four key judgements, proportional section statement limits
+(`maxBlufStatements: 3`, `maxSituationStatements: 18`, `maxAnalysisStatements: 14`,
+`maxUncertaintyStatements: 8`, `maxIndicatorStatements: 8`), full non-rejected
+adjudicated claim pool access for the writer, and no total word-count limit. Its
+required workflow sections, claim-linked citation rule, confidence lexicon,
+prohibited patterns, and per-section statement limits remain deterministic.
 
 The pack records 23 hash-verified archived memos as style references. Nine
 additional archive items were excluded: three valid Open XML files could not be
@@ -32,7 +34,7 @@ not sent to the model.
 
 ## Historical compatibility
 
-`memo-standard-v0`, `memo-standard-v1`, and provisional `memo-standard-v2`
-remain immutable. Existing authorizations, requests, drafts, and editorial
-revisions continue to use their bound version. Changing the default applies
-only to new authorizations; it does not migrate or unblock an existing draft.
+`memo-standard-v0`, `memo-standard-v1`, provisional `memo-standard-v2`, and
+`memo-standard-v3` remain immutable. Existing authorizations, requests, drafts,
+and editorial revisions continue to use their bound version. Changing the default
+applies only to new authorizations; it does not migrate or unblock an existing draft.

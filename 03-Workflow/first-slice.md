@@ -2,7 +2,7 @@
 
 Status: CTI Bench now operates on a **two-gate human operating model**:
 - **Gate 1 (`#/new`)**: Human approves the AI-drafted research plan (scope, research question, information requirements, Seerist search queries, and an external publisher article budget defaulting to 6).
-- **Automated pipeline (`npm run pipeline:run` / `dashboard/pipeline_runner.py`)**: Runs end to end without mid-run human stops — Seerist `/v1/wod` collection, provider-item triage, native Seerist `analysis` full-text admission plus bounded local exact-URL publisher capture, question relevance (`v2`), deterministic verbatim-quote source assurance (`auto-assure:source`), synthesis `Build` + adversarial `Challenge`, deterministic challenge adjudication (surfacing contested claims as explicit caveats and capping confidence to `low` without halting), key-judgement selection, and `memo-standard-v3` writing + 11 deterministic verification checks.
+- **Automated pipeline (`npm run pipeline:run` / `dashboard/pipeline_runner.py`)**: Runs end to end without mid-run human stops — Seerist `/v1/wod` collection, provider-item triage, native Seerist `analysis` full-text admission plus bounded local exact-URL publisher capture, question relevance (`v2`), deterministic verbatim-quote source assurance (`auto-assure:source`), synthesis `Build` + adversarial `Challenge`, deterministic challenge adjudication (surfacing contested claims as explicit caveats and capping confidence to `low` without halting), key-judgement selection, and `memo-standard-v4` executive memo writing + 11 deterministic verification checks.
 - **Gate 2 (`#/review`)**: Human reads the finished executive memo with clickable inline `[N Publisher]` pills, `Caveat` badges, verbatim-quote inspection, direct external source links, optional editorial revision, and 1-click publication (`approve-and-publish` under `support-calibration-policy-v2`, `sampleSize: 0`).
 
 The local article adapter uses Node HTTPS, Readability and a non-executing jsdom
@@ -21,7 +21,7 @@ workflow idempotently from persisted run artifacts:
 2. **Relevance & extraction**: Runs `relevance-v2` screening, admits relevant sources under policy, and extracts structured observations with verbatim quotes.
 3. **Automated source assurance (`auto-assure:source`)**: Deterministically verifies that each extracted quote appears in the canonical source snapshot (`supported` vs `unsupported`), classifies outlet credibility via `geopolitical-outlets-v1.json`, and emits non-provisional `source-note` artifacts.
 4. **Synthesis, challenge & caveat preservation**: Runs bounded `Build` and adversarial `Challenge`, then records deterministic adjudication (`autoAdjudicateChallengeRecord`) where `high`/`moderate` challenges mark claims `contested` (retaining open caveats and capping key-judgement confidence at `low`) and `low` challenges remain `accepted`. Open challenges surface visibly in the memo rather than blocking `OPEN_KEY_JUDGEMENT_CONTEST`.
-5. **Memo writing & Gate 2 readiness**: Runs bounded key-judgement selection and `memo-standard-v3` writing, passes deterministic verification, and prepares Gate 2 review under `support-calibration-policy-v2.json` (`sampleSize: 0`).
+5. **Memo writing & Gate 2 readiness**: Runs bounded key-judgement selection and `memo-standard-v4` executive memo writing (giving the writer access to the full non-rejected adjudicated claim pool across `Bottom Line`, `Key Judgements`, `Situation`, `Assessment & Implications`, `Uncertainties & Intelligence Gaps`, and `Outlook & Indicators to Watch`), passes deterministic verification, and prepares Gate 2 review under `support-calibration-policy-v2.json` (`sampleSize: 0`).
 
 ## Implemented shared next-action projection (2026-11-04)
 
@@ -74,9 +74,12 @@ See [authorization, receipts and recovery limits](../02-Contracts/bounded-synthe
 
 ## Implemented bounded selection and writing (2026-11-04)
 
-New starts now use approved `memo-standard-v3` without a total word ceiling.
-Its domain-neutral guidance favors a clear bottom line, flexible layout,
-explicit uncertainty, and depth proportional to the question and evidence.
+New starts now use approved `memo-standard-v4` without a total word ceiling.
+It supplies the full non-rejected adjudicated claim pool to the writer, composes
+proportional multi-sentence executive prose (`Bottom Line`, `Key Judgements`,
+`Situation`, `Assessment & Implications`, `Uncertainties & Intelligence Gaps`,
+and `Outlook & Indicators to Watch`), renders plain-English gap descriptions,
+and moves mechanical sourcing/provenance counts to the `#/review` inspector.
 Evidence, selection, structured output, call allowances and publication
 boundaries remain unchanged. Existing drafts, authorizations and editorial
 revisions retain their checksum-bound historical standard rather than being
