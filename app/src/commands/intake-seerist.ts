@@ -2,7 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { selectSeeristFeature } from "../modules/intake/intake.js";
+import {
+  isSupportedSeeristIntakeEndpoint,
+  selectSeeristFeature
+} from "../modules/intake/intake.js";
 import { createFailedLedgerEntry } from "../modules/ledger/ledger.js";
 import { renderIntakeSummary } from "../modules/reporting/intake-summary.js";
 import { processSource } from "../workflow/process-source.js";
@@ -105,7 +108,8 @@ const main = async (): Promise<void> => {
       !recordedRawSha256 ||
       !/^[a-f0-9]{64}$/.test(recordedRawSha256) ||
       responseManifest.provider !== "seerist" ||
-      endpoint !== "/v1/wod" ||
+      !endpoint ||
+      !isSupportedSeeristIntakeEndpoint(endpoint) ||
       typeof responseManifest.httpStatus !== "number" ||
       responseManifest.httpStatus < 200 ||
       responseManifest.httpStatus >= 300 ||

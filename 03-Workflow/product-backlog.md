@@ -44,13 +44,13 @@ Feature status: unified Gate 1 research plan approval (**Done**), AI draft-plan 
 
 ## E2 Collection and discovery — Partial
 
-### F2.1 Seerist endpoint coverage — Partial
-Only `GET /v1/wod` (`news,analysis`) collection and discovery are implemented.
+### F2.1 Seerist endpoint coverage — Done (M3)
+All 28 read-only Seerist Hyperion `GET` endpoints are live-probed, inventoried, and governed by explicit role boundaries.
 - *As an analyst, I want every Seerist endpoint my organization may use to be available, so that memos are not limited to one feed.*
-- [ ] Inventory permitted endpoints and record live observations in `seerist-probe-findings.md`.
-- [ ] Map each observed endpoint to evidence candidate, collection lead or context.
-- [ ] Add one narrow adapter plus tests per endpoint, in priority order.
-- [x] Ingest full-text Seerist `analysis` items directly from captured `/v1/wod` discovery pages (`run-pipeline.ts`).
+- [x] Inventory all 28 permitted read-only `GET` endpoints, AOI casing conventions (`pl` / `PL` / `POL`), `/v1/wod` `sources` validation rules, and `metadata.next` `x-api-key` redaction requirements in `seerist-probe-findings.md`.
+- [x] Map each observed endpoint to `evidence_candidate`, `collection_lead`, `context`, or `config/helper` in `02-Contracts/provider-item-role-and-provenance.md` and `02-Contracts/seerist-intake-manifest.md`.
+- [x] Add narrow adapters, deterministic geography-to-AOI expansion (`seerist-aois.ts`), multi-endpoint discovery (`breaking-events`, `verified-events`, `hotspots` + `clusterId` expansion, and Scribe structured event leads), HTML breaking-event canonicalization, and unit/pipeline tests.
+- [x] Ingest full-text Seerist `analysis` and `breaking-events` items directly from captured discovery pages (`run-pipeline.ts`).
 
 ### F2.2 RSS acquisition — Done (two feeds)
 - [ ] Observe and enable further catalogue feeds one at a time.

@@ -107,11 +107,15 @@ export const adaptSeeristSourceContent = (
     ledgerEntry: createLedgerEntry(runId, occurredAt, reconstructedItem.value)
   };
   const persistedReconstruction: unknown = JSON.parse(JSON.stringify(reconstructed));
-  if (!isDeepStrictEqual(persistedReconstruction, intakeValue)) {
+  const persistedIntake: unknown = JSON.parse(JSON.stringify(intakeValue));
+  if (!isDeepStrictEqual(persistedReconstruction, persistedIntake)) {
     return err("NATIVE_INTAKE_MISMATCH");
   }
 
-  const body = readSeeristCapturedBody(selected.value);
+  const body = readSeeristCapturedBody(
+    selected.value,
+    reconstructedItem.value.endpoint
+  );
   if (!body) {
     return err("NATIVE_CONTENT_MISSING");
   }

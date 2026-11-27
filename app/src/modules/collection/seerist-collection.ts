@@ -61,6 +61,50 @@ const readFilters = (value: unknown): Record<string, QueryValue> | undefined => 
   return filters;
 };
 
+const STATIC_COLLECTION_ENDPOINTS = new Set([
+  "/v1/wod",
+  "/v1/wod/breaking-events",
+  "/v1/wod/calendar-events",
+  "/v1/wod/risk-rating",
+  "/v1/hotspots",
+  "/v1/hotspots/topic/top",
+  "/v1/aois/country",
+  "/v1/aois/city",
+  "/v1/aois/county",
+  "/v1/savedsearch",
+  "/v1/config/topics",
+  "/v1/config/risk-categories",
+  "/v1/config/calendar-events",
+  "/v1/config/verified/security/sectors",
+  "/v1/config/verified/security/asset-types",
+  "/v1/config/verified/security/attack-types",
+  "/v1/config/verified/security/perpetrators",
+  "/v1/config/verified/maritime/subcategories",
+  "/v1/config/verified/maritime/vessel-types",
+  "/v2/pulse/country",
+  "/v2/pulse/region",
+  "/v2/pulse/city",
+  "/v2/pulse/county"
+]);
+
+const PARAMETERIZED_COLLECTION_ENDPOINTS = [
+  /^\/v1\/wod\/country-background\/[A-Za-z0-9._-]+$/,
+  /^\/v1\/wod\/risk-rating\/[A-Za-z0-9._-]+$/,
+  /^\/v2\/pulse\/(?:country|region|city|county)\/[A-Za-z0-9._-]+$/,
+  /^\/v2\/clusters\/[A-Za-z0-9._-]+(?:\/articles)?$/,
+  /^\/v2\/auto-summary\/[A-Za-z0-9._-]+\/(?:country|city)$/
+] as const;
+
+export const isSupportedSeeristCollectionEndpoint = (endpoint: string): boolean => {
+  if (!endpoint.startsWith("/") || endpoint.includes("..")) {
+    return false;
+  }
+  return (
+    STATIC_COLLECTION_ENDPOINTS.has(endpoint) ||
+    PARAMETERIZED_COLLECTION_ENDPOINTS.some((pattern) => pattern.test(endpoint))
+  );
+};
+
 const readOperation = (
   value: unknown
 ): Result<SeeristProviderOperation, "INVALID_PROVIDER_OPERATION"> => {
@@ -79,7 +123,8 @@ const readOperation = (
     !researchQuestionId ||
     value.provider !== "seerist" ||
     value.method !== "GET" ||
-    endpoint !== "/v1/wod" ||
+    !endpoint ||
+    !isSupportedSeeristCollectionEndpoint(endpoint) ||
     filters === undefined
   ) {
     return err("INVALID_PROVIDER_OPERATION");

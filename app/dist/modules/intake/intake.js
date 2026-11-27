@@ -1,10 +1,15 @@
 import { err, ok } from "../../core/result.js";
 import { validateApprovedResearchQuestion } from "../research/research-question.js";
+const CONTEXT_EXACT_ENDPOINTS = new Set([
+    "/v1/wod/calendar-events",
+    "/v1/wod/risk-rating"
+]);
 const CONTEXT_ENDPOINT_PREFIXES = [
     "/v1/wod/country-background/",
     "/v1/wod/risk-rating/",
     "/v2/pulse/"
 ];
+const CLUSTER_ENDPOINT_PATTERN = /^\/v2\/clusters\/[A-Za-z0-9._-]+(?:\/articles)?$/;
 const isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 const nonEmptyString = (value) => typeof value === "string" && value.trim() ? value.trim() : undefined;
 const providerIdentifier = (value) => {
@@ -49,15 +54,44 @@ const capturedText = (value) => {
     const localizedValues = Object.values(value).filter((entry) => typeof entry === "string" && Boolean(entry.trim()));
     return localizedValues.length === 1 ? localizedValues[0] : undefined;
 };
-export const readSeeristCapturedBody = (value) => {
+export const normalizeSeeristHtmlText = (value) => {
+    const plain = value
+        .replace(/<\s*br\s*\/?>/gi, "\n")
+        .replace(/<\/\s*(?:p|div|li|h[1-6]|blockquote|tr)\s*>/gi, "\n\n")
+        .replace(/<\s*li(?:\s[^>]*)?>/gi, "- ")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&nbsp;/gi, " ")
+        .replace(/&amp;/gi, "&")
+        .replace(/&lt;/gi, "<")
+        .replace(/&gt;/gi, ">")
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;|&#x27;/gi, "'")
+        .replace(/\r\n?/g, "\n")
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n[ \t]+/g, "\n")
+        .replace(/[ \t]{2,}/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    return plain ? plain : undefined;
+};
+export const readSeeristCapturedBody = (value, endpoint) => {
     if (!isRecord(value)) {
         return undefined;
     }
     const item = isRecord(value.properties) ? value.properties : value;
-    return capturedText(item.sanitizedBody) ?? capturedText(item.body);
+    const directBody = capturedText(item.sanitizedBody) ?? capturedText(item.body);
+    if (directBody) {
+        return directBody;
+    }
+    const isBreakingEvent = item.subtype === "breaking-event" || endpoint === "/v1/wod/breaking-events";
+    if (isBreakingEvent) {
+        const htmlContent = capturedText(item.content);
+        return htmlContent ? normalizeSeeristHtmlText(htmlContent) : undefined;
+    }
+    return undefined;
 };
-const contentCompleteness = (item, allowGenericContent) => {
-    if (readSeeristCapturedBody(item) ||
+const contentCompleteness = (item, allowGenericContent, endpoint) => {
+    if (readSeeristCapturedBody(item, endpoint) ||
         (allowGenericContent && containsText(item.content))) {
         return "captured_content";
     }
@@ -102,8 +136,30 @@ const stringValues = (...values) => values.flatMap((value) => {
     }
     return nonEmptyString(value) ?? [];
 });
-const isContextEndpoint = (endpoint) => CONTEXT_ENDPOINT_PREFIXES.some((prefix) => endpoint.startsWith(prefix));
-const isSupportedEndpoint = (endpoint) => endpoint === "/v1/wod" || isContextEndpoint(endpoint);
+const nestedSourceUrls = (value) => {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return value.flatMap((entry) => {
+        if (typeof entry === "string") {
+            const str = nonEmptyString(entry);
+            return str?.startsWith("http") ? [str] : [];
+        }
+        if (isRecord(entry)) {
+            const url = nonEmptyString(entry.url);
+            return url?.startsWith("http") ? [url] : [];
+        }
+        return [];
+    });
+};
+const isContextEndpoint = (endpoint) => !endpoint.includes("..") &&
+    (CONTEXT_EXACT_ENDPOINTS.has(endpoint) ||
+        CONTEXT_ENDPOINT_PREFIXES.some((prefix) => endpoint.startsWith(prefix)));
+export const isSupportedSeeristIntakeEndpoint = (endpoint) => !endpoint.includes("..") &&
+    (endpoint === "/v1/wod" ||
+        endpoint === "/v1/wod/breaking-events" ||
+        CLUSTER_ENDPOINT_PATTERN.test(endpoint) ||
+        isContextEndpoint(endpoint));
 export const selectSeeristFeature = (payload, itemId) => {
     if (!itemId.trim()) {
         return err("ITEM_ID_REQUIRED");
@@ -135,7 +191,7 @@ export const validateSource = (input) => {
         return err("UNSUPPORTED_PROVIDER");
     }
     const endpoint = nonEmptyString(input.endpoint);
-    if (!endpoint || !isSupportedEndpoint(endpoint)) {
+    if (!endpoint || !isSupportedSeeristIntakeEndpoint(endpoint)) {
         return err("UNSUPPORTED_ENDPOINT");
     }
     const retrievedAt = nonEmptyString(input.retrievedAt);
@@ -163,24 +219,40 @@ export const validateSource = (input) => {
     }
     const rawItem = input.item;
     const item = isRecord(rawItem.properties) ? rawItem.properties : rawItem;
-    const providerItemId = providerIdentifier(item.id) ?? providerIdentifier(rawItem.id);
+    const providerItemId = providerIdentifier(item.id) ??
+        providerIdentifier(rawItem.id) ??
+        providerIdentifier(item.clusterId) ??
+        providerIdentifier(item.cluster_id);
     const sourceValue = nonEmptyString(item.source);
-    const sourceType = sourceValue?.startsWith("http") ? undefined : sourceValue;
+    const sourceType = (sourceValue && !sourceValue.startsWith("http")
+        ? sourceValue
+        : nonEmptyString(item.subtype)) ??
+        (CLUSTER_ENDPOINT_PATTERN.test(endpoint) ? "cluster" : undefined);
     const contextMaterial = isContextEndpoint(endpoint) || sourceType === "country-background";
-    const completeness = contentCompleteness(item, contextMaterial);
+    const completeness = contentCompleteness(item, contextMaterial, endpoint);
     const references = Array.isArray(item.references) ? item.references : [];
+    const itemSources = Array.isArray(item.sources) ? item.sources : [];
+    const sourceLinks = [
+        ...new Set([
+            ...stringValues(item.link, item.source_url, sourceValue?.startsWith("http") ? sourceValue : undefined),
+            ...nestedSourceUrls(item.sources)
+        ])
+    ];
     const base = {
         provider: "seerist",
         endpoint,
         providerItemId,
         sourceType,
-        providerTimestamp: nonEmptyString(item["@timestamp"]) ?? nonEmptyString(item.publishedDate),
+        providerTimestamp: nonEmptyString(item["@timestamp"]) ??
+            nonEmptyString(item.revisedPublishedDate) ??
+            nonEmptyString(item.initialPublishedDate) ??
+            nonEmptyString(item.publishedDate),
         retrievedAt,
         rawArtifactRef,
         rawArtifactSha256,
         collectionLineage,
-        sourceLinks: stringValues(item.link, item.source_url, sourceValue?.startsWith("http") ? sourceValue : undefined),
-        referenceCount: references.length,
+        sourceLinks,
+        referenceCount: references.length > 0 ? references.length : itemSources.length,
         hasSourceMetadata: isRecord(item.source_metadata),
         researchQuestion: researchQuestionResult.value
     };
@@ -197,7 +269,9 @@ export const validateSource = (input) => {
     if (!sourceType) {
         return err("MISSING_SOURCE_TYPE");
     }
-    if (sourceType === "analysis" && completeness === "captured_content") {
+    const isNativeEvidenceSource = sourceType === "analysis" ||
+        (endpoint === "/v1/wod/breaking-events" && sourceType === "breaking-event");
+    if (isNativeEvidenceSource && completeness === "captured_content") {
         return ok({
             ...base,
             providerItemId,

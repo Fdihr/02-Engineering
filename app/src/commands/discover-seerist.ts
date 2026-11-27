@@ -4,8 +4,11 @@ import { relative, resolve } from "node:path";
 import { prepareSeeristCollection } from "../modules/collection/seerist-collection.js";
 import {
   assessSeeristDiscoveryPagination,
+  buildSupplementalSeeristOperation,
+  extractHotspotClusterIds,
   prepareSeeristDiscovery,
   rankSeeristDiscoveryCandidates,
+  resolveSupplementalQueries,
   type CollectedSeeristPage
 } from "../modules/discovery/seerist-discovery.js";
 import { renderSeeristDiscoverySummary } from "../modules/reporting/seerist-discovery-summary.js";
@@ -161,6 +164,7 @@ const main = async (): Promise<void> => {
         const manifest = {
           operationId,
           queryId: query.id,
+          endpoint: "/v1/wod",
           pageOffset,
           requestedAt,
           receivedAt,
@@ -180,11 +184,149 @@ const main = async (): Promise<void> => {
           queryId: query.id,
           pageOffset,
           artifactRef: rawArtifactRef,
+          endpoint: "/v1/wod",
           cacheStatus: response.headers.get("x-cache") ?? undefined,
           payload
         });
         if (!hasNextPage(payload)) {
           break;
+        }
+      }
+    }
+
+    const supplementalQueries = resolveSupplementalQueries(
+      prepared.value.plan,
+      prepared.value.researchQuestion.geographies
+    );
+    for (const supp of supplementalQueries) {
+      if (apiCalls >= prepared.value.plan.maxApiCalls) {
+        break;
+      }
+      if (!isPathSafeId(supp.id)) {
+        throw new Error("Supplemental query IDs must be path-safe identifiers.");
+      }
+      const requestedAt = new Date().toISOString();
+      const suppOp = buildSupplementalSeeristOperation({
+        planId,
+        runId,
+        researchQuestion: prepared.value.researchQuestion,
+        supplementalQuery: supp,
+        referenceNowIso: requestedAt
+      });
+      const preparedSupp = prepareSeeristCollection(
+        suppOp,
+        prepared.value.researchQuestion,
+        requestedAt
+      );
+      if (!preparedSupp.ok) {
+        throw new Error(
+          `Generated supplemental provider operation rejected: ${preparedSupp.error}`
+        );
+      }
+
+      const response = await fetch(preparedSupp.value.requestUrl, {
+        headers: { accept: "application/json", "x-api-key": apiKey }
+      });
+      apiCalls += 1;
+      const receivedAt = new Date().toISOString();
+      const rawResponse = Buffer.from(await response.arrayBuffer());
+      const rawPath = resolve(rawDirectory, `${supp.id}.json`);
+      await writeFile(rawPath, rawResponse);
+      const rawArtifactRef = artifactRef(rawPath);
+      pageManifests.push({
+        operationId: suppOp.id,
+        queryId: supp.id,
+        endpoint: suppOp.endpoint,
+        pageOffset: 0,
+        requestedAt,
+        receivedAt,
+        httpStatus: response.status,
+        mediaType: response.headers.get("content-type") ?? "unknown",
+        cacheStatus: response.headers.get("x-cache") ?? "unknown",
+        artifactRef: rawArtifactRef,
+        sha256: sha256(rawResponse)
+      });
+      if (!response.ok) {
+        continue;
+      }
+      const payload: unknown = JSON.parse(rawResponse.toString("utf8"));
+      pages.push({
+        queryId: supp.id,
+        pageOffset: 0,
+        artifactRef: rawArtifactRef,
+        endpoint: suppOp.endpoint,
+        cacheStatus: response.headers.get("x-cache") ?? undefined,
+        payload
+      });
+
+      if (supp.kind === "hotspots" && (supp.maxClusterFollowups ?? 1) > 0) {
+        const clusterIds = extractHotspotClusterIds(
+          payload,
+          prepared.value.plan.rankingTerms,
+          supp.maxClusterFollowups ?? 1
+        );
+        for (const [clusterIndex, clusterId] of clusterIds.entries()) {
+          if (apiCalls >= prepared.value.plan.maxApiCalls) {
+            break;
+          }
+          const clusterQueryId = `${supp.id}-cluster-${clusterIndex + 1}`;
+          const clusterOpId = `${planId}-${clusterQueryId}`;
+          const clusterRequestedAt = new Date().toISOString();
+          const preparedCluster = prepareSeeristCollection(
+            {
+              id: clusterOpId,
+              runId,
+              researchQuestionId: prepared.value.researchQuestion.id,
+              provider: "seerist",
+              method: "GET",
+              endpoint: "/v1/wod",
+              filters: {
+                clusterId,
+                pageSize: Math.min(20, prepared.value.plan.pageSize),
+                pageOffset: 0,
+                sortDirection: "desc"
+              }
+            },
+            prepared.value.researchQuestion,
+            clusterRequestedAt
+          );
+          if (!preparedCluster.ok) {
+            continue;
+          }
+          const clusterResponse = await fetch(preparedCluster.value.requestUrl, {
+            headers: { accept: "application/json", "x-api-key": apiKey }
+          });
+          apiCalls += 1;
+          const clusterReceivedAt = new Date().toISOString();
+          const clusterBytes = Buffer.from(await clusterResponse.arrayBuffer());
+          const clusterRawPath = resolve(rawDirectory, `${clusterQueryId}.json`);
+          await writeFile(clusterRawPath, clusterBytes);
+          const clusterRawRef = artifactRef(clusterRawPath);
+          pageManifests.push({
+            operationId: clusterOpId,
+            queryId: clusterQueryId,
+            endpoint: "/v1/wod",
+            pageOffset: 0,
+            requestedAt: clusterRequestedAt,
+            receivedAt: clusterReceivedAt,
+            httpStatus: clusterResponse.status,
+            mediaType: clusterResponse.headers.get("content-type") ?? "unknown",
+            cacheStatus: clusterResponse.headers.get("x-cache") ?? "unknown",
+            artifactRef: clusterRawRef,
+            sha256: sha256(clusterBytes)
+          });
+          if (!clusterResponse.ok) {
+            continue;
+          }
+          const clusterPayload: unknown = JSON.parse(clusterBytes.toString("utf8"));
+          pages.push({
+            queryId: clusterQueryId,
+            pageOffset: 0,
+            artifactRef: clusterRawRef,
+            endpoint: "/v1/wod",
+            cacheStatus: clusterResponse.headers.get("x-cache") ?? undefined,
+            payload: clusterPayload
+          });
         }
       }
     }

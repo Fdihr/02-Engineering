@@ -1258,7 +1258,7 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
             if queries_raw and ranking_raw:
                 plan_id = f"{run_id}-dp-{int(time.time())}"
                 queries = [
-                    {"id": f"q-{idx:02d}", "search": q_text, "sources": "news,analysis"}
+                    {"id": f"q-{idx:02d}", "search": q_text, "sources": "news,analysis,political,maritime"}
                     for idx, q_text in enumerate(queries_raw, start=1)
                 ]
                 plan_path = proposals_dir / f"{plan_id}.json"
@@ -1269,10 +1269,11 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
                     "provider": "seerist",
                     "endpoint": "/v1/wod",
                     "queries": queries,
+                    "autoExpandGeography": True,
                     "rankingTerms": ranking_raw,
                     "pageSize": 50,
                     "maxPagesPerQuery": 1,
-                    "maxApiCalls": max(2, len(queries) + 2),
+                    "maxApiCalls": min(50, max(6, len(queries) + 6)),
                     "maxResults": 50,
                     "minimumScore": max(1, min_score),
                 })
@@ -1313,7 +1314,7 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
 
         plan_id = f"{run_id}-dp-{int(time.time())}"
         queries = [
-            {"id": f"q-{idx:02d}", "search": q_text, "sources": "news,analysis"}
+            {"id": f"q-{idx:02d}", "search": q_text, "sources": "news,analysis,political,maritime"}
             for idx, q_text in enumerate(queries_raw[:10], start=1)
         ]
         plan_path = (runs_root / run_id / "proposals" / f"{plan_id}.json").resolve()
@@ -1324,10 +1325,11 @@ def _handle_analyst_action(runs_root: Path, active_run_dir: Path, payload: dict[
             "provider": "seerist",
             "endpoint": "/v1/wod",
             "queries": queries,
+            "autoExpandGeography": True,
             "rankingTerms": ranking_raw,
             "pageSize": 50,
             "maxPagesPerQuery": 1,
-            "maxApiCalls": max(2, len(queries) + 2),
+            "maxApiCalls": min(50, max(6, len(queries) + 6)),
             "maxResults": 50,
             "minimumScore": max(1, min_score),
         })

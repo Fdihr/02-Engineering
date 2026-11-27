@@ -105,3 +105,45 @@ test("rejects changed raw lineage and route tampering", () => {
     { ok: false, error: "INVALID_NATIVE_INTAKE" }
   );
 });
+
+test("adapts a /v1/wod/breaking-events HTML report into normalized paragraph text", () => {
+  const breakingFeature = {
+    type: "Feature",
+    properties: {
+      id: "8680",
+      subtype: "breaking-event",
+      status: "Confirmed",
+      source: "https://www.reuters.com/world/europe/rail-alert/",
+      title: "Breaking rail security alert",
+      content: {
+        en: "<p>First paragraph of breaking alert.</p><p>Second paragraph with &amp; entity.</p>"
+      }
+    }
+  };
+  const breakingSelected = {
+    ...selected,
+    endpoint: "/v1/wod/breaking-events",
+    item: breakingFeature
+  };
+  const intakeRes = processSource(runId, "2026-08-31T08:01:00.000Z", breakingSelected);
+  assert.equal(intakeRes.ok, true);
+  if (!intakeRes.ok) return;
+
+  const adapted = adaptSeeristSourceContent(
+    intakeRes.value,
+    { type: "FeatureCollection", features: [breakingFeature] },
+    "runs/run-native-adapter/breaking-intake.json",
+    "e".repeat(64),
+    rawArtifactRef,
+    rawArtifactSha256
+  );
+  assert.equal(adapted.ok, true);
+  if (adapted.ok) {
+    assert.equal(adapted.value.sourceKind, "provider-captured");
+    assert.equal(adapted.value.sourceItemId, "8680");
+    assert.equal(
+      adapted.value.body,
+      "First paragraph of breaking alert.\n\nSecond paragraph with & entity."
+    );
+  }
+});
